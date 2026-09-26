@@ -5,7 +5,7 @@ import { ArrowUp, MessageSquare, Plus, Square, Trash2, Check, Sprout } from 'luc
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { list, reply, request, type Thread, type Message, type ModelCatalog } from '@/lib/api'
+import { list, reply, request, type Thread, type Message, type ModelCatalog, type ToolRun } from '@/lib/api'
 
 export default function App() {
   const { threadId } = useParams()
@@ -17,6 +17,7 @@ export default function App() {
   const [threads, setThreads] = useState<Thread[]>([])
   const [current, setCurrent] = useState<Thread | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const [tools, setTools] = useState<ToolRun[]>([])
   const [draft, setDraft] = useState(''), [title, setTitle] = useState('')
   const [partial, setPartial] = useState(''), [error, setError] = useState('')
   const [busy, setBusy] = useState(true)
@@ -34,9 +35,11 @@ export default function App() {
       const thread = next.find(thread => thread.id === current.id)
       if (thread) {
         const history = await list<Message>(`/threads/${current.id}/messages`)
+        const activity = await list<ToolRun>(`/threads/${current.id}/tools`)
         if (requestedRevision !== revision.current) { dirty.current = true; return }
         setTitle(value => value === current.title ? thread.title : value); setCurrent(thread)
         setMessages(history)
+        setTools(activity)
       } else { loadedThread.current = null; setCurrent(null); setTitle(''); setMessages([]); if (!isProfile) navigate('/', { replace: true }) }
     }
     setThreads(next)
@@ -57,11 +60,13 @@ export default function App() {
         if (threadId) thread = await request<Thread>(`/threads/${threadId}`)
         else if (!initial.current) { initial.current = true; thread = await request<Thread>('/threads', 'POST', {}) }
         const history: Message[] = thread ? await list(`/threads/${thread.id}/messages`) : []
+        const activity: ToolRun[] = thread ? await list(`/threads/${thread.id}/tools`) : []
         const next: Thread[] = await list('/threads')
         if (disposed) return
         initial.current = true
         loadedThread.current = thread?.id ?? null
         setCurrent(thread); setTitle(thread?.title ?? ''); setMessages(history); setThreads(next); setDraft('')
+        setTools(activity)
         if (thread && !threadId) navigate(`/threads/${thread.id}`, { replace: true })
       } catch (error) { setError(describe(error)) }
       finally { if (!disposed) setBusy(false) }
@@ -92,7 +97,7 @@ export default function App() {
   }, [])
   useEffect(() => { if (!busy && dirty.current) { dirty.current = false; liveChange() } }, [busy])
 
-  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [messages, partial])
+  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [messages, partial, tools])
 
   async function act(operation: () => Promise<void>) {
     if (busy) return
@@ -108,6 +113,7 @@ export default function App() {
     void act(async () => {
       const thread = await request<Thread>('/threads', 'POST', {})
       loadedThread.current = thread.id
+      setTools([])
       setCurrent(thread); setTitle(thread.title); setMessages([]); setDraft(''); setThreads(await list('/threads')); navigate(`/threads/${thread.id}`)
     })
   }
@@ -116,8 +122,10 @@ export default function App() {
     void act(async () => {
       const saved = await request<Thread>(`/threads/${thread.id}`)
       const history = await list<Message>(`/threads/${thread.id}/messages`)
+      const activity = await list<ToolRun>(`/threads/${thread.id}/tools`)
       loadedThread.current = saved.id
       setCurrent(saved); setTitle(saved.title); setMessages(history); setDraft(''); navigate(`/threads/${saved.id}`)
+      setTools(activity)
     })
   }
 
@@ -130,7 +138,9 @@ export default function App() {
       setDraft(''); setMessages(previous => [...previous, message])
       for await (const event of reply(current.id, message.id, abort.signal)) {
         if (event.event === 'delta') setPartial(previous => previous + event.data.text)
-        else { setPartial(''); setMessages(previous => [...previous, event.data]) }
+        else if (event.event === 'reset') setPartial('')
+        else if (event.event === 'done') { setPartial(''); setMessages(previous => [...previous, event.data]) }
+        else setTools(previous => previous.some(tool => tool.id === event.data.id) ? previous.map(tool => tool.id === event.data.id ? event.data : tool) : [...previous, event.data])
       }
       const next = await list<Thread>('/threads'); setThreads(next)
       const thread = next.find(thread => thread.id === current.id)
@@ -165,10 +175,11 @@ export default function App() {
           <Button size="icon" variant="ghost" aria-label="Delete thread" title="Delete thread" disabled={busy || !current} onClick={() => void act(async () => { await request(`/threads/${current!.id}`, 'DELETE'); setCurrent(null); setTitle(''); setMessages([]); setDraft(''); setThreads(await list('/threads')); navigate('/') })}><Trash2 size={15} /></Button>
         </div>
       </header>
+      {current?.workspace && <p className="workspace-path" aria-label="Workspace" title={current.workspace}>{current.workspace}</p>}
       {modelPicker && <section className="model-picker" role="dialog" aria-label="Select model"><h2>Model for this thread</h2><p>{catalog?.provider ?? 'Configure a provider first'} · Changes apply to the next reply.</p><div className="model-options">{[{ id: '', name: `Default${catalog?.default_model ? ` · ${catalog.default_model}` : ''}` }, ...(catalog?.models ?? [])].map(model => <Button key={model.id} variant={model.id === (current?.model ?? '') ? 'default' : 'outline'} disabled={busy} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: model.id || null }); setCurrent(thread); setModelPicker(false); await refresh() })}>{model.name}</Button>)}</div><div className="model-custom"><Input aria-label="Custom model ID" placeholder="Custom model ID" value={customModel} disabled={busy} onChange={event => setCustomModel(event.target.value)}/><Button disabled={busy || !customModel.trim()} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: customModel.trim() }); setCurrent(thread); setModelPicker(false); await refresh() })}>Apply model</Button><Button variant="ghost" onClick={() => setModelPicker(false)}>Cancel</Button></div></section>}
       <section className="history" aria-label="Conversation" aria-busy={busy}>
         {messages.length === 0 && <div className="empty"><span className="eyebrow">Room for possibility</span><h1>A little space for your<br/>next big idea.</h1><p>Ask a question. Untangle a thought. Follow an idea somewhere new — one conversation at a time.</p><div className="suggestions">{['Help me plan a project', 'Explore an idea', 'Explain something new'].map(text => <Button key={text} variant="outline" disabled={!current || busy} onClick={() => setDraft(text)}>{text}</Button>)}</div></div>}
-        {messages.map(message => <article className="message" key={message.id} data-role={message.role}><div className="message-label">{message.role === 'user' ? 'YOU' : 'SOLMU'}</div><div className="message-content">{message.content}</div></article>)}
+        {messages.map(message => <div key={message.id}><article className="message" data-role={message.role}><div className="message-label">{message.role === 'user' ? 'YOU' : 'SOLMU'}</div><div className="message-content">{message.content}</div></article>{tools.filter(tool => tool.message_id === message.id).map(tool => <details className="tool-activity" key={tool.id}><summary>{tool.name} · {tool.status}</summary><pre>{JSON.stringify(tool.arguments, null, 2)}</pre>{tool.result !== null && <pre>{JSON.stringify(tool.result, null, 2)}</pre>}</details>)}</div>)}
         {partial && <article className="message" data-role="assistant" aria-label="Streaming reply"><div className="message-label">SOLMU<span className="stream-dot"/>STREAMING</div><div className="message-content">{partial}</div></article>}
         <div ref={end}/>
       </section>

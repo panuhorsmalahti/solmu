@@ -53,3 +53,9 @@ See [CLI usage](../../docs/cli.md), [configuration](../../docs/configuration.md)
 and [Docker instructions](../../docs/running.md).
 
 ![Solmu client screenshot](../../docs/screenshots/cli.png)
+
+## Workspace tools
+
+Solmu can read, edit, and search files and run Bash commands in the thread's
+workspace. Tool activity and results appear live and stay in conversation history.
+Stop cancels pending work. See [tools](../../docs/tools.md) for usage and limits.

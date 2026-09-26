@@ -80,3 +80,9 @@ its launched CLIs; conversations remain saved in the backend. `/exit` leaves
 an exited pane visible so its final terminal contents can be read or restarted.
 
 ![Solmu client screenshot](screenshots/muxer.png)
+
+## Workspace tools
+
+Solmu can read, edit, and search files and run Bash commands in the thread's
+workspace. Tool activity and results appear live and stay in conversation history.
+Stop cancels pending work. See [tools](tools.md) for usage and limits.

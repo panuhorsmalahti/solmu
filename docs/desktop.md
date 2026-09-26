@@ -28,3 +28,9 @@ changing threads or sending again. Provider errors appear above the input;
 the user message is retained. Closing the window exits without deleting history.
 
 ![Solmu client screenshot](screenshots/desktop.png)
+
+## Workspace tools
+
+Solmu can read, edit, and search files and run Bash commands in the thread's
+workspace. Tool activity and results appear live and stay in conversation history.
+Stop cancels pending work. See [tools](tools.md) for usage and limits.

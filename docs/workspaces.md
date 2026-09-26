@@ -13,5 +13,8 @@ The CLI's directory must also exist on the backend host. When using a remote
 backend or Docker, mount that workspace at the same path. A conversation keeps
 its workspace when opened from another client.
 
-CLI and desktop show the selected thread's workspace. An existing thread created
+All clients show the selected thread's workspace. An existing thread created
 before workspace support uses the backend default when work is needed.
+
+Solmu's [tools](tools.md) operate from this directory. Bash inherits the
+backend's OS permissions; the workspace alone does not restrict shell access.

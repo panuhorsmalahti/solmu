@@ -37,3 +37,9 @@ provider credentials on the backend. The marketing website on GitHub Pages
 is separate from this client and does not host a backend or conversations.
 
 ![Solmu client screenshot](screenshots/web.png)
+
+## Workspace tools
+
+Solmu can read, edit, and search files and run Bash commands in the thread's
+workspace. Tool activity and results appear live and stay in conversation history.
+Stop cancels pending work. See [tools](tools.md) for usage and limits.

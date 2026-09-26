@@ -4,11 +4,11 @@ use axum::http::StatusCode;
 use genai::{
     Client, ServiceTarget,
     adapter::AdapterKind,
-    chat::{ChatMessage, ChatRequest, ChatStreamResponse},
+    chat::{ChatMessage, ChatOptions, ChatRequest, ChatStreamResponse, Tool},
     resolver::{Endpoint, ProviderConfig, ServiceTargetResolver},
 };
 
-use crate::{api::error::ApiError, config::optional_env, storage::messages::Message};
+use crate::{api::error::ApiError, config::optional_env};
 
 #[derive(serde::Serialize)]
 pub struct ModelCatalog {
@@ -29,7 +29,7 @@ pub struct Llm {
     model: Option<String>,
     title_model: Option<String>,
     endpoint: Option<String>,
-    discovered_model: tokio::sync::OnceCell<String>,
+    discovered_model: std::sync::Arc<tokio::sync::OnceCell<String>>,
 }
 
 impl Llm {
@@ -94,7 +94,7 @@ impl Llm {
             model: optional_env("LLM_MODEL")?,
             title_model: optional_env("LLM_TITLE_MODEL")?,
             endpoint,
-            discovered_model: tokio::sync::OnceCell::new(),
+            discovered_model: std::sync::Arc::new(tokio::sync::OnceCell::new()),
         })
     }
 
@@ -160,9 +160,10 @@ impl Llm {
 
     pub async fn stream(
         &self,
-        history: &[Message],
+        history: &[ChatMessage],
         system_prompt: &str,
         model: Option<&str>,
+        tools: Vec<Tool>,
     ) -> Result<ChatStreamResponse, ApiError> {
         let model = if let Some(model) = model {
             self.validate_model(model)?;
@@ -174,18 +175,17 @@ impl Llm {
             self.main_model().await?
         };
         let messages = std::iter::once(ChatMessage::system(system_prompt))
-            .chain(history.iter().map(|message| {
-                if message.role == "assistant" {
-                    ChatMessage::assistant(&message.content)
-                } else {
-                    ChatMessage::user(&message.content)
-                }
-            }))
+            .chain(history.iter().cloned())
             .collect();
-        let request = ChatRequest::new(messages);
+        let request = ChatRequest::new(messages).with_tools(tools);
+        let options = ChatOptions::default()
+            .with_capture_content(true)
+            .with_capture_tool_calls(true)
+            .with_capture_reasoning_content(true);
         tokio::time::timeout(
             Duration::from_secs(30),
-            self.client.exec_chat_stream(&model, request, None),
+            self.client
+                .exec_chat_stream(&model, request, Some(&options)),
         )
         .await
         .map_err(|_| provider_error())?

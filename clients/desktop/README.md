@@ -33,3 +33,9 @@ message. See [Profile](../../docs/profile.md) and [workspaces](../../docs/worksp
 See [desktop usage](../../docs/desktop.md) and [configuration](../../docs/configuration.md).
 
 ![Solmu client screenshot](../../docs/screenshots/desktop.png)
+
+## Workspace tools
+
+Solmu can read, edit, and search files and run Bash commands in the thread's
+workspace. Tool activity and results appear live and stay in conversation history.
+Stop cancels pending work. See [tools](../../docs/tools.md) for usage and limits.

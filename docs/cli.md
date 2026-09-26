@@ -38,3 +38,9 @@ You can exit during a reply.
 See the [CLI README](../clients/cli/README.md) for the full setup.
 
 ![Solmu client screenshot](screenshots/cli.png)
+
+## Workspace tools
+
+Solmu can read, edit, and search files and run Bash commands in the thread's
+workspace. Tool activity and results appear live and stay in conversation history.
+Stop cancels pending work. See [tools](tools.md) for usage and limits.

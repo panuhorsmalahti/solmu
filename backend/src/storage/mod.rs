@@ -1,6 +1,7 @@
 pub mod messages;
 pub mod profile;
 pub mod threads;
+pub mod tools;
 
 #[derive(Debug)]
 pub enum StoreError {

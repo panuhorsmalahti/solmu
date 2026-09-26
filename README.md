@@ -16,6 +16,7 @@ Licensed under [MIT](LICENSE).
 - Choose a model per thread and work from your CLI's current folder.
 - Run locally, in Docker, or in a Linux sandbox workspace.
 - Group Solmu terminal tabs into project spaces with mouse controls and split views.
+- Read, edit, and search workspace files and run Bash commands with saved tool results.
 
 ## Install
 
@@ -146,3 +147,9 @@ on Linux, Windows, and macOS, publishes the website and Docker image, and offers
 daily production releases when there are new commits, plus a manual release workflow.
 
 [API](docs/api.md) · [Build and test](docs/development.md) · [Release workflow](docs/releases.md)
+
+## Workspace tools
+
+Solmu can read, edit, and search files and run Bash commands in the thread's
+workspace. Tool activity and results appear live and stay in conversation history.
+Stop cancels pending work. See [tools](docs/tools.md) for usage and limits.

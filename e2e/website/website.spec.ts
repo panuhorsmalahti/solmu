@@ -4,7 +4,7 @@ test('website describes Solmu features and links to every client and installatio
   await page.goto('http://127.0.0.1:4174')
   await expect(page).toHaveTitle('Solmu — your ideas, connected')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Good ideas')
-  for (const feature of ['See it take shape', 'Follow your threads', 'Bring your model', 'Make it yours']) await expect(page.getByRole('heading', { name: feature })).toBeVisible()
+  for (const feature of ['See it take shape', 'Follow your threads', 'Bring your model', 'Make it yours', 'Put ideas to work']) await expect(page.getByRole('heading', { name: feature })).toBeVisible()
   for (const client of ['Terminal', 'Desktop', 'Web']) await expect(page.getByRole('link').filter({ has: page.getByRole('heading', { name: client }) })).toHaveAttribute('href', /github\.com\/panuhorsmalahti\/solmu\/tree\/main\/clients\//)
   await expect(page.getByRole('link', { name: 'Solmu Muxer ↗', exact: true })).toHaveAttribute('href', 'https://github.com/panuhorsmalahti/solmu/tree/main/muxer')
   await expect(page.getByText(/Group real terminal tabs into project spaces/)).toBeVisible()

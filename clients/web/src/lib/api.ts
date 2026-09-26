@@ -2,7 +2,8 @@ export interface Thread { id: string; title: string; model: string | null; works
 export interface Profile { system_prompt: string; model: string | null; backend_default_model: string | null; edited_at: string }
 export interface ModelCatalog { provider: string | null; default_model: string | null; models: { id: string; name: string }[] }
 export interface Message { id: string; role: 'user' | 'assistant'; content: string }
-export type ReplyEvent = { event: 'delta'; data: { text: string } } | { event: 'done'; data: Message }
+export interface ToolRun { id: string; message_id: string; name: string; arguments: unknown; status: string; result: unknown | null }
+export type ReplyEvent = { event: 'delta'; data: { text: string } } | { event: 'done'; data: Message } | { event: 'reset'; data: object } | { event: 'tool_start' | 'tool_result'; data: ToolRun }
 
 export async function request<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/v1${path}`, {
@@ -55,6 +56,7 @@ export async function* reply(thread: string, message: string, signal: AbortSigna
         if (event === 'error') throw new Error(payload.error?.message ?? 'The reply failed')
         if (event === 'stopped') return
         if (event === 'delta') yield { event, data: payload }
+        if (event === 'reset' || event === 'tool_start' || event === 'tool_result') yield { event, data: payload }
         if (event === 'done') { completed = true; yield { event, data: payload } }
       }
       if (done) break

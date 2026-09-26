@@ -75,7 +75,7 @@ async fn replies_stream_before_completion_and_are_saved_with_history() {
     assert_eq!(captured[0].1["messages"][0]["role"], "system");
     assert_eq!(
         captured[0].1["messages"][0]["content"],
-        "You are Solmu, an autonomous agent."
+        "You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace."
     );
 }
 

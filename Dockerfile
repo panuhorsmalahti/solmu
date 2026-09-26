@@ -18,7 +18,7 @@ RUN cargo build --release --locked -p solmu-backend
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates bash \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

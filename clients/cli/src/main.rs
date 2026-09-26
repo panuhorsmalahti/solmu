@@ -59,9 +59,7 @@ fn stop(
     if !session.responding {
         return;
     }
-    if let Some(task) = active.take() {
-        task.abort();
-    }
+    let response = active.take();
     session.stopping();
     let api = session.api.clone();
     let id = session
@@ -72,11 +70,21 @@ fn stop(
         .clone();
     let sender = sender.clone();
     *active = Some(tokio::spawn(async move {
-        let update = match api.stop(&id).await {
-            Ok(()) => Update::Stopped,
-            Err(error) => Update::Failed(error),
-        };
-        let _ = sender.send(update);
+        match api.stop(&id).await {
+            Ok(()) => {
+                // Keep consuming tool results until the backend acknowledges
+                // cancellation. The response stream sends Update::Stopped.
+                if let Some(response) = response {
+                    let _ = response.await;
+                }
+            }
+            Err(error) => {
+                if let Some(response) = response {
+                    response.abort();
+                }
+                let _ = sender.send(Update::Failed(error));
+            }
+        }
     }));
 }
 
@@ -296,6 +304,21 @@ fn draw(
                     .map(|line| Line::from(line.to_owned())),
             );
             lines.push(Line::from(""));
+            for tool in session
+                .tools
+                .iter()
+                .filter(|tool| tool.message_id == message.id)
+            {
+                lines.push(Line::from(
+                    format!("{} · {}", tool.name, tool.status).yellow().bold(),
+                ));
+                lines.extend(
+                    tool.details()
+                        .lines()
+                        .map(|line| Line::from(line.to_owned())),
+                );
+                lines.push(Line::from(""));
+            }
         }
     }
     if !session.partial.is_empty() {

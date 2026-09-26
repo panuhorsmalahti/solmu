@@ -26,6 +26,7 @@ type ThreadLocks = Arc<Mutex<HashMap<String, Weak<AsyncMutex<()>>>>>;
 pub struct AppState {
     pub pool: SqlitePool,
     pub llm: Llm,
+    pub tools: crate::tools::Registry,
     locks: ThreadLocks,
     pub events: broadcast::Sender<Change>,
     responses: Arc<Mutex<HashMap<String, CancellationToken>>>,
@@ -36,6 +37,7 @@ impl AppState {
         Self {
             pool,
             llm,
+            tools: crate::tools::Registry::new(),
             locks: Arc::default(),
             events: broadcast::channel(256).0,
             responses: Arc::default(),
@@ -87,6 +89,27 @@ impl AppState {
         {
             token.cancel();
         }
+    }
+
+    pub async fn wait_stopped(&self, id: &str) -> Result<(), ApiError> {
+        tokio::time::timeout(std::time::Duration::from_secs(35), async {
+            while self
+                .responses
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .contains_key(id)
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                "stop_pending",
+                "The tool is still finishing; please wait",
+            )
+        })
     }
 
     pub fn lock_thread(&self, id: &str) -> Result<OwnedMutexGuard<()>, ApiError> {

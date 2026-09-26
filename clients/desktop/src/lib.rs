@@ -37,6 +37,7 @@ pub enum Event {
     Title(String),
     Send,
     Stop,
+    StopFinished(Result<(), String>),
     Connection(Connection),
     OpenProfile,
     CloseSettings,
@@ -217,9 +218,6 @@ impl Desktop {
                 if !self.session.responding {
                     return Task::none();
                 }
-                if let Some(handle) = self.active.take() {
-                    handle.abort();
-                }
                 self.session.stopping();
                 let api = self.session.api.clone();
                 let id = self
@@ -229,12 +227,14 @@ impl Desktop {
                     .expect("selected thread")
                     .id
                     .clone();
-                Task::perform(async move { api.stop(&id).await }, |result| {
-                    Event::Updated(match result {
-                        Ok(()) => Update::Stopped,
-                        Err(error) => Update::Failed(error),
-                    })
-                })
+                Task::perform(async move { api.stop(&id).await }, Event::StopFinished)
+            }
+            Event::StopFinished(Ok(())) => Task::none(),
+            Event::StopFinished(Err(error)) => {
+                if let Some(handle) = self.active.take() {
+                    handle.abort();
+                }
+                self.update(Event::Updated(Update::Failed(error)))
             }
             Event::Connection(change) => {
                 match change {
@@ -550,6 +550,27 @@ impl Desktop {
                 .width(Length::Fill)
                 .style(move |theme| appearance::message(theme, message.role == "user")),
             );
+            for tool in self
+                .session
+                .tools
+                .iter()
+                .filter(|tool| tool.message_id == message.id)
+            {
+                history = history.push(
+                    container(
+                        column![
+                            text(format!("{} · {}", tool.name, tool.status))
+                                .size(12)
+                                .color(appearance::PRIMARY),
+                            text(tool.details()).size(13).font(iced::Font::MONOSPACE),
+                        ]
+                        .spacing(8),
+                    )
+                    .padding(16)
+                    .width(Length::Fill)
+                    .style(|theme| appearance::message(theme, false)),
+                );
+            }
         }
         if !self.session.partial.is_empty() {
             history = history.push(

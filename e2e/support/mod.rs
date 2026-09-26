@@ -8,6 +8,7 @@ use std::{
 };
 
 mod screenshot;
+mod tools;
 pub use screenshot::capture_terminal;
 
 use axum::{
@@ -289,6 +290,11 @@ fn provider_response(kind: &'static str, requests: Requests, body: Value) -> Res
     let truncate = latest_user.contains("TRUNCATE");
     let non_stream = body["stream"] != true;
     let model = body["model"].as_str().unwrap_or_default().to_owned();
+    let calls = if non_stream {
+        None
+    } else {
+        tools::calls(&body)
+    };
     requests.lock().unwrap().push((kind.into(), body));
     if model == "unknown-title-model" {
         return (
@@ -311,6 +317,9 @@ fn provider_response(kind: &'static str, requests: Requests, body: Value) -> Res
         } else {
             json!({"id":"title", "object":"chat.completion", "created":0, "model":model, "choices":[{"index":0,"message":{"role":"assistant", "content":title},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":3,"total_tokens":4}})
         }).into_response();
+    }
+    if let Some(calls) = calls {
+        return tools::response(kind, calls);
     }
     let stream = async_stream::stream! {
         if kind == "anthropic" {

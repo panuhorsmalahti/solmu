@@ -6,7 +6,8 @@ Muxer tabs use the same CLI Profile editor.
 
 The page shows your current system prompt. Edit it and save to change how
 Solmu responds. Your profile is saved on the backend and shared across all
-clients and threads. It starts with “You are Solmu, an autonomous agent.”
+clients and threads. The initial prompt introduces Solmu as an autonomous
+agent and names its workspace tools. Existing saved prompts are preserved.
 Changes apply to subsequent replies; a reply already running keeps its original
 settings. Saved messages remain unchanged.
 

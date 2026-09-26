@@ -6,6 +6,7 @@ mod profile;
 mod responses;
 pub mod state;
 mod threads;
+mod tools;
 
 use axum::{
     Router,
@@ -42,6 +43,8 @@ pub struct ListResponse<T> {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/api/v1/tools", get(tools::definitions))
+        .route("/api/v1/threads/{thread_id}/tools", get(tools::list))
         .route("/api/v1/profile", get(profile::get).put(profile::save))
         .route("/api/v1/models", get(models::list))
         .route("/api/v1/events", get(events::connect))

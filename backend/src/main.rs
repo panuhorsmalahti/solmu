@@ -8,6 +8,7 @@ mod db;
 mod llm;
 mod prompt;
 mod storage;
+mod tools;
 mod workspace;
 
 fn main() -> Result<(), Box<dyn Error>> {

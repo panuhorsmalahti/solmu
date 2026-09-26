@@ -37,6 +37,25 @@ pub struct Message {
     pub content: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ToolRun {
+    pub id: String,
+    pub message_id: String,
+    pub name: String,
+    pub arguments: Value,
+    pub status: String,
+    pub result: Option<Value>,
+}
+impl ToolRun {
+    pub fn details(&self) -> String {
+        let arguments = format!("Arguments: {}", self.arguments);
+        match &self.result {
+            Some(result) => format!("{arguments}\nResult: {result}"),
+            None => arguments,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Api {
     client: Client,
@@ -202,6 +221,11 @@ impl Api {
                         let event = match event { Ok(event) => event, Err(_) => { yield Update::Failed("The reply connection was interrupted".into()); return; } };
                         let data: Value = match serde_json::from_str(&event.data) { Ok(data) => data, Err(_) => { yield Update::Failed("Invalid stream data".into()); return; } };
                         match event.event.as_str() {
+                            "reset" => yield Update::Reset,
+                            "tool_start" | "tool_result" => match serde_json::from_value(data) {
+                                Ok(run) => yield Update::Tool(run),
+                                Err(_) => { yield Update::Failed("Invalid tool activity".into()); return; }
+                            },
                             "delta" => yield Update::Delta(data["text"].as_str().unwrap_or_default().into()),
                             "done" => {
                                 match serde_json::from_value(data) { Ok(message) => yield Update::Saved(message), Err(_) => { yield Update::Failed("Invalid completed reply".into()); return; } }
@@ -245,7 +269,14 @@ impl Api {
                     let messages = if let Some(thread) = &thread {
                         match api.list(&format!("/threads/{}/messages", thread.id)).await { Ok(messages) => messages, Err(error) => { yield Update::Failed(error); return; } }
                     } else { Vec::new() };
+                    let tools = if let Some(thread) = &thread {
+                        match api.list(&format!("/threads/{}/tools",thread.id)).await {
+                            Ok(tools)=>tools,
+                            Err(error)=>{yield Update::Failed(error);return;}
+                        }
+                    } else {Vec::new()};
                     yield Update::Opened(thread, messages);
+                    yield Update::Tools(tools);
                     match api.list("/threads").await { Ok(threads) => yield Update::Threads(threads), Err(error) => { yield Update::Failed(error); return; } }
                 },
             }
@@ -282,6 +313,9 @@ pub enum Update {
     Failed(String),
     Finished,
     Stopped,
+    Reset,
+    Tool(ToolRun),
+    Tools(Vec<ToolRun>),
 }
 
 pub struct Session {
@@ -289,6 +323,7 @@ pub struct Session {
     pub current: Option<Thread>,
     pub threads: Vec<Thread>,
     pub messages: Vec<Message>,
+    pub tools: Vec<ToolRun>,
     pub partial: String,
     pub error: Option<String>,
     pub busy: bool,
@@ -301,6 +336,7 @@ impl Session {
             current: None,
             threads: Vec::new(),
             messages: Vec::new(),
+            tools: Vec::new(),
             partial: String::new(),
             error: None,
             busy: false,
@@ -334,6 +370,15 @@ impl Session {
     }
     pub fn apply(&mut self, update: Update) {
         match update {
+            Update::Reset => self.partial.clear(),
+            Update::Tools(tools) => self.tools = tools,
+            Update::Tool(run) => {
+                if let Some(existing) = self.tools.iter_mut().find(|tool| tool.id == run.id) {
+                    *existing = run;
+                } else {
+                    self.tools.push(run);
+                }
+            }
             Update::Opened(thread, messages) => {
                 self.current = thread;
                 self.messages = messages;

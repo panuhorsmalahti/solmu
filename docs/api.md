@@ -10,7 +10,7 @@ authentication is not implemented.
 | GET | `/api/v1/threads` | Threads, most recently updated first. |
 | GET | `/api/v1/threads/{id}` | A thread. |
 | PATCH | `/api/v1/threads/{id}` | Optional `title` and/or `model`. `model: null` clears the thread override. |
-| DELETE | `/api/v1/threads/{id}` | Deletes the thread and its messages (204). |
+| DELETE | `/api/v1/threads/{id}` | Deletes the thread, messages, and tool history (204). |
 | POST | `/api/v1/threads/{id}/messages` | `{ "content": "Hello" }`. Saved user message (201). |
 | GET | `/api/v1/threads/{id}/messages` | Saved messages in conversation order. |
 | POST | `/api/v1/threads/{id}/responses` | `{ "message_id": "saved-user-message-id" }`. Streams an assistant reply. |
@@ -19,6 +19,8 @@ authentication is not implemented.
 | GET | `/api/v1/profile` | Current `system_prompt`, nullable `model`, `backend_default_model`, and `edited_at` (UTC timestamp). |
 | PUT | `/api/v1/profile` | Required `system_prompt`, optional `model`. Omission preserves the model; null clears it. Returns the saved profile. |
 | GET | `/api/v1/models` | Provider, effective `default_model`, and named `models` (`id`, `name`). |
+| GET | `/api/v1/tools` | Available tool definitions and their input schemas in `items`. |
+| GET | `/api/v1/threads/{id}/tools` | Saved tool activity in execution order; supports pagination. |
 
 List endpoints accept `limit` (1–100, default 50) and `offset` (default 0).
 Results have `{ "items": [], "limit": 50, "offset": 0 }`.
@@ -35,9 +37,12 @@ The response is `text/event-stream` with JSON payloads:
 | --- | --- |
 | `start` | `{ "message_id": "..." }` |
 | `delta` | `{ "text": "a piece of the reply" }` |
+| `reset` | Clear the partial assistant text before a tool round. |
+| `tool_start` | A saved tool run with `status: "running"`. |
+| `tool_result` | The saved tool run with its result and final status. |
 | `done` | The complete, persisted assistant message. |
 | `error` | `{ "error": { "code": "...", "message": "..." } }` |
-| `stopped` | Empty object; the response was cancelled. |
+| `stopped` | `{ "message_id": "..." }`; the response was cancelled. |
 
 The assistant message is saved before `done`. Partial replies are not saved on
 failure or disconnect. A thread is locked while its reply streams: concurrent
@@ -46,6 +51,14 @@ messages, title changes, deletion, and additional replies return 409.
 HTTP errors use `{ "error": { "code": "...", "message": "..." } }`.
 Missing resources return 404, invalid input 400/422, a missing provider 503,
 and provider request failures 502. Streaming failures arrive as `error` events.
+
+Tool runs contain `id`, `thread_id`, `message_id`, `call_id`, `name`,
+`arguments` (JSON), `status`, nullable `result`, `started_at`, and `finished_at`.
+Results have `{ "success": true, "output": ... }`; failed results set
+`success: false`. States are queued, running, completed, failed, cancelled, or
+interrupted. A tool-only model turn continues with its results until the model
+produces the final text reply. Saved native tool exchanges are included in
+future model requests and deleted with their thread. See [tools](tools.md).
 
 ## Live updates
 

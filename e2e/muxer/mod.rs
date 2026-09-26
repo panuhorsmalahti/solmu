@@ -235,3 +235,4 @@ mod workspaces;
 
 mod startup;
 mod tabs;
+mod tools;

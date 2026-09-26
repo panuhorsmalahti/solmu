@@ -22,5 +22,8 @@ pub async fn connect(url: &str) -> Result<SqlitePool, Box<dyn Error>> {
     sqlx::query("INSERT INTO system_prompt_versions (system_prompt, edited_at) SELECT system_prompt, edited_at FROM profile WHERE id = 1 AND NOT EXISTS (SELECT 1 FROM system_prompt_versions)")
         .execute(&mut *transaction).await?;
     transaction.commit().await?;
+    crate::storage::tools::recover(&pool, None)
+        .await
+        .map_err(|error| format!("Could not recover interrupted tools: {error:?}"))?;
     Ok(pool)
 }

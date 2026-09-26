@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+.tool-activity { margin: 12px 0; padding: 14px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--secondary); font-size: 13px; }
+.tool-activity summary { cursor: pointer; color: var(--primary); }
+.tool-activity pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 12px 0 0; }
+.workspace-path { margin: 0; padding: 8px 38px; color: var(--muted-foreground); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+
 @theme inline {
   --color-background: var(--background); --color-foreground: var(--foreground);
   --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
