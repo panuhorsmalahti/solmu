@@ -1,7 +1,7 @@
 # Releases and installation
 
 Solmu releases are stored in [GitHub Releases](https://github.com/panuhorsmalahti/solmu/releases).
-They contain backend, CLI, desktop, and sandbox binaries, the web build, and
+They contain backend, CLI, desktop, sandbox, and muxer binaries, the web build, and
 `SHA256SUMS`. Linux x64, Windows x64, and Intel/Apple Silicon macOS are packaged.
 Linux desktop binaries require the usual X11/Wayland runtime libraries.
 macOS and Windows binaries are currently unsigned.

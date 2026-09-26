@@ -17,7 +17,9 @@ npm run test:e2e
 Build the binaries before e2e tests. Tests launch a real Solmu backend with
 temporary SQLite files and a local provider fixture; they never use your keys
 or make paid model requests. Tests live in `e2e/api`, `e2e/cli`, `e2e/desktop`,
-`e2e/web`, `e2e/website`, and `e2e/sandbox`.
+`e2e/web`, `e2e/website`, `e2e/sandbox`, and `e2e/muxer`.
+Muxer tests use a real outer terminal and real Solmu CLI processes in nested
+pseudo-terminals, with the same local backend fixture.
 
 The CLI tests use a real pseudo-terminal; on Linux they also run the client
 inside the isolated sandbox. Linux tests must run in a delegated cgroup v2
@@ -40,6 +42,8 @@ Set `SOLMU_CAPTURE_SCREENSHOTS=1` when running Rust and browser e2e tests to
 refresh the README screenshots in `docs/screenshots/`.
 The CLI test records its real terminal cells into `artifacts/cli.html`;
 run `node scripts/capture-cli.mjs` to render it into `docs/screenshots/cli.png`.
+Muxer tests capture `artifacts/muxer.html`; run
+`node scripts/capture-cli.mjs muxer` for `docs/screenshots/muxer.png`.
 Installer tests under `e2e/install` use local release archives and temporary
 directories; they do not change your PATH or installed applications.
 

@@ -38,5 +38,9 @@ path = "desktop/tests.rs"
 name = "sandbox"
 path = "sandbox/tests.rs"
 
+[[test]]
+name = "muxer"
+path = "muxer/tests.rs"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

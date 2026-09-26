@@ -11,6 +11,7 @@ native desktop, and web clients that share your conversations.
 - See changes across clients instantly and stop responses anytime.
 - Link directly to conversations in the web client.
 - Run locally, in Docker, or in a Linux sandbox workspace.
+- Run multiple Solmu terminal sessions with workspace switching and split views.
 
 ## Install
 
@@ -26,7 +27,7 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.ps1 | iex
 ```
 
-Installs the backend, CLI, desktop, and sandbox from the latest production
+Installs the backend, CLI, desktop, sandbox, and muxer from the latest production
 release, with checksum verification. **Before the first release, use the source
 instructions below.** See [installation options](docs/releases.md).
 
@@ -93,6 +94,16 @@ linkable `/threads/{id}` conversation pages.
 [Run and use the web client](clients/web/README.md).
 
 ![Solmu web client](docs/screenshots/web.png)
+
+## Muxer
+
+A Rust TUI for multiple real Solmu CLI terminals. Switch workspaces, view two
+panes side by side, and track working/idle/error states. Start the backend,
+then run `cargo build -p solmu-cli` and `cargo run -p solmu-muxer`.
+Press **Ctrl+b n** for a new pane, **Ctrl+b s** to split, and **Ctrl+b q** to quit.
+[Run and use muxer](muxer/README.md).
+
+![Solmu muxer terminal workspace](docs/screenshots/muxer.png)
 
 ## Docker
 

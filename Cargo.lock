@@ -4458,6 +4458,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "solmu-muxer"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "dotenvy",
+ "portable-pty",
+ "ratatui",
+ "vt100",
+]
+
+[[package]]
 name = "solmu-sandbox"
 version = "0.1.0"
 dependencies = [

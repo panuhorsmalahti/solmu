@@ -1,5 +1,8 @@
 # Solmu configuration
 
+The terminal workspace uses `SOLMU_BACKEND_URL` and optionally `SOLMU_CLI_PATH`
+to locate its CLI executable. See [muxer configuration](muxer.md).
+
 For the Linux sandbox launcher, `SOLMU_CGROUP_ROOT` optionally chooses an
 existing delegated cgroup v2 parent. Systemd delegation is detected automatically
 when this variable is unset. See [sandbox setup and limits](sandbox.md).

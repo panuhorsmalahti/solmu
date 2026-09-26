@@ -96,8 +96,18 @@ async fn run() -> Result<(), Box<dyn Error>> {
         let mut changes = session.api.changes();
         let mut connected = false;
         let mut pending_refresh = false;
+        let mut reported_state = "";
+        let mut pending_enter = None;
         loop {
+            let state = if session.error.is_some() { "error" } else if session.busy { "working" } else { "idle" };
+            if state != reported_state {
+                // Semantic terminal status lets Solmu muxer label each real
+                // CLI pane without guessing from model-generated text.
+                crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(format!("Solmu | {state}")))?;
+                reported_state = state;
+            }
             terminal.draw(|frame| draw(frame, &session, &input, show_threads, scroll, spinner, connected))?;
+            let can_submit = !session.busy;
             tokio::select! {
                 _ = animation.tick(), if session.busy => spinner = spinner.wrapping_add(1),
                 Some(change) = changes.next() => {
@@ -113,7 +123,10 @@ async fn run() -> Result<(), Box<dyn Error>> {
                     session.apply(update);
                     if !session.busy && pending_refresh { pending_refresh = false; active = launch(&mut session, Action::Refresh, &sender); }
                 },
-                event = events.next() => {
+                event = async {
+                    if can_submit && let Some(event) = pending_enter.take() { Some(Ok(event)) }
+                    else { events.next().await }
+                } => {
                     let Some(event) = event else { break; };
                     let Event::Key(key) = event? else { continue; };
                     if key.kind == KeyEventKind::Release { continue; }
@@ -135,7 +148,14 @@ async fn run() -> Result<(), Box<dyn Error>> {
                             let text = input.trim().to_owned();
                             if text == "/exit" { break; }
                             if text == "/stop" { stop(&mut session, &mut active, &sender); input.clear(); continue; }
-                            if text.is_empty() || session.busy { continue; }
+                            if text.is_empty() { continue; }
+                            if session.busy {
+                                // Live refreshes and conversation operations can
+                                // finish just after the terminal showed Ready.
+                                // Preserve Enter until that operation completes.
+                                if !session.responding { pending_enter = Some(Event::Key(key)); }
+                                continue;
+                            }
                             input.clear(); scroll = 0;
                             let (command, argument) = text.split_once(' ').unwrap_or((&text, ""));
                             let action = match command {

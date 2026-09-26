@@ -6,6 +6,7 @@ Provider credentials and SQLite data stay on the backend.
 | Client | Start from repository root | Guide |
 | --- | --- | --- |
 | CLI | `cargo run -p solmu-cli` | [Terminal client](cli.md) |
+| Muxer (multiple CLI panes) | `cargo build -p solmu-cli`, then `cargo run -p solmu-muxer` | [Terminal workspace](muxer.md) |
 | Desktop | `cargo run -p solmu-desktop` | [Desktop client](desktop.md) |
 | Web | `npm ci`, then `npm run dev:web` | [Web client](web.md) |
 

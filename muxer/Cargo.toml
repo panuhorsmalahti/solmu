@@ -1,0 +1,15 @@
+[package]
+name = "solmu-muxer"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "muxer"
+path = "src/main.rs"
+
+[dependencies]
+crossterm = "0.29"
+ratatui = "0.30.2"
+portable-pty = "0.9"
+vt100 = "0.16"
+dotenvy = "0.15.7"

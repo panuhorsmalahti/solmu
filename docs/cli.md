@@ -1,5 +1,8 @@
 # Terminal client
 
+If a conversation operation or live refresh is still finishing when you press
+Enter, the CLI keeps the submission and sends it once that operation completes.
+
 Start the backend, then run `cargo run -p solmu-cli` from the repository root.
 The CLI connects to `SOLMU_BACKEND_URL`, defaulting to `http://127.0.0.1:3000`,
 and creates a new conversation every time it opens.

@@ -7,6 +7,9 @@ use std::{
     time::Duration,
 };
 
+mod screenshot;
+pub use screenshot::capture_terminal;
+
 use axum::{
     Json, Router,
     extract::State,
