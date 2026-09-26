@@ -7,7 +7,6 @@ backend/          Rust binary crate (solmu-backend)
   Cargo.toml
   src/main.rs     Empty entry point
 clients/          Future frontend applications
-docs/             Design and dependency research
 ```
 
 With a Rust toolchain installed, run the backend from the repository root:
@@ -17,5 +16,3 @@ cargo run --manifest-path backend/Cargo.toml
 ```
 
 The backend currently has no dependencies or application behavior.
-
-See [LLM provider library research](docs/llm-providers.md) for initial candidates.
