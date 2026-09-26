@@ -1,5 +1,6 @@
 mod app;
 mod keys;
+mod layout;
 mod pane;
 
 use app::{App, pane_inner};
@@ -13,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     while let Some(arg) = args.next() {
         if arg == "--help" || arg == "-h" {
             println!(
-                "Solmu muxer\n\nUsage: muxer [--cwd PATH]...\n\nSpaces group real Solmu CLI tabs by working directory. Start solmu-backend first.\nClick spaces, tabs, close icons, or toolbar controls.\nCtrl+b then: n new tab; w new space; Tab/] next tab; [ previous tab;\nUp/Down switch space; 1-8 select tab; s split; x close tab; r restart; q quit.\nCtrl+b b sends literal Ctrl+b. Up to eight spaces, with eight tabs each.\nSOLMU_BACKEND_URL selects the backend; SOLMU_CLI_PATH selects solmu-cli.\nForeground sessions only: quitting terminates the launched CLIs."
+                "Solmu muxer\n\nUsage: muxer [--cwd PATH]...\n\nSpaces group Solmu tabs by working directory. Tabs hold real terminal panes.\nStart solmu-backend first. Click spaces, tabs, close icons, or toolbar controls.\nRight-click a pane for actions; drag dividers to resize.\nCtrl+b then: n new tab; w new space; Tab/] next tab; [ previous tab;\nUp/Down switch space; 1-8 select tab; s/v split right; - split down;\nh/j/k/l focus; H/J/K/L swap; z zoom; r resize/restart; x close pane;\nX close tab; q quit. Ctrl+b b sends literal Ctrl+b.\nUp to eight spaces, eight tabs per space, and eight panes per tab.\nSOLMU_BACKEND_URL selects the backend; SOLMU_CLI_PATH selects solmu-cli.\nForeground sessions only: quitting terminates the launched CLIs."
             );
             return Ok(());
         } else if arg == "--version" {
@@ -67,6 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             let size = terminal.size()?;
             let area = Rect::new(0, 0, size.width, size.height);
+            app.resized(area);
             for (index, rect) in app.visible(area) {
                 app.panes[index].resize(pane_inner(rect))?;
             }
@@ -93,6 +95,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                         && app.click(area, mouse.column, mouse.row)? =>
                 {
                     break;
+                }
+                Event::Mouse(mouse)
+                    if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Right)) =>
+                {
+                    app.context_menu(area, mouse.column, mouse.row)
+                }
+                Event::Mouse(mouse)
+                    if matches!(mouse.kind, MouseEventKind::Drag(MouseButton::Left)) =>
+                {
+                    app.drag(mouse.column, mouse.row)
+                }
+                Event::Mouse(mouse)
+                    if matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left)) =>
+                {
+                    app.end_drag()
                 }
                 _ => {}
             }

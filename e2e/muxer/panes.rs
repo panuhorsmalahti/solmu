@@ -16,13 +16,13 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.command("Hello from pane one");
     tui.wait("Solmu 1 · working").await;
     tui.wait("SOLMU · streaming").await;
-    tui.prefix('n');
+    tui.prefix('s');
     tui.wait("Solmu 2 · idle").await;
     tui.wait("Ready").await;
     tui.command("/ren\tSecond workspace");
     tui.wait("SOLMU    Second workspace").await;
     tui.wait("Ready").await;
-    tui.prefix('1');
+    tui.prefix('h');
     tui.wait("Hello from Solmu").await;
     tui.wait("Ready").await;
     assert_eq!(
@@ -32,7 +32,6 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
             .len(),
         2
     );
-    tui.prefix('s');
     tui.wait("SOLMU    Second workspace").await;
     tui.wait("SOLMU    First workspace").await;
     solmu_e2e::support::capture_terminal(tui.screen.lock().unwrap().screen(), "muxer");
@@ -57,14 +56,14 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.wait("SOLMU    Second workspace").await;
     // Confirm native resize/focus transitions before sending the next action.
     tui.send(b"\x1b[<0;160;6M\x1b[<0;160;6m");
-    tui.wait("› Solmu 2").await;
-    tui.send(b"\x1b[<0;30;3M\x1b[<0;30;3m");
-    tui.wait("› Solmu 1").await;
-    tui.send(b"\x1b[<0;55;3M\x1b[<0;55;3m");
-    tui.wait("› Solmu 2").await;
+    tui.wait("› Solmu 2 · idle").await;
+    tui.send(b"\x1b[<0;30;6M\x1b[<0;30;6m");
+    tui.wait("› Solmu 1 · idle").await;
+    tui.send(b"\x1b[<0;160;6M\x1b[<0;160;6m");
+    tui.wait("› Solmu 2 · idle").await;
     tui.command("/rename Clicked workspace");
     tui.wait("SOLMU    Clicked workspace").await;
-    tui.prefix('s');
+    tui.prefix('z');
     tui.command(&format!("/open {id}"));
     tui.wait("Hello from pane one").await;
     tui.wait("Ready").await;

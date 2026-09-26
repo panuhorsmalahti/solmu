@@ -58,7 +58,11 @@ async fn mouse_controls_group_tabs_by_space_preserve_focus_and_close_sessions() 
     tui.wait("Model: gpt-6-luna").await;
     tui.wait("› Solmu 4").await;
     tui.click("Split").await;
-    tui.wait("Solmu 3 · idle").await;
+    tui.click("Split right").await;
+    tui.wait("Solmu 5 · idle").await;
+    tui.wait("Ready").await;
+    tui.prefix('h');
+    tui.wait("› Solmu 4 · idle").await;
     tui.command("/profile");
     tui.wait("SOLMU / PROFILE").await;
     tui.wait("Edited on ").await;
@@ -71,7 +75,7 @@ async fn mouse_controls_group_tabs_by_space_preserve_focus_and_close_sessions() 
     tui.wait("Ready").await;
     assert_eq!(
         backend.threads().await["items"].as_array().unwrap().len(),
-        5
+        6
     );
     tui.close_tab(4);
     tui.wait_absent("Solmu 4").await;
@@ -80,7 +84,7 @@ async fn mouse_controls_group_tabs_by_space_preserve_focus_and_close_sessions() 
     tui.wait_exit().await;
     assert_eq!(
         backend.threads().await["items"].as_array().unwrap().len(),
-        5,
+        6,
         "Closing tabs keeps saved threads"
     );
 }

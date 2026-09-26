@@ -15,7 +15,7 @@ Licensed under [MIT](LICENSE).
 - Customize the shared system prompt and default model in Profile.
 - Choose a model per thread and work from your CLI's current folder.
 - Run locally, in Docker, or in a Linux sandbox workspace.
-- Group Solmu terminal tabs into project spaces with mouse controls and split views.
+- Group Solmu terminal tabs into project spaces with nested panes and mouse controls.
 - Read, edit, and search workspace files and run Bash commands with saved tool results.
 
 ## Install
@@ -102,10 +102,11 @@ linkable `/threads/{id}` conversation pages.
 
 ## Muxer
 
-A Rust TUI for project spaces with multiple real Solmu CLI tabs. Switch spaces, view two
-panes side by side, and track working/idle/error states. Start the backend,
+A Rust TUI for project spaces with multiple Solmu tabs and nested terminal panes.
+Switch spaces, arrange conversations, and track working/idle/error states. Start the backend,
 then run `cargo build -p solmu-cli` and `cargo run -p solmu-muxer`.
-Click **+ Tab** or press **Ctrl+b n** to add a tab. **Ctrl+b s** splits the view;
+Click **+ Tab** or press **Ctrl+b n** to add a tab. **Ctrl+b s** splits a pane right;
+**Ctrl+b -** splits down. Drag dividers to resize, or **Ctrl+b z** to zoom.
 **Ctrl+b q** quits.
 [Run and use muxer](muxer/README.md).
 

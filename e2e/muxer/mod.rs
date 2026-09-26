@@ -233,6 +233,7 @@ mod panes;
 
 mod workspaces;
 
+mod layouts;
 mod startup;
 mod tabs;
 mod tools;
