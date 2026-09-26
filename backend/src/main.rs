@@ -1,24 +1,37 @@
-use std::{env, error::Error, net::SocketAddr};
+use std::error::Error;
 
-use axum::Router;
 use tokio::net::TcpListener;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let bind_addr: SocketAddr = match env::var("SOLMU_BIND_ADDR") {
-        Ok(value) => value.parse()?,
-        Err(env::VarError::NotPresent) => "127.0.0.1:3000".parse()?,
-        Err(error) => return Err(error.into()),
-    };
+mod api;
+mod config;
+mod db;
+mod llm;
+mod storage;
 
-    let listener = TcpListener::bind(bind_addr).await?;
-    let app = Router::new();
+fn main() -> Result<(), Box<dyn Error>> {
+    if let Err(error) = dotenvy::dotenv() {
+        if !error.not_found() {
+            return Err("Could not load .env; check its syntax and permissions".into());
+        }
+    }
+    run()
+}
+
+#[tokio::main]
+async fn run() -> Result<(), Box<dyn Error>> {
+    let config = config::Config::from_env()?;
+    let llm = llm::Llm::from_env()?;
+    let pool = db::connect(&config.database_url).await?;
+    let listener = TcpListener::bind(config.bind_addr).await?;
+    let app = api::router(api::state::AppState::new(pool.clone(), llm));
 
     println!("Solmu listening on http://{}", listener.local_addr()?);
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
+
+    pool.close().await;
 
     Ok(())
 }

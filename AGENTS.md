@@ -6,3 +6,5 @@ All user-facing changes and features must be documented in the root `docs/` fold
 
 Scope end-to-end tests by client under `e2e/<client>/`, for example `e2e/cli/`.
 Use `e2e/api/` for tests of the backend HTTP API.
+
+Commit automatically after each major change.

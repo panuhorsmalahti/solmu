@@ -1,0 +1,34 @@
+[package]
+name = "solmu-e2e"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+portable-pty = "0.9"
+iced_test = "0.14.0"
+iced = { version = "0.14.0", default-features = false, features = ["tiny-skia", "tokio", "fira-sans"] }
+png = "0.18"
+solmu-client = { path = "../clients/common" }
+solmu-desktop = { path = "../clients/desktop" }
+vt100 = "0.16"
+async-stream = "0.3.6"
+axum = "0.8.9"
+eventsource-stream = "0.2.3"
+futures-util = "0.3.34"
+reqwest = { version = "0.13.5", features = ["json", "stream"] }
+serde_json = "1.0.151"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite"] }
+tempfile = "3"
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "net", "sync", "time"] }
+
+[[test]]
+name = "api"
+path = "api/tests.rs"
+
+[[test]]
+name = "cli"
+path = "cli/tests.rs"
+
+[[test]]
+name = "desktop"
+path = "desktop/tests.rs"

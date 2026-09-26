@@ -5,9 +5,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-COPY backend/Cargo.toml backend/Cargo.lock ./backend/
-COPY backend/src ./backend/src
-RUN cargo build --release --locked --manifest-path backend/Cargo.toml
+COPY Cargo.toml Cargo.lock ./
+COPY backend ./backend
+COPY clients/common ./clients/common
+COPY clients/cli ./clients/cli
+COPY clients/desktop ./clients/desktop
+COPY e2e ./e2e
+RUN cargo build --release --locked -p solmu-backend
 
 FROM debian:bookworm-slim AS runtime
 
@@ -16,8 +20,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=build /build/backend/target/release/solmu-backend /usr/local/bin/solmu-backend
+RUN mkdir /data && chown 10001:10001 /data
+COPY --from=build /build/target/release/solmu-backend /usr/local/bin/solmu-backend
 ENV SOLMU_BIND_ADDR=0.0.0.0:3000
+ENV SOLMU_DATABASE_URL=sqlite:///data/solmu.db
 EXPOSE 3000
+VOLUME ["/data"]
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/solmu-backend"]

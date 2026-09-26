@@ -2,3 +2,11 @@
 .env
 .env.*
 !.env.example
+*.db
+*.db-shm
+*.db-wal
+**/node_modules/
+**/dist/
+/test-results/
+/playwright-report/
+/artifacts/
