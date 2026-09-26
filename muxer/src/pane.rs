@@ -56,6 +56,7 @@ pub struct Pane {
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    redraw_at: Option<std::time::Instant>,
 }
 impl Pane {
     pub fn start(
@@ -118,6 +119,7 @@ impl Pane {
             master: pair.master,
             child,
             writer,
+            redraw_at: None,
         })
     }
     pub fn send(&self, bytes: &[u8]) -> std::io::Result<()> {
@@ -132,6 +134,17 @@ impl Pane {
         writer.flush()
     }
     pub fn poll(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self
+            .redraw_at
+            .is_some_and(|deadline| deadline <= std::time::Instant::now())
+        {
+            self.redraw_at = None;
+            self.parser
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .process(b"\x1b[2J\x1b[H");
+            self.send(&[12])?;
+        }
         if self.exited.is_none()
             && let Some(status) = self.child.try_wait()?
         {
@@ -154,6 +167,9 @@ impl Pane {
                 pixel_height: 0,
             })?;
             parser.screen_mut().set_size(size.0, size.1);
+            // ConPTY can emit old-dimension diffs while a resize is in flight.
+            // Solmu's Ctrl+L redraw settles the screen once resize events arrive.
+            self.redraw_at = Some(std::time::Instant::now() + std::time::Duration::from_millis(75));
         }
         Ok(())
     }

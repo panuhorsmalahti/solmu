@@ -1,6 +1,31 @@
 use super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn redraw_preserves_unsent_input_and_conversation() {
+    let backend = Backend::start().await;
+    let mut terminal = Terminal::start(&backend);
+    terminal.ready().await;
+    let id = backend.threads().await["items"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    {
+        let mut writer = terminal.writer.lock().unwrap();
+        writer.write_all(b"Keep my draft\x0c").unwrap();
+        writer.flush().unwrap();
+    }
+    terminal.wait("Keep my draft").await;
+    terminal.ready().await;
+    terminal.command("");
+    terminal.wait("Hello from Solmu").await;
+    terminal.ready().await;
+    let messages = backend.messages(&id).await;
+    assert_eq!(messages["items"][0]["content"], "Keep my draft");
+    assert_eq!(messages["items"].as_array().unwrap().len(), 2);
+    terminal.exit().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn slash_command_list_filters_navigates_and_completes_without_persistent_hints() {
     let backend = Backend::start().await;
     let mut terminal = Terminal::start(&backend);

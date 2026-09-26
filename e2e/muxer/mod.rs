@@ -11,9 +11,21 @@ struct Terminal {
     master: Box<dyn portable_pty::MasterPty + Send>,
     input: Arc<Mutex<Box<dyn Write + Send>>>,
     screen: Arc<Mutex<vt100::Parser>>,
+    raw: Arc<Mutex<Vec<u8>>>,
 }
 impl Terminal {
     fn start(backend: &Backend, directories: &[&std::path::Path]) -> Self {
+        Self::start_mode(backend, directories, true, "default")
+    }
+    fn start_session(backend: &Backend, name: &str) -> Self {
+        Self::start_mode(backend, &[], false, name)
+    }
+    fn start_mode(
+        backend: &Backend,
+        directories: &[&std::path::Path],
+        foreground: bool,
+        name: &str,
+    ) -> Self {
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: 40,
@@ -23,9 +35,18 @@ impl Terminal {
             })
             .unwrap();
         let mut command = CommandBuilder::new(binary("muxer"));
+        if foreground {
+            command.arg("--foreground");
+        }
+        command.arg("--session");
+        command.arg(name);
         command.cwd(backend.directory.path());
         command.env("SOLMU_BACKEND_URL", &backend.url);
         command.env("SOLMU_CLI_PATH", binary("solmu-cli"));
+        command.env(
+            "SOLMU_MUXER_DIR",
+            backend.directory.path().join("muxer-state"),
+        );
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         command.env_remove("NO_COLOR");
@@ -39,6 +60,8 @@ impl Terminal {
         let mut reader = pair.master.try_clone_reader().unwrap();
         let screen = Arc::new(Mutex::new(vt100::Parser::new(40, 180, 0)));
         let capture = screen.clone();
+        let raw = Arc::new(Mutex::new(Vec::new()));
+        let bytes_capture = raw.clone();
         let writer = input.clone();
         std::thread::spawn(move || {
             let mut bytes = [0; 8192];
@@ -47,6 +70,15 @@ impl Terminal {
                 if count == 0 {
                     break;
                 }
+                let mut raw = bytes_capture
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                raw.extend_from_slice(&bytes[..count]);
+                if raw.len() > 128 * 1024 {
+                    let excess = raw.len() - 128 * 1024;
+                    raw.drain(..excess);
+                }
+                drop(raw);
                 capture
                     .lock()
                     .unwrap_or_else(|error| error.into_inner())
@@ -77,6 +109,7 @@ impl Terminal {
             master: pair.master,
             input,
             screen,
+            raw,
         }
     }
     fn send(&self, bytes: &[u8]) {
@@ -153,7 +186,13 @@ impl Terminal {
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("Missing {text:?}:\n{}", self.contents()));
+        .unwrap_or_else(|_| {
+            panic!(
+                "Missing {text:?}:\n{}\nRaw output: {:?}",
+                self.contents(),
+                String::from_utf8_lossy(&self.raw.lock().unwrap())
+            )
+        });
     }
     async fn wait_absent(&self, text: &str) {
         tokio::time::timeout(Duration::from_secs(25), async {
@@ -205,13 +244,9 @@ impl Terminal {
                     .lock()
                     .unwrap()
                     .screen()
-                    .cell(1, cols - 1)
-                    .is_some_and(|cell| {
-                        matches!(
-                            cell.contents(),
-                            "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8"
-                        )
-                    });
+                    .rows(cols.saturating_sub(3), 3)
+                    .nth(1)
+                    .is_some_and(|text| text.chars().any(|ch| ('1'..='8').contains(&ch)));
                 if rendered {
                     break;
                 }
@@ -234,6 +269,7 @@ mod panes;
 mod workspaces;
 
 mod layouts;
+mod sessions;
 mod startup;
 mod tabs;
 mod tools;

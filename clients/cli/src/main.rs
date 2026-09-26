@@ -145,6 +145,10 @@ async fn run() -> Result<(), Box<dyn Error>> {
                     let Some(event) = event else { break; };
                     let Event::Key(key) = event? else { continue; };
                     if key.kind == KeyEventKind::Release { continue; }
+                    if key.code == KeyCode::Char('l') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                        terminal.clear()?;
+                        continue;
+                    }
                     if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c' | 'd')) { break; }
                     if let Some(current_page) = &mut page {
                         if session.busy && key.code == KeyCode::Enter && matches!(current_page, settings::Page::Models { .. }) { pending_enter = Some(Event::Key(key)); continue; }

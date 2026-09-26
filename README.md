@@ -107,7 +107,8 @@ Switch spaces, arrange conversations, and track working/idle/error states. Start
 then run `cargo build -p solmu-cli` and `cargo run -p solmu-muxer`.
 Click **+ Tab** or press **Ctrl+b n** to add a tab. **Ctrl+b s** splits a pane right;
 **Ctrl+b -** splits down. Drag dividers to resize, or **Ctrl+b z** to zoom.
-**Ctrl+b q** quits.
+**Ctrl+b q** detaches while panes keep running. Run `muxer` to reattach;
+`muxer server stop` ends the session. Use `--session NAME` for separate sessions.
 [Run and use muxer](muxer/README.md).
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)

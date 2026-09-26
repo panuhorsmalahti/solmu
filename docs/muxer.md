@@ -32,9 +32,9 @@ Click a sidebar space to switch projects. Each space remembers its selected
 tab and each tab remembers its focused pane. Click a tab to select its layout,
 or its **×** icon to close and terminate all its CLIs. Closing a background tab
 preserves the current tab. Closing a space's last tab removes the space;
-closing the final tab quits Muxer. Saved conversations remain in the backend.
+closing the final tab ends that session. Saved conversations remain in the backend.
 Toolbar buttons also create spaces/tabs, open split actions, zoom the focused
-pane, restart an exited CLI, or quit.
+pane, restart an exited CLI, or detach.
 
 Split a pane **right** or **down** to start another Solmu conversation in the
 same workspace. Splits can be nested. Click any visible terminal to focus it;
@@ -69,7 +69,7 @@ Press **Ctrl+b**, release it, then press the second key:
 | `x` | Close and terminate the focused pane |
 | `X` | Close the selected tab and all its panes |
 | `r` | Resize a running pane; restart an exited CLI with a new conversation |
-| `q` | Quit muxer and terminate its CLIs |
+| `q` | Detach from the session; its CLIs keep running |
 | `b` | Send a literal Ctrl+b to the selected CLI |
 
 Use all [CLI conversation commands](cli.md) inside a pane: send messages,
@@ -89,10 +89,50 @@ Provider keys stay on the backend. Muxer finds `solmu-cli` beside its own
 executable, then on PATH. Set `SOLMU_CLI_PATH` to an absolute Solmu CLI path
 if installed elsewhere.
 
-This first implementation supports **Solmu only** and foreground sessions.
-There is no background server or detach/reattach yet. Closing muxer terminates
-its launched CLIs; conversations remain saved in the backend. `/exit` leaves
-an exited pane visible so its final terminal contents can be read or restarted.
+Muxer supports **Solmu only**. Running `muxer` starts or attaches to your
+**default local background session**. **Detach** or **Ctrl+b q** closes only
+the attached UI: its panes keep running, including streaming replies. Closing
+the terminal also leaves the session running. Run `muxer` again to reattach
+to the same live terminals and conversations.
+
+Use named sessions for separate groups of projects:
+
+```sh
+muxer session attach work
+muxer --session side-project --cwd /path/to/project
+muxer session list
+muxer server status --session work
+muxer server stop --session work
+muxer pane read 1 --session work
+```
+
+`muxer server start --session work` starts a session without opening a UI.
+`--cwd` options set initial spaces when a session starts; reattaching uses its
+existing spaces. Add more projects with **+ Space** after attaching.
+Session names accept letters, digits, underscores, and hyphens (up to 64 characters).
+`muxer pane read ID` prints the live pane's visible terminal text, including
+when no UI is attached. Pane IDs appear in terminal headers. This command reads
+the current screen; it does not create a conversation or send input.
+
+Several terminals can attach to one session. Each remembers its own selected
+space, tab, pane, and zoom. Shared layout changes appear automatically in all
+clients. When clients view different tabs, each tab follows its viewer's size.
+When they share a tab, the last client to interact controls its pane dimensions;
+other clients display as much as fits in their terminal.
+
+Stop the default session and its CLIs with `muxer server stop`. `/exit` leaves
+an exited pane visible so its final contents can be read or restarted. Saved
+conversations remain available after stopping. For a temporary session whose
+panes terminate when you quit, use `muxer --foreground`.
+
+Session connection state and error logs live under `~/.solmu/muxer`
+(`%USERPROFILE%\.solmu\muxer` on Windows); `SOLMU_MUXER_DIR` overrides that
+directory. Keep it private to your account. The server listens only on localhost
+and authenticates clients using a per-session token.
+
+At this stage, reattaching preserves live terminals while the server runs.
+Stopping or restarting the server creates fresh panes on the next launch;
+layout restoration after server restart is not implemented yet.
 
 ![Solmu client screenshot](screenshots/muxer.png)
 

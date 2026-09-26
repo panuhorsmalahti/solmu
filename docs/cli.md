@@ -9,6 +9,7 @@ and creates a new conversation every time it opens.
 
 Type a message and press Enter to receive a streamed reply. Conversations and
 completed replies are saved by the backend. Use PageUp/PageDown to scroll.
+Ctrl+L redraws the terminal without changing your draft or conversation.
 An animated spinner shows progress. Tab completes a slash command prefix;
 repeated Tab cycles through matches. For example, `/ren` + Tab completes `/rename`.
 Typing `/` opens a filtered command list. Up/Down chooses a command;

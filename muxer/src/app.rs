@@ -31,6 +31,7 @@ struct Space {
     tabs: Vec<Tab>,
     selected: u64,
 }
+#[derive(Clone)]
 struct Menu {
     area: Rect,
     selected: usize,
@@ -44,6 +45,7 @@ const ACTIONS: &[&str] = &[
     "Restart exited pane",
 ];
 pub struct App {
+    pub persistent: bool,
     pub panes: Vec<Pane>,
     pub active: usize,
     pub workspace: Option<String>,
@@ -58,7 +60,93 @@ pub struct App {
     menu: Option<Menu>,
     area: Rect,
 }
+
+// Only presentation and navigation live in a client view. Layouts and real
+// processes remain shared in App, owned by the background server.
+#[derive(Clone)]
+pub struct View {
+    active: u64,
+    selections: Vec<(PathBuf, u64)>,
+    tabs: Vec<(u64, u64, bool)>,
+    workspace: Option<String>,
+    prefix: bool,
+    notice: String,
+    resizing: bool,
+    dragging: Option<Divider>,
+    menu: Option<Menu>,
+    area: Rect,
+}
 impl App {
+    pub fn view(&self) -> View {
+        View {
+            active: self.panes[self.active].id,
+            selections: self
+                .spaces
+                .iter()
+                .map(|space| (space.directory.clone(), space.selected))
+                .collect(),
+            tabs: self
+                .spaces
+                .iter()
+                .flat_map(|space| {
+                    space
+                        .tabs
+                        .iter()
+                        .map(|tab| (tab.id, tab.selected, tab.zoomed))
+                })
+                .collect(),
+            workspace: self.workspace.clone(),
+            prefix: self.prefix,
+            notice: self.notice.clone(),
+            resizing: self.resizing,
+            dragging: self.dragging.clone(),
+            menu: self.menu.clone(),
+            area: self.area,
+        }
+    }
+    pub fn use_view(&mut self, view: &View) {
+        for space in &mut self.spaces {
+            space.selected = view
+                .selections
+                .iter()
+                .find(|(directory, id)| {
+                    *directory == space.directory && space.tabs.iter().any(|tab| tab.id == *id)
+                })
+                .map(|(_, id)| *id)
+                .unwrap_or(space.tabs[0].id);
+            for tab in &mut space.tabs {
+                if let Some((_, selected, zoomed)) =
+                    view.tabs.iter().find(|(id, _, _)| *id == tab.id)
+                {
+                    tab.selected = if tab.layout.contains(*selected) {
+                        *selected
+                    } else {
+                        tab.layout.ids()[0]
+                    };
+                    tab.zoomed = *zoomed;
+                } else {
+                    tab.selected = tab.layout.ids()[0];
+                    tab.zoomed = false;
+                }
+            }
+        }
+        let active = self
+            .panes
+            .iter()
+            .position(|pane| pane.id == view.active)
+            .unwrap_or(0);
+        self.focus(active);
+        self.workspace = view.workspace.clone();
+        self.prefix = view.prefix;
+        self.notice = view.notice.clone();
+        self.resizing = view.resizing;
+        self.dragging = view.dragging.clone();
+        self.menu = view.menu.clone();
+        self.area = view.area;
+    }
+    pub fn selected_tab(&self) -> u64 {
+        self.tab().id
+    }
     pub fn new(executable: PathBuf) -> Self {
         Self {
             panes: vec![],
@@ -74,6 +162,7 @@ impl App {
             dragging: None,
             menu: None,
             area: Rect::new(0, 0, 120, 40),
+            persistent: false,
         }
     }
     pub fn add_space(&mut self, directory: PathBuf) -> Result<(), Box<dyn Error>> {
@@ -523,7 +612,7 @@ impl App {
             }
             return Ok(false);
         }
-        for (label, rect) in toolbar(area) {
+        for (label, rect) in toolbar(area, self.persistent) {
             if rect.contains(point) {
                 match label {
                     "+ Space" => self.workspace = Some(String::new()),
@@ -535,7 +624,7 @@ impl App {
                     "Split" => self.context_menu(area, x, y + 1),
                     "Zoom" => return Ok(self.action("Zoom / restore")),
                     "Restart" => self.restart(),
-                    "Quit" => return Ok(true),
+                    "Quit" | "Detach" => return Ok(true),
                     _ => {}
                 }
                 return Ok(false);
@@ -705,7 +794,7 @@ impl App {
             Block::new().bg(CHROME),
             Rect::new(content.x, 1, content.width, 1),
         );
-        for (label, rect) in toolbar(area) {
+        for (label, rect) in toolbar(area, self.persistent) {
             frame.render_widget(
                 Paragraph::new(format!(" {label} ")).fg(ACCENT).bg(CHROME),
                 rect,
@@ -841,7 +930,11 @@ impl App {
             }
         }
         let text = if self.prefix {
-            "n new tab · w space · v split right · - split down · h/j/k/l focus · H/J/K/L swap · z zoom · r resize/restart · x close pane · q quit"
+            if self.persistent {
+                "n new tab · w space · v split right · - split down · h/j/k/l focus · H/J/K/L swap · z zoom · r resize/restart · x close pane · q detach"
+            } else {
+                "n new tab · w space · v split right · - split down · h/j/k/l focus · H/J/K/L swap · z zoom · r resize/restart · x close pane · q quit"
+            }
         } else if self.resizing {
             "Resize: arrows or h/j/k/l move the nearest divider · Enter/Esc finishes · drag borders with the mouse"
         } else if !self.notice.is_empty() {
@@ -944,19 +1037,26 @@ fn modal(area: Rect) -> Rect {
         6.min(area.height),
     )
 }
-fn toolbar(area: Rect) -> Vec<(&'static str, Rect)> {
+fn toolbar(area: Rect, persistent: bool) -> Vec<(&'static str, Rect)> {
     let content = content(area);
     let mut x = content.x;
-    ["+ Space", "+ Tab", "Split", "Zoom", "Restart", "Quit"]
-        .into_iter()
-        .filter_map(|label| {
-            let width = label.len() as u16 + 4;
-            if x + width > content.right().saturating_sub(10) {
-                return None;
-            }
-            let rect = Rect::new(x, 1, width, 1);
-            x += width;
-            Some((label, rect))
-        })
-        .collect()
+    [
+        "+ Space",
+        "+ Tab",
+        "Split",
+        "Zoom",
+        "Restart",
+        if persistent { "Detach" } else { "Quit" },
+    ]
+    .into_iter()
+    .filter_map(|label| {
+        let width = label.len() as u16 + 4;
+        if x + width > content.right().saturating_sub(10) {
+            return None;
+        }
+        let rect = Rect::new(x, 1, width, 1);
+        x += width;
+        Some((label, rect))
+    })
+    .collect()
 }

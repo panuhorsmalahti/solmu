@@ -23,6 +23,7 @@ or your shell to connect elsewhere. Provider keys belong to the backend.
 
 Type a message and press Enter. Replies appear as they stream and are saved
 when complete. PageUp and PageDown scroll the conversation.
+Ctrl+L redraws the screen and preserves your unsent input.
 An animated spinner indicates that Solmu is working. Type a command prefix
 such as `/ren` and press Tab to complete it. Repeated Tab cycles matching commands.
 Typing `/` shows the command list. Use Up/Down to choose and Enter to select.

@@ -2,6 +2,9 @@ mod app;
 mod keys;
 mod layout;
 mod pane;
+mod session;
+#[cfg(windows)]
+mod windows;
 
 use app::{App, pane_inner};
 use crossterm::event::{self, Event, KeyEventKind, MouseButton, MouseEventKind};
@@ -10,11 +13,13 @@ use std::{error::Error, io, path::PathBuf, time::Duration};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut directories = Vec::new();
+    let mut mode = "attach".to_owned();
+    let mut name = "default".to_owned();
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--help" || arg == "-h" {
             println!(
-                "Solmu muxer\n\nUsage: muxer [--cwd PATH]...\n\nSpaces group Solmu tabs by working directory. Tabs hold real terminal panes.\nStart solmu-backend first. Click spaces, tabs, close icons, or toolbar controls.\nRight-click a pane for actions; drag dividers to resize.\nCtrl+b then: n new tab; w new space; Tab/] next tab; [ previous tab;\nUp/Down switch space; 1-8 select tab; s/v split right; - split down;\nh/j/k/l focus; H/J/K/L swap; z zoom; r resize/restart; x close pane;\nX close tab; q quit. Ctrl+b b sends literal Ctrl+b.\nUp to eight spaces, eight tabs per space, and eight panes per tab.\nSOLMU_BACKEND_URL selects the backend; SOLMU_CLI_PATH selects solmu-cli.\nForeground sessions only: quitting terminates the launched CLIs."
+                "Solmu muxer\n\nUsage: muxer [--session NAME] [--cwd PATH]... [--foreground]\n       muxer session list\n       muxer session attach NAME\n       muxer server start|status|stop [--session NAME]\n       muxer pane read ID [--session NAME]\n\nSpaces group Solmu tabs by working directory. Tabs hold real terminal panes.\nStart solmu-backend first. Click spaces, tabs, close icons, or toolbar controls.\nRight-click a pane for actions; drag dividers to resize.\nCtrl+b then: n new tab; w new space; Tab/] next tab; [ previous tab;\nUp/Down switch space; 1-8 select tab; s/v split right; - split down;\nh/j/k/l focus; H/J/K/L swap; z zoom; r resize/restart; x close pane;\nX close tab; q detach. Ctrl+b b sends literal Ctrl+b.\nUp to eight spaces, eight tabs per space, and eight panes per tab.\nSOLMU_BACKEND_URL selects the backend; SOLMU_CLI_PATH selects solmu-cli.\nDefault: attach to a local background session; panes survive detaching.\nUse server stop to terminate panes, or --foreground for a temporary session.\nSOLMU_MUXER_DIR selects the session state directory."
             );
             return Ok(());
         } else if arg == "--version" {
@@ -24,6 +29,50 @@ fn main() -> Result<(), Box<dyn Error>> {
             directories.push(PathBuf::from(
                 args.next().ok_or("--cwd requires a directory")?,
             ));
+        } else if arg == "--session" || arg == "--server" {
+            if arg == "--server" {
+                mode = "serve".into();
+            }
+            name = args
+                .next()
+                .ok_or("A session name is required")?
+                .into_string()
+                .map_err(|_| "Invalid session name")?;
+        } else if arg == "--foreground" {
+            mode = "foreground".into();
+        } else if arg == "server" {
+            mode = args
+                .next()
+                .ok_or("Use server start, status, or stop")?
+                .into_string()
+                .map_err(|_| "Invalid server command")?;
+            if !matches!(mode.as_str(), "start" | "status" | "stop") {
+                return Err("Use server start, status, or stop".into());
+            }
+        } else if arg == "session" {
+            let action = args.next().ok_or("Use session list or attach NAME")?;
+            if action == "list" {
+                mode = "list".into();
+            } else if action == "attach" {
+                name = args
+                    .next()
+                    .ok_or("Session name is required")?
+                    .into_string()
+                    .map_err(|_| "Invalid session name")?;
+            } else {
+                return Err("Use session list or attach NAME".into());
+            }
+        } else if arg == "pane" {
+            if args.next().is_none_or(|arg| arg != "read") {
+                return Err("Use pane read ID".into());
+            }
+            let id = args
+                .next()
+                .ok_or("Pane ID is required")?
+                .into_string()
+                .map_err(|_| "Invalid pane ID")?
+                .parse::<u64>()?;
+            mode = format!("read:{id}");
         } else {
             return Err("Unknown option; use muxer --help".into());
         }
@@ -33,11 +82,35 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         return Err("Could not load .env".into());
     }
+    session::validate_name(&name)?;
+    if mode.starts_with("read:") {
+        return session::control(&name, &mode);
+    }
+    match mode.as_str() {
+        "list" => return session::list(),
+        "stop" | "status" => return session::control(&name, &mode),
+        _ => {}
+    }
     if directories.is_empty() {
         directories.push(std::env::current_dir()?);
     }
     if directories.len() > 8 {
         return Err("Solmu muxer supports up to eight spaces".into());
+    }
+    for directory in &mut directories {
+        *directory = directory.canonicalize()?;
+        if !directory.is_dir() {
+            return Err("Workspace must be a directory".into());
+        }
+    }
+    match mode.as_str() {
+        "attach" => return session::attach(&name, &directories),
+        "start" => {
+            session::ensure(&name, &directories)?;
+            println!("Started Muxer session {name}");
+            return Ok(());
+        }
+        _ => {}
     }
     let executable = if let Some(path) = std::env::var_os("SOLMU_CLI_PATH") {
         PathBuf::from(path).canonicalize()?
@@ -50,6 +123,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             PathBuf::from(format!("solmu-cli{}", std::env::consts::EXE_SUFFIX))
         }
     };
+    if mode == "serve" {
+        return session::serve(&name, executable, directories);
+    }
     let mut app = App::new(executable);
     for directory in directories {
         app.add_space(directory)?;

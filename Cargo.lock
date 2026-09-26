@@ -775,6 +775,7 @@ dependencies = [
  "mio",
  "parking_lot",
  "rustix 1.1.5",
+ "serde",
  "signal-hook",
  "signal-hook-mio",
  "winapi",
@@ -4485,7 +4486,11 @@ dependencies = [
  "dotenvy",
  "portable-pty",
  "ratatui",
+ "serde",
+ "serde_json",
+ "uuid",
  "vt100",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
