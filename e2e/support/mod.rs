@@ -116,6 +116,9 @@ impl Backend {
         };
         if dotenv {
             std::fs::write(backend.directory.path().join(".env"), format!("LLM_PROVIDER=openai\nLLM_MODEL=test-model\nLLM_ENDPOINT={}\nOPENAI_API_KEY=fixture-key\nANTHROPIC_API_KEY=fixture-key\nSOLMU_BIND_ADDR=invalid-dotenv-value\n", backend.endpoint)).unwrap();
+        } else {
+            // Stop dotenv's parent-directory search before it reaches real keys.
+            std::fs::write(backend.directory.path().join(".env"), "").unwrap();
         }
         backend.launch().await;
         backend
