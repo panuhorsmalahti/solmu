@@ -139,6 +139,25 @@ impl Terminal {
             })
             .unwrap();
     }
+    async fn wait_resized(&self, cols: u16) {
+        tokio::time::timeout(Duration::from_secs(25), async {
+            loop {
+                let rendered = self
+                    .screen
+                    .lock()
+                    .unwrap()
+                    .screen()
+                    .cell(0, cols - 1)
+                    .is_some_and(|cell| !cell.contents().trim().is_empty());
+                if rendered {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(30)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("Missing resized right border:\n{}", self.contents()));
+    }
 }
 impl Drop for Terminal {
     fn drop(&mut self) {
@@ -183,10 +202,16 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.wait("SOLMU    First workspace").await;
     solmu_e2e::support::capture_terminal(tui.screen.lock().unwrap().screen(), "muxer");
     tui.resize(44, 200);
+    tui.wait_resized(200).await;
     tui.wait("SOLMU    First workspace").await;
     tui.wait("SOLMU    Second workspace").await;
-    // Click the second sidebar entry; keystrokes must reach that pane only.
+    // Confirm native resize/focus transitions before sending the next action.
+    tui.send(b"\x1b[<0;160;6M\x1b[<0;160;6m");
+    tui.wait("› 2 Solmu 2").await;
+    tui.send(b"\x1b[<0;3;3M\x1b[<0;3;3m");
+    tui.wait("› 1 Solmu 1").await;
     tui.send(b"\x1b[<0;3;6M\x1b[<0;3;6m");
+    tui.wait("› 2 Solmu 2").await;
     tui.command("/rename Clicked workspace");
     tui.wait("SOLMU    Clicked workspace").await;
     tui.prefix('s');
