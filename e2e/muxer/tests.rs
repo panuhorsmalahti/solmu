@@ -100,6 +100,15 @@ impl Terminal {
         .await
         .unwrap_or_else(|_| panic!("Missing {text:?}:\n{}", self.contents()));
     }
+    async fn wait_absent(&self, text: &str) {
+        tokio::time::timeout(Duration::from_secs(25), async {
+            while self.contents().contains(text) {
+                tokio::time::sleep(Duration::from_millis(30)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("Still showing {text:?}:\n{}", self.contents()));
+    }
     async fn exit(&mut self) {
         self.prefix('q');
         tokio::time::timeout(Duration::from_secs(10), async {
@@ -228,6 +237,9 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
     tui.wait("Workspace path: solmu-missing-workspace").await;
     assert!(tui.contents().contains("Workspace path:"));
     tui.send(b"\x1b");
+    // Unix terminals encode Alt using an Escape prefix. Confirm cancellation
+    // before sending Ctrl+b, so separate user actions cannot become Alt+Ctrl+b.
+    tui.wait_absent("New workspace").await;
     tui.prefix('w');
     tui.command(other.to_str().unwrap());
     tui.wait("Solmu 3 · idle").await;
