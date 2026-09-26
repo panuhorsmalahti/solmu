@@ -27,7 +27,12 @@ async fn complete_reply(backend: &Backend, id: &str, message: &Value) -> Vec<Str
     names
 }
 
+mod models;
+mod profile;
+mod profile_model;
+mod system_prompt_history;
 mod threads;
+mod workspaces;
 
 mod responses;
 

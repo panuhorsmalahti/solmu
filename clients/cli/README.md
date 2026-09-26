@@ -25,12 +25,15 @@ Type a message and press Enter. Replies appear as they stream and are saved
 when complete. PageUp and PageDown scroll the conversation.
 An animated spinner indicates that Solmu is working. Type a command prefix
 such as `/ren` and press Tab to complete it. Repeated Tab cycles matching commands.
+Typing `/` shows the command list. Use Up/Down to choose and Enter to select.
 
 | Command | Action |
 | --- | --- |
 | `/new [title]` | Start another conversation. |
 | `/threads` | List saved conversations with their IDs. |
 | `/open <id>` | Open a saved conversation and its history. |
+| `/profile` | Edit the shared system prompt and optional default model; see its last edit time. |
+| `/model [id\|default]` | Pick a thread model, set an ID, or restore the default. |
 | `/rename <title>` | Rename the current conversation. |
 | `/delete` | Delete the current conversation and its messages. |
 | `/help` | Show commands. |
@@ -41,6 +44,10 @@ Wait for a reply to finish before sending again or changing conversations.
 `/exit` still works during streaming. Errors are shown above the input; user
 messages remain saved after provider failures or cancellation. Conversations
 update automatically when another client changes them.
+
+New threads use your current working folder. `/new` reuses an empty thread until
+you send a message. In Profile, Tab switches fields, Ctrl+S saves, Ctrl+U clears,
+and Esc returns. The empty Model field shows the actual backend default.
 
 See [CLI usage](../../docs/cli.md), [configuration](../../docs/configuration.md),
 and [Docker instructions](../../docs/running.md).

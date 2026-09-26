@@ -2,17 +2,19 @@ use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures_util::StreamExt;
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 use solmu_client::{Action, Api, Connection, Session, Update};
 use std::{error::Error, io};
 use tokio::sync::mpsc;
+mod settings;
 
 const COMMANDS: &[&str] = &[
-    "/delete", "/exit", "/help", "/new", "/open", "/rename", "/stop", "/threads",
+    "/new", "/threads", "/open", "/model", "/profile", "/rename", "/delete", "/help", "/stop",
+    "/exit",
 ];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -82,7 +84,9 @@ fn stop(
 async fn run() -> Result<(), Box<dyn Error>> {
     let mut terminal = ratatui::init();
     let result = async {
-        let mut session = Session::new(Api::from_env());
+        let mut session = Session::new(Api::from_env().with_workspace(std::env::current_dir()?));
+        let (settings_sender, mut settings_receiver) = mpsc::unbounded_channel();
+        let mut page: Option<settings::Page> = None;
         let (sender, mut receiver) = mpsc::unbounded_channel();
         let mut active = launch(&mut session, Action::New("New conversation".into()), &sender);
         let mut events = EventStream::new();
@@ -90,6 +94,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
         let mut show_threads = false;
         let mut scroll = 0u16;
         let mut completion: Option<(String, usize)> = None;
+        let mut command_selection = 0usize;
         let mut spinner = 0usize;
         let mut animation = tokio::time::interval(std::time::Duration::from_millis(80));
         animation.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -106,12 +111,13 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(format!("Solmu | {state}")))?;
                 reported_state = state;
             }
-            terminal.draw(|frame| draw(frame, &session, &input, show_threads, scroll, spinner, connected))?;
+            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame); } else { draw(frame, &session, &input, show_threads, scroll, spinner, connected); draw_commands(frame, &input, command_selection); })?;
             let can_submit = !session.busy;
             tokio::select! {
                 _ = animation.tick(), if session.busy => spinner = spinner.wrapping_add(1),
                 Some(change) = changes.next() => {
                     match change {
+                        Connection::ProfileChanged => { if let Some(page) = &mut page && page.refresh() { settings::load(session.api.clone(), settings_sender.clone()); } },
                         Connection::Disconnected => connected = false,
                         Connection::Connected | Connection::Changed => {
                             connected = true;
@@ -119,6 +125,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
                         }
                     }
                 },
+                Some(event) = settings_receiver.recv() => { if let Some(page) = &mut page { page.update(event); } },
                 Some(update) = receiver.recv() => {
                     session.apply(update);
                     if !session.busy && pending_refresh { pending_refresh = false; active = launch(&mut session, Action::Refresh, &sender); }
@@ -130,8 +137,23 @@ async fn run() -> Result<(), Box<dyn Error>> {
                     let Some(event) = event else { break; };
                     let Event::Key(key) = event? else { continue; };
                     if key.kind == KeyEventKind::Release { continue; }
+                    if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c' | 'd')) { break; }
+                    if let Some(current_page) = &mut page {
+                        if session.busy && key.code == KeyCode::Enter && matches!(current_page, settings::Page::Models { .. }) { pending_enter = Some(Event::Key(key)); continue; }
+                        match current_page.key(key) {
+                            settings::Action::Close => page = None,
+                            settings::Action::Save(text, model) => settings::save(session.api.clone(), text, model, settings_sender.clone()),
+                            settings::Action::Model(model) => { page = None; active = launch(&mut session, Action::Model(model), &sender); },
+                            settings::Action::None => {},
+                        }
+                        continue;
+                    }
                     if key.code != KeyCode::Tab { completion = None; }
                     match key.code {
+                        KeyCode::Up | KeyCode::Down if !command_matches(&input).is_empty() => {
+                            let count = command_matches(&input).len();
+                            command_selection = if key.code == KeyCode::Up { (command_selection + count - 1) % count } else { (command_selection + 1) % count };
+                        },
                         KeyCode::Esc => { stop(&mut session, &mut active, &sender); input.clear(); },
                         KeyCode::Tab => {
                             let (prefix, index) = completion.get_or_insert_with(|| (input.clone(), 0));
@@ -142,9 +164,15 @@ async fn run() -> Result<(), Box<dyn Error>> {
                         KeyCode::Char('c' | 'd') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
                         KeyCode::PageUp => scroll = scroll.saturating_add(8),
                         KeyCode::PageDown => scroll = scroll.saturating_sub(8),
-                        KeyCode::Backspace => { input.pop(); },
-                        KeyCode::Char(character) => input.push(character),
+                        KeyCode::Backspace => { input.pop(); command_selection = 0; },
+                        KeyCode::Char(character) => { input.push(character); command_selection = 0; },
                         KeyCode::Enter => {
+                            let matches = command_matches(&input);
+                            if !matches.is_empty() && !COMMANDS.contains(&input.as_str()) {
+                                let selected = matches[command_selection % matches.len()];
+                                input = selected.into(); command_selection = 0;
+                                if matches!(selected, "/open" | "/rename") { input.push(' '); continue; }
+                            }
                             let text = input.trim().to_owned();
                             if text == "/exit" { break; }
                             if text == "/stop" { stop(&mut session, &mut active, &sender); input.clear(); continue; }
@@ -159,12 +187,15 @@ async fn run() -> Result<(), Box<dyn Error>> {
                             input.clear(); scroll = 0;
                             let (command, argument) = text.split_once(' ').unwrap_or((&text, ""));
                             let action = match command {
+                                "/profile" => { page = Some(settings::Page::profile()); settings::load(session.api.clone(), settings_sender.clone()); continue; },
+                                "/model" if argument.is_empty() => { page = Some(settings::Page::models(session.current.as_ref().and_then(|thread| thread.model.clone()))); settings::models(session.api.clone(), settings_sender.clone()); continue; },
+                                "/model" => Action::Model(if argument == "default" { None } else { Some(argument.into()) }),
                                 "/threads" => { show_threads = true; Action::Refresh },
                                 "/new" => { show_threads = false; Action::New(if argument.is_empty() { "New conversation".into() } else { argument.into() }) },
                                 "/open" if !argument.is_empty() => { show_threads = false; Action::Open(argument.into()) },
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /delete · /stop · /exit".into()); continue; },
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -205,13 +236,29 @@ fn draw(
         .map(|thread| thread.title.as_str())
         .unwrap_or("No conversation");
     frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(
-                " SOLMU ",
-                Style::new().fg(Color::Black).bg(Color::Cyan).bold(),
-            ),
-            Span::raw(format!("   {title}")),
-        ]))
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled(
+                    " SOLMU ",
+                    Style::new().fg(Color::Black).bg(Color::Cyan).bold(),
+                ),
+                Span::raw(format!("   {title}")),
+            ]),
+            Line::from(format!(
+                "Model: {}  · {}",
+                session
+                    .current
+                    .as_ref()
+                    .and_then(|thread| thread.model.as_deref())
+                    .unwrap_or("default"),
+                session
+                    .current
+                    .as_ref()
+                    .and_then(|thread| thread.workspace.as_deref())
+                    .unwrap_or("")
+            ))
+            .dark_gray(),
+        ])
         .block(Block::new().borders(Borders::BOTTOM)),
         header,
     );
@@ -229,7 +276,6 @@ fn draw(
             Line::from("A little space for your next big idea.".cyan().bold()),
             Line::from(""),
             Line::from("Send a message to begin. Your conversation is saved automatically."),
-            Line::from("Use /help for conversation commands."),
         ]);
     } else {
         for message in &session.messages {
@@ -286,11 +332,84 @@ fn draw(
     );
     frame.render_widget(
         Paragraph::new(if session.responding {
-            "Esc stop   /stop stop reply   /exit quit"
+            "Esc to stop"
         } else {
-            "Enter send   Tab complete   /help commands   PageUp/PageDown scroll   /exit quit"
+            ""
         })
         .dark_gray(),
         footer,
+    );
+}
+
+fn command_matches(input: &str) -> Vec<&'static str> {
+    if !input.starts_with('/') || input.contains(char::is_whitespace) {
+        return Vec::new();
+    }
+    COMMANDS
+        .iter()
+        .copied()
+        .filter(|command| command.starts_with(input))
+        .collect()
+}
+
+fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
+    let commands = command_matches(input);
+    if commands.is_empty() {
+        return;
+    }
+    let descriptions = |command| match command {
+        "/new" => "Start a new conversation",
+        "/threads" => "Browse saved conversations",
+        "/open" => "Open a conversation by ID",
+        "/model" => "Choose the model for this thread",
+        "/profile" => "Edit Solmu's system prompt",
+        "/rename" => "Rename this conversation",
+        "/delete" => "Delete this conversation",
+        "/help" => "Show available commands",
+        "/stop" => "Stop the current response",
+        "/exit" => "Quit Solmu",
+        _ => "",
+    };
+    let area = frame.area();
+    let height = (commands.len() as u16 + 2).min(area.height.saturating_sub(7));
+    if height < 3 {
+        return;
+    }
+    let rect = Rect::new(
+        area.x + 1,
+        area.y + area.height.saturating_sub(4 + height),
+        area.width.saturating_sub(2).min(78),
+        height,
+    );
+    frame.render_widget(Clear, rect);
+    let lines: Vec<Line<'_>> = commands
+        .iter()
+        .enumerate()
+        .map(|(index, command)| {
+            let line = format!(
+                "{} {:<12} {}",
+                if index == selected % commands.len() {
+                    "›"
+                } else {
+                    " "
+                },
+                command,
+                descriptions(command)
+            );
+            if index == selected % commands.len() {
+                Line::from(line.green().bold())
+            } else {
+                Line::from(line)
+            }
+        })
+        .collect();
+    let offset = (selected as u16).saturating_sub(height.saturating_sub(3));
+    frame.render_widget(
+        Paragraph::new(lines).scroll((offset, 0)).block(
+            Block::bordered()
+                .title(" Commands ")
+                .border_style(Style::new().fg(Color::DarkGray)),
+        ),
+        rect,
     );
 }

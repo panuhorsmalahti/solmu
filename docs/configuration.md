@@ -21,6 +21,7 @@ ignored by Git. Keep provider credentials on the backend; clients never need the
 | `SOLMU_BIND_ADDR` | `127.0.0.1:3000` | `0.0.0.0:3000` | IP address and port for the API server. IPv6 addresses use brackets, such as `[::1]:3000`. |
 | `SOLMU_DATABASE_URL` | `sqlite://solmu.db` | `sqlite:///data/solmu.db` | SQLite file. Its parent directory must exist. Tables are created automatically. |
 | `SOLMU_BACKEND_URL` | `http://127.0.0.1:3000` | Same | Backend address used by Rust clients. |
+| `SOLMU_WORKSPACE` | `~/.solmu/workspace` (Windows: `%USERPROFILE%\.solmu\workspace`) | `/data/workspace` | Default working folder for threads without an explicit workspace. Created automatically. |
 
 See [the API guide](api.md) for conversation endpoints. Replies currently stream
 over Server-Sent Events. All clients use `/api/v1/events` WebSocket notifications
@@ -55,6 +56,13 @@ when several providers are configured, for example `openai`, `anthropic`,
 Set `LLM_MODEL` to your preferred model. Otherwise Solmu uses the first model
 listed by the provider adapter. Set `LLM_ENDPOINT` to override the provider's
 native API base URL, including its API path (for example `/v1/` for OpenAI).
+
+You can change models without restarting: set the optional Model field in
+[Profile](profile.md), or select a model for an individual thread. The order is
+thread model, then Profile model, then `LLM_MODEL` or provider discovery. An
+empty Profile model field displays the backend's actual fallback. Clearing an
+override restores the next setting in this order. The provider still comes
+from backend configuration.
 
 For OpenAI, an example is `LLM_MODEL=gpt-6-sol` and
 `LLM_TITLE_MODEL=gpt-6-luna`. `LLM_TITLE_MODEL` chooses a cheaper model to name

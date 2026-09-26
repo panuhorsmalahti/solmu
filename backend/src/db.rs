@@ -16,5 +16,11 @@ pub async fn connect(url: &str) -> Result<SqlitePool, Box<dyn Error>> {
         .connect_with(options)
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
+    let mut transaction = pool.begin().await?;
+    sqlx::query("INSERT OR IGNORE INTO profile (id, system_prompt, edited_at) VALUES (1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")
+        .bind(crate::prompt::SYSTEM_PROMPT).execute(&mut *transaction).await?;
+    sqlx::query("INSERT INTO system_prompt_versions (system_prompt, edited_at) SELECT system_prompt, edited_at FROM profile WHERE id = 1 AND NOT EXISTS (SELECT 1 FROM system_prompt_versions)")
+        .execute(&mut *transaction).await?;
+    transaction.commit().await?;
     Ok(pool)
 }

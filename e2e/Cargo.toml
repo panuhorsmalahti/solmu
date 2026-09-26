@@ -33,7 +33,7 @@ path = "cli/mod.rs"
 
 [[test]]
 name = "desktop"
-path = "desktop/tests.rs"
+path = "desktop/mod.rs"
 
 [[test]]
 name = "boxer"

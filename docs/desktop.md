@@ -12,6 +12,15 @@ Edit the title and click **Rename** to save it. **Delete** removes the selected
 thread and all its messages. Changes from other clients appear automatically
 over WebSockets. New threads are named after the first user message.
 
+Repeated **+** clicks reuse the current empty conversation until you send a
+message. **Profile**, above Conversations, edits your shared system prompt and
+optional default model. It shows the prompt's last edit time and the actual
+backend default in the empty Model field. Changes appear live; unsaved edits
+are preserved. The conversation's model button opens known OpenAI or Anthropic
+choices, or a custom model ID. Default removes the thread override. The working
+folder is shown below the conversation title. See [Profile](profile.md) and
+[workspaces](workspaces.md).
+
 Type into the message input and press Enter or **Send**. Replies stream into
 the conversation and are saved when complete. **Stop** cancels a response and
 discards the unfinished reply, keeping your user message. Wait for completion before

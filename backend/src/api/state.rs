@@ -49,6 +49,13 @@ impl AppState {
         });
     }
 
+    pub fn profile_changed(&self) {
+        let _ = self.events.send(Change {
+            kind: "profile_changed",
+            thread_id: None,
+        });
+    }
+
     pub fn resync() -> Change {
         Change {
             kind: "conversation_changed",

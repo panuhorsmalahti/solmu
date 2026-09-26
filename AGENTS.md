@@ -7,6 +7,10 @@ All user-facing changes and features must be documented in the root `docs/` fold
 Whenever a client's UI changes, update its screenshot in `docs/screenshots/`.
 Keep the screenshot links in client guides, READMEs, and the website current.
 
+Do not add reload or refresh buttons anywhere. Every web page must remain
+reactive and refresh automatically when relevant data changes, including after
+reconnecting. Preserve unsaved user edits during automatic updates.
+
 Scope end-to-end tests by client under `e2e/<client>/`, for example `e2e/cli/`.
 Use `e2e/api/` for tests of the backend HTTP API.
 

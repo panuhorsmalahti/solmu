@@ -10,6 +10,18 @@ use genai::{
 
 use crate::{api::error::ApiError, config::optional_env, storage::messages::Message};
 
+#[derive(serde::Serialize)]
+pub struct ModelCatalog {
+    pub provider: Option<String>,
+    pub default_model: Option<String>,
+    pub models: Vec<Model>,
+}
+#[derive(serde::Serialize)]
+pub struct Model {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Clone)]
 pub struct Llm {
     client: Client,
@@ -17,6 +29,7 @@ pub struct Llm {
     model: Option<String>,
     title_model: Option<String>,
     endpoint: Option<String>,
+    discovered_model: tokio::sync::OnceCell<String>,
 }
 
 impl Llm {
@@ -81,12 +94,86 @@ impl Llm {
             model: optional_env("LLM_MODEL")?,
             title_model: optional_env("LLM_TITLE_MODEL")?,
             endpoint,
+            discovered_model: tokio::sync::OnceCell::new(),
         })
     }
 
-    pub async fn stream(&self, history: &[Message]) -> Result<ChatStreamResponse, ApiError> {
-        let model = self.main_model().await?;
-        let messages = std::iter::once(ChatMessage::system(crate::prompt::SYSTEM_PROMPT))
+    pub fn models(&self) -> ModelCatalog {
+        let known: &[(&str, &str)] = match self.provider {
+            Some(AdapterKind::OpenAI) => &[
+                ("gpt-6-astra", "GPT 6 Astra"),
+                ("gpt-6-sol", "GPT 6 Sol"),
+                ("gpt-6-luna", "GPT 6 Luna"),
+            ],
+            Some(AdapterKind::Anthropic) => &[
+                ("claude-opus-5-5", "Opus 5.5"),
+                ("claude-fable-5-1", "Fable 5.1"),
+                ("claude-sonnet-5", "Sonnet 5"),
+                ("claude-haiku-4-5", "Haiku 4.5"),
+            ],
+            _ => &[],
+        };
+        let mut models: Vec<Model> = known
+            .iter()
+            .map(|(id, name)| Model {
+                id: (*id).into(),
+                name: (*name).into(),
+            })
+            .collect();
+        if let Some(id) = &self.model
+            && !models.iter().any(|model| model.id == *id)
+        {
+            models.push(Model {
+                id: id.clone(),
+                name: id.clone(),
+            });
+        }
+        ModelCatalog {
+            provider: self.provider.map(|provider| provider.as_lower_str().into()),
+            default_model: self.model.clone(),
+            models,
+        }
+    }
+
+    pub async fn backend_default_model(&self) -> Option<String> {
+        self.main_model().await.ok().map(|model| {
+            model
+                .split_once("::")
+                .map_or(model.clone(), |(_, id)| id.to_owned())
+        })
+    }
+
+    pub fn validate_model(&self, model: &str) -> Result<(), ApiError> {
+        if model.is_empty()
+            || model.len() > 200
+            || !model
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_.:/".contains(c))
+            || model.contains("::")
+        {
+            return Err(ApiError::invalid(
+                "Use a model ID for the backend's selected provider, without a provider prefix",
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn stream(
+        &self,
+        history: &[Message],
+        system_prompt: &str,
+        model: Option<&str>,
+    ) -> Result<ChatStreamResponse, ApiError> {
+        let model = if let Some(model) = model {
+            self.validate_model(model)?;
+            let provider = self
+                .provider
+                .ok_or_else(|| ApiError::invalid("Configure an LLM provider first"))?;
+            format!("{}::{model}", provider.as_lower_str())
+        } else {
+            self.main_model().await?
+        };
+        let messages = std::iter::once(ChatMessage::system(system_prompt))
             .chain(history.iter().map(|message| {
                 if message.role == "assistant" {
                     ChatMessage::assistant(&message.content)
@@ -168,17 +255,19 @@ impl Llm {
         let model = if let Some(model) = &self.model {
             model.clone()
         } else {
-            let config = ProviderConfig {
-                endpoint: self.endpoint.as_ref().map(|endpoint| {
-                    Endpoint::from_owned(if endpoint.ends_with('/') {
-                        endpoint.clone()
-                    } else {
-                        format!("{endpoint}/")
-                    })
-                }),
-                auth: None,
-            };
-            tokio::time::timeout(
+            self.discovered_model
+                .get_or_try_init(|| async {
+                    let config = ProviderConfig {
+                        endpoint: self.endpoint.as_ref().map(|endpoint| {
+                            Endpoint::from_owned(if endpoint.ends_with('/') {
+                                endpoint.clone()
+                            } else {
+                                format!("{endpoint}/")
+                            })
+                        }),
+                        auth: None,
+                    };
+                    tokio::time::timeout(
                 Duration::from_secs(30),
                 self.client.all_model_names(provider, config),
             )
@@ -193,7 +282,10 @@ impl Llm {
                     "model_unavailable",
                     "No model is available; set LLM_MODEL to a model supported by your provider",
                 )
-            })?
+            })
+                })
+                .await?
+                .clone()
         };
         Ok(format!("{}::{model}", provider.as_lower_str()))
     }

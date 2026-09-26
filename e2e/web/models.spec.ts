@@ -1,0 +1,22 @@
+import { test, expect } from '@playwright/test'
+
+test('model picker saves only the selected thread override and can clear it', async ({ page, request }) => {
+  await page.goto('/')
+  await expect(page.getByLabel('Message Solmu', { exact: true })).toBeEnabled()
+  const id = page.url().split('/').pop()
+  await page.getByRole('button', { name: 'Select model' }).click()
+  for (const name of ['GPT 6 Astra', 'GPT 6 Sol', 'GPT 6 Luna']) await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'GPT 6 Luna', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Select model' })).toHaveText('GPT 6 Luna')
+  expect((await (await request.get(`/api/v1/threads/${id}`)).json()).model).toBe('gpt-6-luna')
+  await request.patch(`/api/v1/threads/${id}`, { data: { model: 'gpt-6-sol' } })
+  await expect(page.getByRole('button', { name: 'Select model' })).toHaveText('GPT 6 Sol')
+  await page.getByRole('button', { name: 'Select model' }).click()
+  await page.getByLabel('Custom model ID').fill('test-model')
+  await page.getByRole('button', { name: 'Apply model' }).click()
+  await expect(page.getByRole('button', { name: 'Select model' })).toHaveText('test-model')
+  await page.getByRole('button', { name: 'Select model' }).click()
+  await page.getByRole('button', { name: /^Default/ }).click()
+  await expect(page.getByRole('button', { name: 'Select model' })).toHaveText('Default model')
+  expect((await (await request.get(`/api/v1/threads/${id}`)).json()).model).toBeNull()
+})

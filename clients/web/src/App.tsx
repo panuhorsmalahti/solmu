@@ -1,14 +1,19 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import ProfilePage from './Profile'
 import { ArrowUp, MessageSquare, Plus, Square, Trash2, Check, Sprout } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { list, reply, request, type Thread, type Message } from '@/lib/api'
+import { list, reply, request, type Thread, type Message, type ModelCatalog } from '@/lib/api'
 
 export default function App() {
   const { threadId } = useParams()
   const navigate = useNavigate()
+  const isProfile = useLocation().pathname === '/profile'
+  const [profileRevision, setProfileRevision] = useState(0)
+  const [catalog, setCatalog] = useState<ModelCatalog | null>(null)
+  const [modelPicker, setModelPicker] = useState(false), [customModel, setCustomModel] = useState('')
   const [threads, setThreads] = useState<Thread[]>([])
   const [current, setCurrent] = useState<Thread | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -32,12 +37,16 @@ export default function App() {
         if (requestedRevision !== revision.current) { dirty.current = true; return }
         setTitle(value => value === current.title ? thread.title : value); setCurrent(thread)
         setMessages(history)
-      } else { loadedThread.current = null; setCurrent(null); setTitle(''); setMessages([]); navigate('/', { replace: true }) }
+      } else { loadedThread.current = null; setCurrent(null); setTitle(''); setMessages([]); if (!isProfile) navigate('/', { replace: true }) }
     }
     setThreads(next)
   }
 
   useEffect(() => {
+    if (isProfile) {
+      void list<Thread>('/threads').then(setThreads).catch(error => setError(describe(error))).finally(() => setBusy(false))
+      return
+    }
     if (threadId && loadedThread.current === threadId) return
     ++revision.current
     setBusy(true)
@@ -61,7 +70,9 @@ export default function App() {
       disposed = true
       if (controller.current) { controller.current.abort(); if (threadId) void request(`/threads/${threadId}/stop`, 'POST').catch(() => {}) }
     }
-  }, [threadId, navigate])
+  }, [threadId, navigate, isProfile])
+
+  useEffect(() => { void request<ModelCatalog>('/models').then(setCatalog).catch(error => setError(describe(error))) }, [profileRevision])
 
   const liveChange = useEffectEvent(() => {
     if (busy) { dirty.current = true; return }
@@ -71,8 +82,8 @@ export default function App() {
     let socket: WebSocket | undefined, timer: ReturnType<typeof setTimeout> | undefined, disposed = false
     function connect() {
       socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/v1/events`)
-      socket.onopen = () => { setConnected(true); liveChange() }
-      socket.onmessage = event => { if (JSON.parse(event.data).type === 'conversation_changed') liveChange() }
+      socket.onopen = () => { setConnected(true); setProfileRevision(value => value + 1); liveChange() }
+      socket.onmessage = event => { const type = JSON.parse(event.data).type; if (type === 'conversation_changed') liveChange(); if (type === 'profile_changed') setProfileRevision(value => value + 1) }
       socket.onclose = () => { if (!disposed) { setConnected(false); timer = setTimeout(connect, 2000) } }
       socket.onerror = () => socket?.close()
     }
@@ -93,6 +104,7 @@ export default function App() {
   }
 
   function newThread() {
+    if (current && messages.length === 0) return
     void act(async () => {
       const thread = await request<Thread>('/threads', 'POST', {})
       loadedThread.current = thread.id
@@ -135,7 +147,8 @@ export default function App() {
 
   return <div className="app">
     <aside className="sidebar" aria-label="Conversation threads">
-      <div className="brand"><Sprout className="brand-mark" strokeWidth={1.5} />solmu</div>
+      <button className="brand" aria-label="Solmu · Profile" disabled={busy} onClick={() => navigate('/profile')}><Sprout className="brand-mark" strokeWidth={1.5} />solmu</button>
+      <Button variant="ghost" className="profile-link" aria-current={isProfile ? 'page' : undefined} disabled={busy} onClick={() => navigate('/profile')}>Profile</Button>
       <div className="sidebar-label">Conversations<Button variant="ghost" size="icon" aria-label="New thread" title="New thread" disabled={busy} onClick={newThread}><Plus size={17} /></Button></div>
       <nav className="threads" aria-label="Thread selector">
         {threads.map(thread => <button key={thread.id} className="thread" aria-current={thread.id === current?.id} disabled={busy} onClick={() => openThread(thread)}><MessageSquare size={14} /><span>{thread.title}</span></button>)}
@@ -143,13 +156,16 @@ export default function App() {
       <div className="sidebar-footer">YOUR IDEAS, CONNECTED</div>
     </aside>
     <main className="workspace">
+      {isProfile ? <ProfilePage revision={profileRevision}/> : <>
       <header className="topbar">
         <Input className="title-input" aria-label="Conversation title" placeholder="Select a conversation" value={title} disabled={busy || !current} onChange={event => setTitle(event.target.value)} />
         <div className="topbar-actions">
+          <Button variant="ghost" aria-label="Select model" disabled={busy || !current} onClick={() => { setCustomModel(current?.model ?? ''); setModelPicker(true) }}>{catalog?.models.find(model => model.id === current?.model)?.name ?? current?.model ?? 'Default model'}</Button>
           <Button size="icon" variant="ghost" aria-label="Rename thread" title="Save title" disabled={busy || !current || !title.trim()} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { title }); setCurrent(thread); setTitle(thread.title); setThreads(await list('/threads')) })}><Check size={16} /></Button>
           <Button size="icon" variant="ghost" aria-label="Delete thread" title="Delete thread" disabled={busy || !current} onClick={() => void act(async () => { await request(`/threads/${current!.id}`, 'DELETE'); setCurrent(null); setTitle(''); setMessages([]); setDraft(''); setThreads(await list('/threads')); navigate('/') })}><Trash2 size={15} /></Button>
         </div>
       </header>
+      {modelPicker && <section className="model-picker" role="dialog" aria-label="Select model"><h2>Model for this thread</h2><p>{catalog?.provider ?? 'Configure a provider first'} · Changes apply to the next reply.</p><div className="model-options">{[{ id: '', name: `Default${catalog?.default_model ? ` · ${catalog.default_model}` : ''}` }, ...(catalog?.models ?? [])].map(model => <Button key={model.id} variant={model.id === (current?.model ?? '') ? 'default' : 'outline'} disabled={busy} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: model.id || null }); setCurrent(thread); setModelPicker(false); await refresh() })}>{model.name}</Button>)}</div><div className="model-custom"><Input aria-label="Custom model ID" placeholder="Custom model ID" value={customModel} disabled={busy} onChange={event => setCustomModel(event.target.value)}/><Button disabled={busy || !customModel.trim()} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: customModel.trim() }); setCurrent(thread); setModelPicker(false); await refresh() })}>Apply model</Button><Button variant="ghost" onClick={() => setModelPicker(false)}>Cancel</Button></div></section>}
       <section className="history" aria-label="Conversation" aria-busy={busy}>
         {messages.length === 0 && <div className="empty"><span className="eyebrow">Room for possibility</span><h1>A little space for your<br/>next big idea.</h1><p>Ask a question. Untangle a thought. Follow an idea somewhere new — one conversation at a time.</p><div className="suggestions">{['Help me plan a project', 'Explore an idea', 'Explain something new'].map(text => <Button key={text} variant="outline" disabled={!current || busy} onClick={() => setDraft(text)}>{text}</Button>)}</div></div>}
         {messages.map(message => <article className="message" key={message.id} data-role={message.role}><div className="message-label">{message.role === 'user' ? 'YOU' : 'SOLMU'}</div><div className="message-content">{message.content}</div></article>)}
@@ -160,8 +176,9 @@ export default function App() {
         {error && <p className="error" role="alert">{error}</p>}
         {busy && <p className="working" role="status">Solmu is working…</p>}
         <div className="composer"><Textarea aria-label="Message Solmu" placeholder="Where shall we begin?" value={draft} disabled={busy || !current} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send() } }}/>{responding ? <Button className="send" variant="destructive" aria-label="Stop response" onClick={() => void stop()}><Square size={12}/>Stop</Button> : <Button className="send" size="icon" aria-label="Send message" disabled={busy || !current || !draft.trim()} onClick={send}><ArrowUp size={19}/></Button>}</div>
-        <div className="composer-note"><span>Enter to send · Shift+Enter for a new line</span><span>{connected ? 'Conversations saved locally' : 'Reconnecting…'}</span></div>
+        <div className="composer-note"><span>Enter to send · Shift+Enter for a new line</span>{!connected && <span>Reconnecting…</span>}</div>
       </div>
+      </>}
     </main>
   </div>
 }

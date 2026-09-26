@@ -1,6 +1,6 @@
 # Solmu
 
-An open-source autonomous agent, taking shape. A Rust backend with terminal,
+An open-source autonomous agent. A Rust backend with terminal,
 native desktop, and web clients that share your conversations.
 
 [Website](https://panuhorsmalahti.github.io/solmu/) · [Client guide](docs/clients.md) · [Configuration](docs/configuration.md) · [Releases](https://github.com/panuhorsmalahti/solmu/releases)
@@ -12,6 +12,8 @@ Licensed under [MIT](LICENSE).
 - Create, open, rename, and delete threads in every client.
 - See changes across clients instantly and stop responses anytime.
 - Link directly to conversations in the web client.
+- Customize the shared system prompt and default model in Profile.
+- Choose a model per thread and work from your CLI's current folder.
 - Run locally, in Docker, or in a Linux sandbox workspace.
 - Run multiple Solmu terminal sessions with workspace switching and split views.
 

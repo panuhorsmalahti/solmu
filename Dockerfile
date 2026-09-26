@@ -26,6 +26,7 @@ RUN mkdir /data && chown 10001:10001 /data
 COPY --from=build /build/target/release/solmu-backend /usr/local/bin/solmu-backend
 ENV SOLMU_BIND_ADDR=0.0.0.0:3000
 ENV SOLMU_DATABASE_URL=sqlite:///data/solmu.db
+ENV SOLMU_WORKSPACE=/data/workspace
 EXPOSE 3000
 VOLUME ["/data"]
 USER 10001:10001

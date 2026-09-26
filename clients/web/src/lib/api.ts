@@ -1,4 +1,6 @@
-export interface Thread { id: string; title: string }
+export interface Thread { id: string; title: string; model: string | null; workspace: string | null }
+export interface Profile { system_prompt: string; model: string | null; backend_default_model: string | null; edited_at: string }
+export interface ModelCatalog { provider: string | null; default_model: string | null; models: { id: string; name: string }[] }
 export interface Message { id: string; role: 'user' | 'assistant'; content: string }
 export type ReplyEvent = { event: 'delta'; data: { text: string } } | { event: 'done'; data: Message }
 

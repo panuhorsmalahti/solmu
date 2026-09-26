@@ -6,20 +6,23 @@ authentication is not implemented.
 
 | Method | Path | Body / result |
 | --- | --- | --- |
-| POST | `/api/v1/threads` | `{ "title": "Planning" }`, optional title. New thread (201). |
+| POST | `/api/v1/threads` | `{ "title": "Planning", "workspace": "/path/to/project" }`, both optional. New thread (201). |
 | GET | `/api/v1/threads` | Threads, most recently updated first. |
 | GET | `/api/v1/threads/{id}` | A thread. |
-| PATCH | `/api/v1/threads/{id}` | `{ "title": "New title" }`. |
+| PATCH | `/api/v1/threads/{id}` | Optional `title` and/or `model`. `model: null` clears the thread override. |
 | DELETE | `/api/v1/threads/{id}` | Deletes the thread and its messages (204). |
 | POST | `/api/v1/threads/{id}/messages` | `{ "content": "Hello" }`. Saved user message (201). |
 | GET | `/api/v1/threads/{id}/messages` | Saved messages in conversation order. |
 | POST | `/api/v1/threads/{id}/responses` | `{ "message_id": "saved-user-message-id" }`. Streams an assistant reply. |
 | POST | `/api/v1/threads/{id}/stop` | Cancels the active response (204). Safe to repeat. |
 | GET | `/api/v1/events` | WebSocket connection for live conversation updates. |
+| GET | `/api/v1/profile` | Current `system_prompt`, nullable `model`, `backend_default_model`, and `edited_at` (UTC timestamp). |
+| PUT | `/api/v1/profile` | Required `system_prompt`, optional `model`. Omission preserves the model; null clears it. Returns the saved profile. |
+| GET | `/api/v1/models` | Provider, effective `default_model`, and named `models` (`id`, `name`). |
 
 List endpoints accept `limit` (1–100, default 50) and `offset` (default 0).
 Results have `{ "items": [], "limit": 50, "offset": 0 }`.
-Threads contain `id`, `title`, `created_at`, and `updated_at`. Messages contain
+Threads contain `id`, `title`, nullable `model`, `workspace`, `created_at`, and `updated_at`. Messages contain
 `id`, `thread_id`, `role`, `content`, `reply_to_id`, and `created_at`.
 
 ## Streaming replies
@@ -52,3 +55,16 @@ The server sends `{ "type": "ready" }`, then
 saved messages, completed replies, and generated names. Reload affected data
 after these notifications. A null thread ID means reload everything. Reconnect
 and reload after a lost connection; events are not replayed.
+
+`{ "type": "profile_changed" }` means fetch the current Profile and model
+catalog again. Preserve unsaved edits. System prompt revisions are saved
+atomically with the current profile; only changed text creates a revision.
+History is not exposed by an API yet. Existing profiles get an initial history
+entry when upgrading, with the migration time as their edit timestamp.
+
+Models apply in this order: thread override, Profile override, backend default.
+Profile's `backend_default_model` always describes the fallback without either
+override. Model IDs must belong to the configured backend provider. Prompts
+must contain text and be at most 64000 bytes. Workspaces are absolute folders
+on the backend host; they must exist when explicitly supplied. Without a
+workspace, the backend creates its [default folder](workspaces.md).

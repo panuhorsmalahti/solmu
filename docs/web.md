@@ -11,6 +11,15 @@ click a thread to resume it or **+** to create one. The title gets an automatic
 name after the first message. Edit it and click the check icon to rename it.
 The trash icon deletes the thread and all its messages.
 
+Repeated **+** clicks reuse the current empty conversation until you send a
+message. Open **Profile** above Conversations, or click **solmu**, to edit your
+shared system prompt and optional default model. The page shows when the prompt
+was last edited, and the empty Model field displays the actual backend default.
+Use the model button in a conversation to override its model or return to the
+default. OpenAI and Anthropic show named choices; custom model IDs also work.
+Profile changes appear live while preserving unsaved edits.
+See [Profile](profile.md) and [workspaces](workspaces.md).
+
 Type a message and press Enter or the send arrow. Shift+Enter adds a newline.
 Replies stream into the conversation and are saved when complete. Thread
 changes and sending are disabled while a reply is processing. Provider errors
@@ -22,7 +31,7 @@ automatically over WebSockets, with reconnect after a lost connection.
 
 For a production build, run `npm run build:web`. Serve `clients/web/dist` with
 a reverse proxy that sends `/api` to the backend on the same origin, including
-WebSocket upgrades for `/api/v1/events`. Serve `index.html` for `/threads/*`
+WebSocket upgrades for `/api/v1/events`. Serve `index.html` for `/threads/*` and `/profile`
 so conversation links and reloads work. Keep all
 provider credentials on the backend. The marketing website on GitHub Pages
 is separate from this client and does not host a backend or conversations.

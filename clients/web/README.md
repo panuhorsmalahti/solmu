@@ -27,6 +27,13 @@ message unless you chose a name manually. Changes from other clients appear
 automatically over WebSockets. **Stop** cancels a response. Each conversation
 has a linkable `/threads/{id}` URL. Errors appear above the composer.
 
+**Profile**, above Conversations, or clicking **solmu** opens `/profile`.
+Edit the shared system prompt and optional default model, and see the prompt's
+last edit time. An empty Model field shows the actual backend default. Use the
+conversation's model button to choose a model for that thread. Repeated **+**
+clicks reuse the empty thread until you send a message. Profile updates appear
+automatically and preserve unsaved edits. See [Profile](../../docs/profile.md).
+
 ## Build
 
 ```sh
@@ -36,7 +43,7 @@ npm run build:web
 
 The static build is in `clients/web/dist`. In production, serve it on the same
 origin as the backend and proxy `/api` to Solmu, including WebSocket upgrades.
-Serve `index.html` for `/threads/*`. The web client does not embed
+Serve `index.html` for `/threads/*` and `/profile`. The web client does not embed
 provider keys or connect directly to LLM providers.
 
 See [web usage](../../docs/web.md).

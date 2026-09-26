@@ -136,6 +136,7 @@ impl Backend {
             .current_dir(self.directory.path())
             .env("SOLMU_BIND_ADDR", "127.0.0.1:0")
             .env("SOLMU_DATABASE_URL", "sqlite://solmu.db")
+            .env("SOLMU_WORKSPACE", self.directory.path().join("workspace"))
             .env_remove("LLM_PROVIDER")
             .env_remove("LLM_MODEL")
             .env_remove("LLM_TITLE_MODEL")

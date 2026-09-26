@@ -24,6 +24,12 @@ Use **Stop** while waiting to cancel a response. Conversations update live
 when another client changes them. Errors appear above
 the message input. Close the window to exit; conversations remain saved.
 
+Open **Profile** above Conversations to edit the system prompt and optional
+default model, and see when the prompt was last edited. An empty Model field
+shows the backend default. Use the conversation's model button to pick a model
+for that thread. Repeated **+** clicks reuse the empty thread until you send a
+message. See [Profile](../../docs/profile.md) and [workspaces](../../docs/workspaces.md).
+
 See [desktop usage](../../docs/desktop.md) and [configuration](../../docs/configuration.md).
 
 ![Solmu client screenshot](../../docs/screenshots/desktop.png)

@@ -39,8 +39,10 @@ pub async fn create(
     let permit = state.response(&thread_id)?;
     let token = permit.token.clone();
     let history = messages::history_for_reply(&state.pool, &thread_id, &input.message_id).await?;
+    let profile = crate::storage::profile::get(&state.pool).await?;
+    let thread = crate::storage::threads::get(&state.pool, &thread_id).await?;
     let mut reply = tokio::select! {
-        result = state.llm.stream(&history) => result?,
+        result = state.llm.stream(&history, &profile.system_prompt, thread.model.as_deref().or(profile.model.as_deref())) => result?,
         _ = token.cancelled() => return Err(stopped()),
     };
     let first = tokio::select! {

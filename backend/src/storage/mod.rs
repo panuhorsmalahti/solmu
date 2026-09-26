@@ -1,4 +1,5 @@
 pub mod messages;
+pub mod profile;
 pub mod threads;
 
 #[derive(Debug)]

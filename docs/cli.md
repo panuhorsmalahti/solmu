@@ -11,6 +11,8 @@ Type a message and press Enter to receive a streamed reply. Conversations and
 completed replies are saved by the backend. Use PageUp/PageDown to scroll.
 An animated spinner shows progress. Tab completes a slash command prefix;
 repeated Tab cycles through matches. For example, `/ren` + Tab completes `/rename`.
+Typing `/` opens a filtered command list. Up/Down chooses a command;
+Tab completes it and Enter selects it.
 
 Use `/threads` to list conversations and `/open <id>` to continue one.
 `/new [title]` creates a conversation, `/rename <title>` changes its title,
@@ -18,6 +20,14 @@ and `/delete` deletes it and its messages. `/help` shows commands.
 Conversation changes from other clients appear automatically over WebSockets.
 New threads are named automatically after the first user message.
 `/exit` or Ctrl+C exits without deleting conversations.
+
+`/new` reuses the current empty conversation until you send a message.
+`/profile` edits the shared system prompt and optional default model, with its
+last edit time shown. `/model` opens the thread model picker, `/model <id>` sets
+a custom model, and `/model default` clears the thread override. OpenAI and
+Anthropic show named model choices. Each new CLI thread uses your current
+working directory on the backend. See [Profile](profile.md) and
+[workspaces](workspaces.md).
 
 Provider errors appear above the input. The user message is retained; partial
 assistant replies are not saved. Wait for a reply to finish before another

@@ -9,6 +9,26 @@ use std::{pin::Pin, time::Duration};
 pub struct Thread {
     pub id: String,
     pub title: String,
+    pub model: Option<String>,
+    pub workspace: Option<String>,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct Profile {
+    pub system_prompt: String,
+    pub model: Option<String>,
+    pub backend_default_model: Option<String>,
+    pub edited_at: String,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModelCatalog {
+    pub provider: Option<String>,
+    pub default_model: Option<String>,
+    pub models: Vec<Model>,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct Model {
+    pub id: String,
+    pub name: String,
 }
 #[derive(Debug, Clone, Deserialize)]
 pub struct Message {
@@ -21,6 +41,7 @@ pub struct Message {
 pub struct Api {
     client: Client,
     base: String,
+    workspace: Option<String>,
 }
 
 impl Api {
@@ -33,11 +54,18 @@ impl Api {
             loop {
                 if let Ok((mut socket, _)) = tokio_tungstenite::connect_async(&url).await {
                     yield Connection::Connected;
+                    yield Connection::ProfileChanged;
                     while let Some(Ok(message)) = socket.next().await {
                         if message.is_close() { break; }
-                        if let Ok(text) = message.to_text()
-                            && serde_json::from_str::<Value>(text).ok().is_some_and(|event| event["type"] == "conversation_changed") {
-                            yield Connection::Changed;
+                        if let Ok(text) = message.to_text() && let Ok(event) = serde_json::from_str::<Value>(text) {
+                            match event["type"].as_str() {
+                                Some("conversation_changed") => {
+                                    yield Connection::Changed;
+                                    if event["thread_id"].is_null() { yield Connection::ProfileChanged; }
+                                },
+                                Some("profile_changed") => yield Connection::ProfileChanged,
+                                _ => {},
+                            }
                         }
                     }
                 }
@@ -53,12 +81,35 @@ impl Api {
                 .build()
                 .expect("HTTP client"),
             base: base.into().trim_end_matches('/').to_owned(),
+            workspace: None,
         }
     }
     pub fn from_env() -> Self {
         Self::new(
             std::env::var("SOLMU_BACKEND_URL").unwrap_or_else(|_| "http://127.0.0.1:3000".into()),
         )
+    }
+    pub fn with_workspace(mut self, workspace: std::path::PathBuf) -> Self {
+        self.workspace = Some(workspace.to_string_lossy().into_owned());
+        self
+    }
+    pub async fn profile(&self) -> Result<Profile, String> {
+        self.json(Method::GET, "/profile", None).await
+    }
+    pub async fn save_profile(
+        &self,
+        system_prompt: &str,
+        model: Option<&str>,
+    ) -> Result<Profile, String> {
+        self.json(
+            Method::PUT,
+            "/profile",
+            Some(json!({"system_prompt": system_prompt, "model": model})),
+        )
+        .await
+    }
+    pub async fn models(&self) -> Result<ModelCatalog, String> {
+        self.json(Method::GET, "/models", None).await
     }
     pub async fn stop(&self, id: &str) -> Result<(), String> {
         self.request(Method::POST, &format!("/threads/{id}/stop"), None, false)
@@ -167,11 +218,15 @@ impl Api {
                 action => {
                     let result: Result<Option<Thread>, String> = async {
                         match action {
-                            Action::New(title) => api.json(Method::POST, "/threads", Some(json!({"title": title}))).await.map(Some),
+                            Action::New(title) => api.json(Method::POST, "/threads", Some(json!({"title": title, "workspace": api.workspace}))).await.map(Some),
                             Action::Open(id) => api.json(Method::GET, &format!("/threads/{id}"), None).await.map(Some),
                             Action::Rename(title) => {
                                 let thread = current.as_ref().ok_or("No conversation selected")?;
                                 api.json(Method::PATCH, &format!("/threads/{}", thread.id), Some(json!({"title": title}))).await.map(Some)
+                            },
+                            Action::Model(model) => {
+                                let thread = current.as_ref().ok_or("No conversation selected")?;
+                                api.json(Method::PATCH, &format!("/threads/{}", thread.id), Some(json!({"model": model}))).await.map(Some)
                             },
                             Action::Delete => {
                                 let thread = current.as_ref().ok_or("No conversation selected")?;
@@ -204,6 +259,7 @@ pub type Updates = Pin<Box<dyn Stream<Item = Update> + Send>>;
 pub enum Connection {
     Connected,
     Changed,
+    ProfileChanged,
     Disconnected,
 }
 #[derive(Clone, Debug)]
@@ -211,6 +267,7 @@ pub enum Action {
     New(String),
     Open(String),
     Rename(String),
+    Model(Option<String>),
     Delete,
     Refresh,
     List,
@@ -252,6 +309,9 @@ impl Session {
     }
     pub fn begin(&mut self, action: Action) -> Option<Updates> {
         if self.busy {
+            return None;
+        }
+        if matches!(action, Action::New(_)) && self.current.is_some() && self.messages.is_empty() {
             return None;
         }
         self.responding = matches!(action, Action::Send(_));

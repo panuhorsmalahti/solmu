@@ -139,6 +139,8 @@ mod conversations;
 mod responses;
 
 mod input;
+mod models;
+mod profile;
 
 #[cfg(target_os = "linux")]
 mod isolation;

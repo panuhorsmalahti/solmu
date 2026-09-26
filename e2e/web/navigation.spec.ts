@@ -1,0 +1,23 @@
+import { test, expect } from '@playwright/test'
+
+test('conversation links, sidebar selection, and browser history open the saved thread', async ({ page, request }) => {
+  const threads = await (await request.get('/api/v1/threads?limit=100')).json()
+  for (const thread of threads.items) await request.delete(`/api/v1/threads/${thread.id}`)
+  const first = await (await request.post('/api/v1/threads', { data: { title: 'Linked conversation' } })).json()
+  await request.post(`/api/v1/threads/${first.id}/messages`, { data: { content: 'A saved thought' } })
+  await page.goto(`/threads/${first.id}`)
+  await expect(page.getByText('A saved thought', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'New thread', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'New thread', exact: true }).click()
+  await expect(page.getByText('A little space for your')).toBeVisible()
+  await expect(page.getByLabel('Message Solmu', { exact: true })).toBeEnabled()
+  const secondUrl = page.url()
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/threads/${first.id}$`))
+  await expect(page.getByText('A saved thought', { exact: true })).toBeVisible()
+  await page.goForward()
+  await expect(page).toHaveURL(secondUrl)
+  await expect(page.getByText('A little space for your')).toBeVisible()
+  await page.getByLabel('Thread selector').getByRole('button', { name: 'Linked conversation' }).click()
+  await expect(page.getByText('A saved thought', { exact: true })).toBeVisible()
+})

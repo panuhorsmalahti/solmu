@@ -8,6 +8,7 @@ mod db;
 mod llm;
 mod prompt;
 mod storage;
+mod workspace;
 
 fn main() -> Result<(), Box<dyn Error>> {
     if let Err(error) = dotenvy::dotenv()

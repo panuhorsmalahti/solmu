@@ -10,16 +10,19 @@ pub struct Thread {
     pub title: String,
     pub created_at: String,
     pub updated_at: String,
+    pub model: Option<String>,
+    pub workspace: Option<String>,
 }
 
-pub async fn create(pool: &SqlitePool, title: &str) -> Result<Thread, StoreError> {
-    Ok(
-        sqlx::query_as::<_, Thread>("INSERT INTO threads (id, title) VALUES (?, ?) RETURNING *")
-            .bind(Uuid::new_v4().to_string())
-            .bind(title)
-            .fetch_one(pool)
-            .await?,
+pub async fn create(pool: &SqlitePool, title: &str, workspace: &str) -> Result<Thread, StoreError> {
+    Ok(sqlx::query_as::<_, Thread>(
+        "INSERT INTO threads (id, title, workspace) VALUES (?, ?, ?) RETURNING *",
     )
+    .bind(Uuid::new_v4().to_string())
+    .bind(title)
+    .bind(workspace)
+    .fetch_one(pool)
+    .await?)
 }
 
 pub async fn list(pool: &SqlitePool, limit: u32, offset: u32) -> Result<Vec<Thread>, StoreError> {
@@ -40,11 +43,18 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<Thread, StoreError> {
         .ok_or(StoreError::NotFound("Thread not found"))
 }
 
-pub async fn update(pool: &SqlitePool, id: &str, title: &str) -> Result<Thread, StoreError> {
+pub async fn update(
+    pool: &SqlitePool,
+    id: &str,
+    title: Option<&str>,
+    model: Option<Option<&str>>,
+) -> Result<Thread, StoreError> {
     sqlx::query_as::<_, Thread>(
-        "UPDATE threads SET title = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? RETURNING *",
+        "UPDATE threads SET title = coalesce(?, title), model = CASE WHEN ? THEN ? ELSE model END, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? RETURNING *",
     )
     .bind(title)
+    .bind(model.is_some())
+    .bind(model.flatten())
     .bind(id)
     .fetch_optional(pool)
     .await?
