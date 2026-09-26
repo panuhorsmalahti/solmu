@@ -137,6 +137,6 @@ The volume keeps conversations across container restarts.
 The backend exposes REST APIs, SSE responses, and WebSocket notifications.
 All clients have scoped end-to-end tests. GitHub Actions builds, lints, and tests
 on Linux, Windows, and macOS, publishes the website and Docker image, and offers
-an explicit manual production release workflow.
+daily production releases when there are new commits, plus a manual release workflow.
 
 [API](docs/api.md) · [Build and test](docs/development.md) · [Release workflow](docs/releases.md)

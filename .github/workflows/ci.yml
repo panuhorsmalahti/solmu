@@ -26,6 +26,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright test --config e2e/install/playwright.config.ts
+      - run: npx playwright test --config e2e/releases/playwright.config.ts
 
   rust:
     name: Rust (${{ matrix.os }})

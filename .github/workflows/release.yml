@@ -1,6 +1,8 @@
 name: Production release
 
 on:
+  schedule:
+    - cron: '17 4 * * *'
   workflow_dispatch:
     inputs:
       version:
@@ -20,30 +22,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+      previous: ${{ steps.version.outputs.previous }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
       - id: version
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$GITHUB_REF" = refs/heads/main
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          python - <<'PY'
-          import os, tomllib
-          from pathlib import Path
-          expected = os.environ['VERSION']
-          for path in ['backend', 'clients/cli', 'clients/desktop', 'boxer', 'muxer']:
-              data = tomllib.loads(Path(path, 'Cargo.toml').read_text())
-              assert data['package']['version'] == expected, f'Bump {path}/Cargo.toml to {expected} before releasing'
-          PY
-          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION"; then
-            echo 'This release tag already exists.' >&2
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        run: node scripts/release.mjs plan
   quality:
     needs: validate
+    if: needs.validate.outputs.release == 'true'
     uses: ./.github/workflows/ci.yml
 
   native:
@@ -67,6 +62,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Set the release version in build metadata
+        if: github.event_name == 'schedule'
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: node scripts/release.mjs stamp
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.98.1'
@@ -108,6 +111,11 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Set the release version in build metadata
+        if: github.event_name == 'schedule'
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: node scripts/release.mjs stamp
       - run: npm run build:web
       - env:
           VERSION: ${{ needs.validate.outputs.version }}
@@ -128,6 +136,7 @@ jobs:
       packages: write
     with:
       tag: v${{ needs.validate.outputs.version }}
+      version: ${{ needs.validate.outputs.version }}
 
   publish:
     needs: [validate, native, web, container]
@@ -136,6 +145,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Collect commit changelog
+        env:
+          PREVIOUS_TAG: ${{ needs.validate.outputs.previous }}
+        run: node scripts/release.mjs notes
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
@@ -148,4 +166,4 @@ jobs:
         run: |
           cd artifacts
           sha256sum solmu-* > SHA256SUMS
-          gh release create "v$VERSION" ./* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Solmu v$VERSION" --generate-notes
+          gh release create "v$VERSION" solmu-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Solmu v$VERSION" --notes-file release-notes.md --generate-notes
