@@ -5,7 +5,10 @@ Enter, the CLI keeps the submission and sends it once that operation completes.
 
 Start the backend, then run `cargo run -p solmu-cli` from the repository root.
 The CLI connects to `SOLMU_BACKEND_URL`, defaulting to `http://127.0.0.1:3000`,
-and creates a new conversation every time it opens.
+and creates a new conversation by default. To reopen a saved conversation at
+startup, use `solmu-cli --thread <id>` (from source:
+`cargo run -p solmu-cli -- --thread <id>`). This does not create another thread.
+`solmu-cli --help` shows startup options.
 
 Type a message and press Enter to receive a streamed reply. Conversations and
 completed replies are saved by the backend. Use PageUp/PageDown to scroll.

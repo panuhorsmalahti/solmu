@@ -109,6 +109,8 @@ Click **+ Tab** or press **Ctrl+b n** to add a tab. **Ctrl+b s** splits a pane r
 **Ctrl+b -** splits down. Drag dividers to resize, or **Ctrl+b z** to zoom.
 **Ctrl+b q** detaches while panes keep running. Run `muxer` to reattach;
 `muxer server stop` ends the session. Use `--session NAME` for separate sessions.
+Spaces and pane layouts return after a server restart, with existing Solmu
+conversations reopened.
 [Run and use muxer](muxer/README.md).
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)

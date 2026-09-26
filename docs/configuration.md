@@ -1,7 +1,10 @@
 # Solmu configuration
 
 The terminal workspace uses `SOLMU_BACKEND_URL` and optionally `SOLMU_CLI_PATH`
-to locate its CLI executable. See [muxer configuration](muxer.md).
+to locate its CLI executable. `SOLMU_MUXER_DIR` overrides the private session
+directory (default: `~/.solmu/muxer`, or `%USERPROFILE%\.solmu\muxer` on Windows).
+It holds saved layouts, local connection state, logs, and recovery backups.
+See [Muxer configuration and recovery](muxer.md).
 
 For the Linux sandbox launcher, `SOLMU_CGROUP_ROOT` optionally chooses an
 existing delegated cgroup v2 parent. Systemd delegation is detected automatically

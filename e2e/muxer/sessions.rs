@@ -1,11 +1,11 @@
 use super::*;
 
-struct Session<'a> {
-    backend: &'a Backend,
-    name: &'a str,
+pub(super) struct Session<'a> {
+    pub(super) backend: &'a Backend,
+    pub(super) name: &'a str,
 }
 impl Session<'_> {
-    fn command(&self, args: &[&str]) -> std::process::Output {
+    pub(super) fn command(&self, args: &[&str]) -> std::process::Output {
         std::process::Command::new(binary("muxer"))
             .args(args)
             .arg("--session")

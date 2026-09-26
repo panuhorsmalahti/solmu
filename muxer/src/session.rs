@@ -1,4 +1,5 @@
 use crate::app::{App, View, pane_inner};
+use crate::persistence::Persistence;
 use crossterm::{
     cursor,
     event::{self, Event, KeyEventKind, MouseButton, MouseEventKind},
@@ -82,7 +83,7 @@ pub fn root() -> Result<PathBuf> {
     }
     Ok(directory.canonicalize()?)
 }
-fn private_file(path: &Path, append: bool) -> io::Result<File> {
+pub(crate) fn private_file(path: &Path, append: bool) -> io::Result<File> {
     let mut options = File::options();
     options
         .create(true)
@@ -440,12 +441,19 @@ fn serve_inner(name: &str, executable: PathBuf, directories: Vec<PathBuf>) -> Re
     let lock = private_file(&directory.join(format!("{name}.lock")), false)?;
     lock.try_lock()
         .map_err(|_| "Muxer session is already running")?;
-    let mut app = App::new(executable);
+    let (mut persistence, snapshot) = Persistence::open(&directory, name);
+    let mut app = if let Some(snapshot) = snapshot.filter(|snapshot| !snapshot.is_empty()) {
+        App::restore(executable, snapshot)?
+    } else {
+        let mut app = App::new(executable);
+        for cwd in directories {
+            app.add_space(cwd)?;
+        }
+        app.select_space(0);
+        app
+    };
     app.persistent = true;
-    for cwd in directories {
-        app.add_space(cwd)?;
-    }
-    app.select_space(0);
+    persistence.save(&app);
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     let endpoint = Endpoint {
         protocol: PROTOCOL,
@@ -464,14 +472,19 @@ fn serve_inner(name: &str, executable: PathBuf, directories: Vec<PathBuf>) -> Re
         fs::remove_file(&endpoint_path)?;
     }
     fs::rename(&temporary, &endpoint_path)?;
-    let result = run_server(&mut app, listener, &endpoint);
+    let result = run_server(&mut app, listener, &endpoint, &mut persistence);
     // Dropping App kills and reaps PTYs before publishing that the server stopped.
     drop(app);
     let _ = fs::remove_file(endpoint_path);
     drop(lock);
     result
 }
-fn run_server(app: &mut App, listener: TcpListener, endpoint: &Endpoint) -> Result<()> {
+fn run_server(
+    app: &mut App,
+    listener: TcpListener,
+    endpoint: &Endpoint,
+    persistence: &mut Persistence,
+) -> Result<()> {
     listener.set_nonblocking(true)?;
     let (incoming, events) = mpsc::sync_channel(256);
     let mut clients: std::collections::BTreeMap<u64, Client> = Default::default();
@@ -479,6 +492,7 @@ fn run_server(app: &mut App, listener: TcpListener, endpoint: &Endpoint) -> Resu
     let mut generation = 1;
     let mut last_view = app.view();
     let handshakes = Arc::new(AtomicUsize::new(0));
+    let mut saved_at = Instant::now();
     loop {
         // Authentication reads happen outside the event loop so a half-written
         // local connection cannot freeze terminal rendering or other clients.
@@ -540,6 +554,8 @@ fn run_server(app: &mut App, listener: TcpListener, endpoint: &Endpoint) -> Resu
                         continue;
                     }
                     if operation == "stop" {
+                        app.use_view(&last_view);
+                        persistence.save(app);
                         return Ok(());
                     }
                     if let Some(id) = read {
@@ -587,6 +603,7 @@ fn run_server(app: &mut App, listener: TcpListener, endpoint: &Endpoint) -> Resu
                     client.interacted = generation;
                     let detach = input(app, client.area, event)?;
                     if app.panes.is_empty() {
+                        persistence.save(app);
                         return Ok(());
                     }
                     client.view = app.view();
@@ -604,6 +621,11 @@ fn run_server(app: &mut App, listener: TcpListener, endpoint: &Endpoint) -> Resu
         }
         for pane in &mut app.panes {
             pane.poll()?;
+        }
+        if saved_at.elapsed() >= Duration::from_millis(500) {
+            app.use_view(&last_view);
+            persistence.save(app);
+            saved_at = Instant::now();
         }
         // The last client to interact with a tab owns its PTY dimensions.
         // Other tabs follow their own viewers, rather than alternating sizes

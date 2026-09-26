@@ -25,6 +25,9 @@ detach or close the terminal. Run `muxer` again to reattach, or use
 `muxer server stop` to stop the session. `muxer --session work` selects a named
 session; `muxer session list` lists running sessions. Use `--foreground` for
 a temporary session that ends when you quit.
+After a server restart, Muxer restores spaces, tabs, and pane layouts, and
+reopens existing Solmu conversations. Pending work stops when the server stops.
+See the guide for saved state and recovery backups.
 All Solmu conversation commands work inside panes, including `/stop` and `/exit`.
 
 Run `muxer --help` or read the [muxer guide](../docs/muxer.md) for workspace

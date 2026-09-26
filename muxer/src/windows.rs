@@ -36,6 +36,25 @@ fn quote(value: &OsStr) -> Vec<u16> {
     output
 }
 
+pub fn replace(source: &Path, destination: &Path) -> io::Result<()> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+    let source: Vec<_> = source.as_os_str().encode_wide().chain([0]).collect();
+    let destination: Vec<_> = destination.as_os_str().encode_wide().chain([0]).collect();
+    if unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 // Rust Command inherits other inheritable handles on Windows. A daemon must
 // inherit none: otherwise a launching client's pipes or ConPTY remain open.
 pub fn spawn(directory: &Path, name: &str, directories: &[PathBuf]) -> io::Result<()> {

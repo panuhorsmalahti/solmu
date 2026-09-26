@@ -17,6 +17,12 @@ impl Terminal {
         Self::start_in(backend, false)
     }
     fn start_in(backend: &Backend, isolated: bool) -> Self {
+        Self::start_with_options(backend, isolated, None)
+    }
+    fn start_with_thread(backend: &Backend, thread: &str) -> Self {
+        Self::start_with_options(backend, false, Some(thread))
+    }
+    fn start_with_options(backend: &Backend, isolated: bool, thread: Option<&str>) -> Self {
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: 32,
@@ -26,6 +32,10 @@ impl Terminal {
             })
             .unwrap();
         let mut command = CommandBuilder::new(binary(if isolated { "boxer" } else { "solmu-cli" }));
+        if let Some(thread) = thread {
+            command.arg("--thread");
+            command.arg(thread);
+        }
         if isolated {
             command.arg("--isolated");
             command.arg("--cwd");
@@ -143,6 +153,7 @@ mod responses;
 mod input;
 mod models;
 mod profile;
+mod startup;
 mod tools;
 
 #[cfg(target_os = "linux")]

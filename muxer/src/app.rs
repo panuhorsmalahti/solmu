@@ -11,6 +11,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, Clear, Paragraph, Wrap},
 };
+use serde::{Deserialize, Serialize};
 use std::{error::Error, path::PathBuf};
 
 const BG: Color = Color::Rgb(21, 26, 35);
@@ -20,16 +21,92 @@ const TEXT: Color = Color::Rgb(224, 222, 244);
 const MUTED: Color = Color::Rgb(136, 149, 166);
 const ACCENT: Color = Color::Rgb(156, 207, 176);
 
+#[derive(Clone, Serialize, Deserialize)]
 struct Tab {
     id: u64,
     layout: Node,
     selected: u64,
     zoomed: bool,
 }
+#[derive(Clone, Serialize, Deserialize)]
 struct Space {
     directory: PathBuf,
     tabs: Vec<Tab>,
     selected: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Snapshot {
+    pub version: u32,
+    next_id: u64,
+    active: u64,
+    spaces: Vec<Space>,
+    panes: Vec<SavedPane>,
+}
+#[derive(Serialize, Deserialize)]
+struct SavedPane {
+    id: u64,
+    directory: PathBuf,
+    thread: Option<String>,
+    exited: Option<String>,
+}
+impl Snapshot {
+    pub fn validate(&self) -> Result<(), Box<dyn Error>> {
+        if self.version != 1 {
+            return Err("Saved session requires a different Muxer version".into());
+        }
+        if self.spaces.len() > 8 || self.panes.len() > 512 {
+            return Err("Saved session exceeds supported space or pane limits".into());
+        }
+        let mut owned = std::collections::BTreeSet::new();
+        let mut tabs = std::collections::BTreeSet::new();
+        for space in &self.spaces {
+            if space.tabs.is_empty()
+                || space.tabs.len() > 8
+                || !space.tabs.iter().any(|tab| tab.id == space.selected)
+            {
+                return Err("Invalid saved space selection".into());
+            }
+            for tab in &space.tabs {
+                let ids = tab.layout.ids();
+                if tab.id == 0
+                    || !tabs.insert(tab.id)
+                    || ids.len() > 8
+                    || !tab.layout.valid()
+                    || !ids.contains(&tab.selected)
+                    || ids.iter().any(|id| *id == 0 || !owned.insert(*id))
+                {
+                    return Err("Invalid saved pane layout".into());
+                }
+            }
+        }
+        let mut recorded = std::collections::BTreeSet::new();
+        for pane in &self.panes {
+            if !recorded.insert(pane.id)
+                || pane
+                    .thread
+                    .as_ref()
+                    .is_some_and(|thread| uuid::Uuid::parse_str(thread).is_err())
+            {
+                return Err("Invalid saved pane metadata".into());
+            }
+        }
+        if recorded != owned
+            || (owned.is_empty() && self.active != 0)
+            || (!owned.is_empty() && !owned.contains(&self.active))
+            || self.next_id == 0
+            || owned
+                .iter()
+                .chain(tabs.iter())
+                .any(|id| *id >= self.next_id)
+        {
+            return Err("Invalid saved pane identity or selection".into());
+        }
+        Ok(())
+    }
+    pub fn is_empty(&self) -> bool {
+        self.panes.is_empty()
+    }
 }
 #[derive(Clone)]
 struct Menu {
@@ -77,6 +154,72 @@ pub struct View {
     area: Rect,
 }
 impl App {
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            version: 1,
+            next_id: self.next_id,
+            active: self.panes.get(self.active).map_or(0, |pane| pane.id),
+            spaces: if self.panes.is_empty() {
+                vec![]
+            } else {
+                self.spaces.clone()
+            },
+            panes: self
+                .panes
+                .iter()
+                .map(|pane| SavedPane {
+                    id: pane.id,
+                    directory: pane.directory.clone(),
+                    thread: pane
+                        .parser
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner())
+                        .callbacks()
+                        .thread
+                        .clone(),
+                    exited: pane.exited.clone(),
+                })
+                .collect(),
+        }
+    }
+    pub fn restore(executable: PathBuf, snapshot: Snapshot) -> Result<Self, Box<dyn Error>> {
+        snapshot.validate()?;
+        let mut app = Self::new(executable);
+        app.next_id = snapshot.next_id;
+        app.spaces = snapshot.spaces;
+        for saved in snapshot.panes {
+            let pane = if let Some(reason) = saved.exited {
+                Pane::closed(saved.id, saved.directory, saved.thread, reason)
+            } else if !saved.directory.is_dir() {
+                Pane::closed(
+                    saved.id,
+                    saved.directory,
+                    saved.thread,
+                    "workspace unavailable".into(),
+                )
+            } else {
+                match Pane::resume(
+                    saved.id,
+                    saved.directory.clone(),
+                    &app.executable,
+                    saved.thread.clone(),
+                ) {
+                    Ok(pane) => pane,
+                    Err(error) => Pane::closed(
+                        saved.id,
+                        saved.directory,
+                        saved.thread,
+                        format!("launch failed: {error}"),
+                    ),
+                }
+            };
+            app.panes.push(pane);
+        }
+        if let Some(index) = app.panes.iter().position(|pane| pane.id == snapshot.active) {
+            app.focus(index);
+        }
+        Ok(app)
+    }
     pub fn view(&self) -> View {
         View {
             active: self.panes[self.active].id,

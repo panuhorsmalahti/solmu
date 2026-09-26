@@ -1,6 +1,6 @@
 # Solmu CLI
 
-A Rust terminal interface for Solmu. Every launch creates a new saved conversation.
+A Rust terminal interface for Solmu. Launch into a new or existing saved conversation.
 
 ## Run
 
@@ -18,6 +18,10 @@ cargo run -p solmu-cli
 
 The default backend is `http://127.0.0.1:3000`. Set `SOLMU_BACKEND_URL` in `.env`
 or your shell to connect elsewhere. Provider keys belong to the backend.
+
+Use `solmu-cli --thread <id>` to reopen a conversation without creating another.
+From source, run `cargo run -p solmu-cli -- --thread <id>`. Find IDs with `/threads`.
+`solmu-cli --help` shows startup options; `--version` shows the installed version.
 
 ## Use
 

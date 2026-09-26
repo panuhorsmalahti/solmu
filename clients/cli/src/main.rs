@@ -19,12 +19,36 @@ const COMMANDS: &[&str] = &[
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let mut thread = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "Solmu CLI\n\nUsage: solmu-cli [--thread ID]\n\nBy default, create a conversation in the current directory.\n--thread ID opens an existing conversation without creating another.\nSOLMU_BACKEND_URL defaults to http://127.0.0.1:3000.\nUse /help for conversation commands; Ctrl+L redraws the terminal."
+                );
+                return Ok(());
+            }
+            "--version" => {
+                println!("Solmu CLI {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
+            "--thread" => {
+                let id = args.next().ok_or("--thread requires a conversation ID")?;
+                if id.len() != 36 || !id.chars().all(|ch| ch.is_ascii_hexdigit() || ch == '-') {
+                    return Err("Invalid conversation ID".into());
+                }
+                thread = Some(id);
+            }
+            _ => return Err("Unknown option; use solmu-cli --help".into()),
+        }
+    }
     if let Err(error) = dotenvy::dotenv()
         && !error.not_found()
     {
         return Err("Could not load .env".into());
     }
-    run()
+    run(thread)
 }
 
 fn launch(
@@ -89,14 +113,16 @@ fn stop(
 }
 
 #[tokio::main(worker_threads = 2)]
-async fn run() -> Result<(), Box<dyn Error>> {
+async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
     let mut terminal = ratatui::init();
     let result = async {
         let mut session = Session::new(Api::from_env().with_workspace(std::env::current_dir()?));
         let (settings_sender, mut settings_receiver) = mpsc::unbounded_channel();
         let mut page: Option<settings::Page> = None;
         let (sender, mut receiver) = mpsc::unbounded_channel();
-        let mut active = launch(&mut session, Action::New("New conversation".into()), &sender);
+        let mut startup_thread = thread.clone();
+        let initial = thread.map(Action::Open).unwrap_or_else(|| Action::New("New conversation".into()));
+        let mut active = launch(&mut session, initial, &sender);
         let mut events = EventStream::new();
         let mut input = String::new();
         let mut show_threads = false;
@@ -109,15 +135,17 @@ async fn run() -> Result<(), Box<dyn Error>> {
         let mut changes = session.api.changes();
         let mut connected = false;
         let mut pending_refresh = false;
-        let mut reported_state = "";
+        let mut reported_title = String::new();
         let mut pending_enter = None;
         loop {
             let state = if session.error.is_some() { "error" } else if session.busy { "working" } else { "idle" };
-            if state != reported_state {
+            let identity = session.current.as_ref().map(|thread| thread.id.as_str()).or(startup_thread.as_deref()).unwrap_or("-");
+            let title = format!("Solmu | {state} | {identity}");
+            if title != reported_title {
                 // Semantic terminal status lets Solmu muxer label each real
                 // CLI pane without guessing from model-generated text.
-                crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(format!("Solmu | {state}")))?;
-                reported_state = state;
+                crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(&title))?;
+                reported_title = title;
             }
             terminal.draw(|frame| if let Some(page) = &page { page.draw(frame); } else { draw(frame, &session, &input, show_threads, scroll, spinner, connected); draw_commands(frame, &input, command_selection); })?;
             let can_submit = !session.busy;
@@ -135,6 +163,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 },
                 Some(event) = settings_receiver.recv() => { if let Some(page) = &mut page { page.update(event); } },
                 Some(update) = receiver.recv() => {
+                    if matches!(update, Update::Opened(_, _)) { startup_thread = None; }
                     session.apply(update);
                     if !session.busy && pending_refresh { pending_refresh = false; active = launch(&mut session, Action::Refresh, &sender); }
                 },

@@ -1,12 +1,13 @@
 use ratatui::layout::Rect;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Axis {
     Right,
     Down,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Node {
     Pane(u64),
     Split {
@@ -26,6 +27,17 @@ pub struct Divider {
 }
 
 impl Node {
+    pub fn valid(&self) -> bool {
+        match self {
+            Self::Pane(_) => true,
+            Self::Split {
+                ratio,
+                first,
+                second,
+                ..
+            } => (100..=900).contains(ratio) && first.valid() && second.valid(),
+        }
+    }
     pub fn contains(&self, id: u64) -> bool {
         match self {
             Self::Pane(pane) => *pane == id,

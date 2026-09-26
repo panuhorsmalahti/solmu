@@ -39,3 +39,6 @@ WebSocket notifications keep conversation changes synchronized across clients.
 The web client uses `/threads/{id}` links for individual conversations. Stop
 controls cancel a pending reply; the CLI uses `/stop` or Esc. `/exit` quits the
 CLI. Closing another client leaves saved conversations on the backend.
+`solmu-cli --thread <id>` reopens a thread at startup. Muxer sessions keep their
+panes running after detaching and restore layouts and conversations after a
+server restart; see the [Muxer guide](muxer.md).

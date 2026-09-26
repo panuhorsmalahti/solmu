@@ -107,8 +107,8 @@ muxer pane read 1 --session work
 ```
 
 `muxer server start --session work` starts a session without opening a UI.
-`--cwd` options set initial spaces when a session starts; reattaching uses its
-existing spaces. Add more projects with **+ Space** after attaching.
+`--cwd` options set initial spaces for a new session; existing or restored
+sessions use their saved spaces. Add more projects with **+ Space** after attaching.
 Session names accept letters, digits, underscores, and hyphens (up to 64 characters).
 `muxer pane read ID` prints the live pane's visible terminal text, including
 when no UI is attached. Pane IDs appear in terminal headers. This command reads
@@ -130,9 +130,31 @@ Session connection state and error logs live under `~/.solmu/muxer`
 directory. Keep it private to your account. The server listens only on localhost
 and authenticates clients using a per-session token.
 
-At this stage, reattaching preserves live terminals while the server runs.
-Stopping or restarting the server creates fresh panes on the next launch;
-layout restoration after server restart is not implemented yet.
+## Restart recovery
+
+Muxer saves each session's spaces, working directories, tabs, nested splits,
+divider sizes, zoom, and last active pane in `<session>.json` in its state
+directory. Closing a tab or pane updates the saved layout. Closing the final
+tab ends the session; its next launch starts a new layout.
+
+After a server stop or restart, running Solmu panes reopen their saved
+conversations, including message history, tool results, and model selections.
+New processes are started: pending replies and commands do not continue across
+a server restart. Detaching keeps those original processes alive.
+Panes previously closed with `/exit` remain stopped; use **Restart** to start a
+new conversation. A missing workspace is shown as unavailable instead of
+silently substituting a different working directory.
+
+Only layout and conversation references are written to Muxer's snapshot;
+terminal contents and message text are not copied into it. Conversation history
+stays in the backend database.
+
+If a snapshot is corrupt or belongs to an unsupported format, Muxer preserves
+its original bytes in `backups/` before replacing it with a fresh session.
+The latest three recovery copies per session are retained. If preservation
+fails, the original snapshot remains untouched; running panes still work.
+Recovery details are written to `<session>.log`. To recover a copy, stop that
+session, copy the chosen backup over `<session>.json`, and start it again.
 
 ![Solmu client screenshot](screenshots/muxer.png)
 
