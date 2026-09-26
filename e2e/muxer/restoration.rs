@@ -137,6 +137,17 @@ async fn restarting_restores_spaces_nested_layouts_focus_models_and_conversation
     restored.prefix('z');
     restored.wait("Model: gpt-6-luna").await;
     restored.wait("Solmu 3 · exited 0").await;
+    for (key, title, name) in [
+        ('W', "Rename space", "Solmu workspace"),
+        ('T', "Rename tab", "Agents"),
+        ('P', "Rename pane", "Planning"),
+    ] {
+        restored.prefix(key);
+        restored.wait(title).await;
+        restored.command(name);
+        restored.wait_absent(title).await;
+    }
+    restored.wait("Planning #1 · idle").await;
     solmu_e2e::support::capture_terminal(restored.screen.lock().unwrap().screen(), "muxer");
     restored.send(b"\x02\x1b[B");
     restored.wait("Solmu 5 · idle").await;

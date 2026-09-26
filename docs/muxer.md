@@ -34,13 +34,43 @@ or its **×** icon to close and terminate all its CLIs. Closing a background tab
 preserves the current tab. Closing a space's last tab removes the space;
 closing the final tab ends that session. Saved conversations remain in the backend.
 Toolbar buttons also create spaces/tabs, open split actions, zoom the focused
-pane, restart an exited CLI, or detach.
+pane, restart an exited CLI, detach, find another pane, or open navigation and help.
 
 Split a pane **right** or **down** to start another Solmu conversation in the
 same workspace. Splits can be nested. Click any visible terminal to focus it;
 only the focused pane receives typing. Right-click a pane for split, zoom,
 resize, close, and restart actions. Its header's **×** closes just that pane;
 the remaining layout expands to fill the gap.
+
+Right-click a **space**, **tab**, or **pane** to rename it. Names are shared
+with other attached terminals and saved across session restarts. They label
+Muxer's layout; `/rename` inside a CLI still changes its conversation title.
+Names can contain up to 80 characters. Save an empty name to restore the default.
+Custom pane headers retain their numeric ID, such as `Planner #2`.
+Space menus also create tabs or close the entire space. Closing a space stops
+its panes without deleting project files or saved conversations.
+
+**Find** or **Ctrl+b g** opens a searchable list of spaces, tabs, and panes.
+Search names, workspace paths, and pane states; several words narrow the results.
+Use Up/Down or Tab to select, then Enter or a mouse click to open it. Esc or **×** cancels.
+The list updates automatically as other terminals change the session.
+
+**Navigate** or **Ctrl+b m** enters navigation mode: `h/j/k/l` focuses panes,
+Up/Down switches spaces, and Tab switches tabs without another prefix. Other
+Muxer shortcuts work in this mode too, including `g` for Find and `?` for help.
+Enter, Esc, `q`, or another click on **Navigate** returns typing to the CLI.
+**Help** or **Ctrl+b ?** shows a searchable shortcut list. Typing in navigation,
+help, search, or naming dialogs is kept out of the conversation.
+
+Naming, workspace, and search fields support editing at the cursor: Left/Right
+move by Unicode grapheme, Home/End move to either end, Alt+B/F or Ctrl+Left/Right
+move by word, and Backspace/Delete remove the adjacent grapheme. Ctrl+U/K cuts
+before/after the cursor, Ctrl+W cuts the previous word, Alt+D cuts the next word,
+and Ctrl+Y inserts the field's last cut text. Paste inserts at the cursor;
+line breaks are removed. Long fields scroll horizontally. Each attached
+terminal keeps its own search and unsaved drafts during live updates.
+Ctrl+B/F, Ctrl+A/E, and Ctrl+H/D also move by grapheme, move to either end,
+and delete the previous/next grapheme respectively.
 
 Drag a divider to resize its adjacent panes. **Ctrl+b r** enters keyboard
 resizing for a running pane: arrows or `h/j/k/l` adjust its nearest divider
@@ -68,6 +98,11 @@ Press **Ctrl+b**, release it, then press the second key:
 | `z` | Zoom the focused pane or restore the layout |
 | `x` | Close and terminate the focused pane |
 | `X` | Close the selected tab and all its panes |
+| `D` | Close the selected space and all its tabs |
+| `W` / `T` / `P` | Rename the space / tab / pane |
+| `g` | Find spaces, tabs, and panes |
+| `m` | Enter or leave navigation mode |
+| `?` | Search keyboard help |
 | `r` | Resize a running pane; restart an exited CLI with a new conversation |
 | `q` | Detach from the session; its CLIs keep running |
 | `b` | Send a literal Ctrl+b to the selected CLI |
@@ -132,7 +167,7 @@ and authenticates clients using a per-session token.
 
 ## Restart recovery
 
-Muxer saves each session's spaces, working directories, tabs, nested splits,
+Muxer saves each session's spaces, working directories, names, tabs, nested splits,
 divider sizes, zoom, and last active pane in `<session>.json` in its state
 directory. Closing a tab or pane updates the saved layout. Closing the final
 tab ends the session; its next launch starts a new layout.

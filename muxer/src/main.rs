@@ -1,4 +1,5 @@
 mod app;
+mod editor;
 mod keys;
 mod layout;
 mod pane;
@@ -159,13 +160,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                         break;
                     }
                 }
-                Event::Paste(text) if app.workspace.is_some() => {
-                    if let Some(path) = &mut app.workspace {
-                        path.push_str(&text.replace(['\r', '\n'], ""));
-                    }
-                }
                 Event::Paste(text) => {
-                    app.panes[app.active].send(text.as_bytes())?;
+                    app.paste(&text)?;
                 }
                 Event::Mouse(mouse)
                     if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))

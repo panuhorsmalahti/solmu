@@ -4488,6 +4488,8 @@ dependencies = [
  "ratatui",
  "serde",
  "serde_json",
+ "unicode-segmentation",
+ "unicode-width",
  "uuid",
  "vt100",
  "windows-sys 0.61.2",

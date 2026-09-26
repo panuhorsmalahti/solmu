@@ -24,6 +24,7 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.wait("Ready").await;
     tui.prefix('h');
     tui.wait("Hello from Solmu").await;
+    tui.wait("Solmu 1 · idle").await;
     tui.wait("Ready").await;
     assert_eq!(
         backend.messages(&id).await["items"]

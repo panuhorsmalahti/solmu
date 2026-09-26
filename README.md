@@ -110,7 +110,9 @@ Click **+ Tab** or press **Ctrl+b n** to add a tab. **Ctrl+b s** splits a pane r
 **Ctrl+b q** detaches while panes keep running. Run `muxer` to reattach;
 `muxer server stop` ends the session. Use `--session NAME` for separate sessions.
 Spaces and pane layouts return after a server restart, with existing Solmu
-conversations reopened.
+conversations reopened. Name spaces, tabs, and panes with their right-click
+menus; **Find** searches across the session. **Navigate** and searchable **Help**
+make keyboard controls easy to discover.
 [Run and use muxer](muxer/README.md).
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)

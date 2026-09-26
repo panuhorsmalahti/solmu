@@ -13,7 +13,8 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
     tui.prefix('w');
     tui.wait("Workspace path:").await;
     tui.command("solmu-missing-workspace");
-    tui.wait("Workspace path: solmu-missing-workspace").await;
+    tui.wait("Workspace unavailable:").await;
+    tui.wait("solmu-missing-workspace").await;
     assert!(tui.contents().contains("Workspace path:"));
     tui.send(b"\x1b");
     // Unix terminals encode Alt using an Escape prefix. Confirm cancellation

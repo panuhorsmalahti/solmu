@@ -1,4 +1,5 @@
 use crate::{
+    editor::Editor,
     keys::encode,
     layout::{Axis, Divider, Node},
     pane::{Pane, TerminalScreen},
@@ -13,6 +14,8 @@ use ratatui::{
 };
 use serde::{Deserialize, Serialize};
 use std::{error::Error, path::PathBuf};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 const BG: Color = Color::Rgb(21, 26, 35);
 const CHROME: Color = Color::Rgb(30, 37, 48);
@@ -24,12 +27,18 @@ const ACCENT: Color = Color::Rgb(156, 207, 176);
 #[derive(Clone, Serialize, Deserialize)]
 struct Tab {
     id: u64,
+    #[serde(default)]
+    name: Option<String>,
     layout: Node,
     selected: u64,
     zoomed: bool,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Space {
+    #[serde(default)]
+    id: u64,
+    #[serde(default)]
+    name: Option<String>,
     directory: PathBuf,
     tabs: Vec<Tab>,
     selected: u64,
@@ -46,6 +55,8 @@ pub struct Snapshot {
 #[derive(Serialize, Deserialize)]
 struct SavedPane {
     id: u64,
+    #[serde(default)]
+    name: Option<String>,
     directory: PathBuf,
     thread: Option<String>,
     exited: Option<String>,
@@ -60,8 +71,16 @@ impl Snapshot {
         }
         let mut owned = std::collections::BTreeSet::new();
         let mut tabs = std::collections::BTreeSet::new();
+        let mut spaces = std::collections::BTreeSet::new();
         for space in &self.spaces {
-            if space.tabs.is_empty()
+            if (!space.tabs.is_empty()
+                && !spaces.insert(if space.id == 0 {
+                    space.tabs[0].id
+                } else {
+                    space.id
+                }))
+                || !valid_name(&space.name)
+                || space.tabs.is_empty()
                 || space.tabs.len() > 8
                 || !space.tabs.iter().any(|tab| tab.id == space.selected)
             {
@@ -70,6 +89,7 @@ impl Snapshot {
             for tab in &space.tabs {
                 let ids = tab.layout.ids();
                 if tab.id == 0
+                    || !valid_name(&tab.name)
                     || !tabs.insert(tab.id)
                     || ids.len() > 8
                     || !tab.layout.valid()
@@ -83,6 +103,7 @@ impl Snapshot {
         let mut recorded = std::collections::BTreeSet::new();
         for pane in &self.panes {
             if !recorded.insert(pane.id)
+                || !valid_name(&pane.name)
                 || pane
                     .thread
                     .as_ref()
@@ -98,6 +119,7 @@ impl Snapshot {
             || owned
                 .iter()
                 .chain(tabs.iter())
+                .chain(spaces.iter())
                 .any(|id| *id >= self.next_id)
         {
             return Err("Invalid saved pane identity or selection".into());
@@ -112,6 +134,45 @@ impl Snapshot {
 struct Menu {
     area: Rect,
     selected: usize,
+    target: Target,
+}
+#[derive(Clone, Copy)]
+enum Target {
+    Space(u64),
+    Tab(u64),
+    Pane(u64),
+}
+impl Target {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Space(_) => "Space",
+            Self::Tab(_) => "Tab",
+            Self::Pane(_) => "Pane",
+        }
+    }
+    fn actions(self) -> &'static [&'static str] {
+        match self {
+            Self::Space(_) => &["Rename space", "New tab", "Close space"],
+            Self::Tab(_) => &["Rename tab", "Split right", "Split down", "Close tab"],
+            Self::Pane(_) => ACTIONS,
+        }
+    }
+}
+#[derive(Clone)]
+struct Rename {
+    target: Target,
+    editor: Editor,
+}
+#[derive(Clone)]
+struct Picker {
+    editor: Editor,
+    selected: usize,
+    help: bool,
+}
+struct Entry {
+    target: Target,
+    label: String,
+    detail: String,
 }
 const ACTIONS: &[&str] = &[
     "Split right",
@@ -120,12 +181,16 @@ const ACTIONS: &[&str] = &[
     "Resize with keys",
     "Close pane",
     "Restart exited pane",
+    "Rename pane",
 ];
 pub struct App {
     pub persistent: bool,
     pub panes: Vec<Pane>,
     pub active: usize,
-    pub workspace: Option<String>,
+    workspace: Option<Editor>,
+    rename: Option<Rename>,
+    picker: Option<Picker>,
+    navigation: bool,
     spaces: Vec<Space>,
     space: usize,
     next_id: u64,
@@ -145,7 +210,10 @@ pub struct View {
     active: u64,
     selections: Vec<(PathBuf, u64)>,
     tabs: Vec<(u64, u64, bool)>,
-    workspace: Option<String>,
+    workspace: Option<Editor>,
+    rename: Option<Rename>,
+    picker: Option<Picker>,
+    navigation: bool,
     prefix: bool,
     notice: String,
     resizing: bool,
@@ -169,6 +237,7 @@ impl App {
                 .iter()
                 .map(|pane| SavedPane {
                     id: pane.id,
+                    name: pane.name.clone(),
                     directory: pane.directory.clone(),
                     thread: pane
                         .parser
@@ -187,8 +256,13 @@ impl App {
         let mut app = Self::new(executable);
         app.next_id = snapshot.next_id;
         app.spaces = snapshot.spaces;
+        for space in &mut app.spaces {
+            if space.id == 0 {
+                space.id = space.tabs[0].id;
+            }
+        }
         for saved in snapshot.panes {
-            let pane = if let Some(reason) = saved.exited {
+            let mut pane = if let Some(reason) = saved.exited {
                 Pane::closed(saved.id, saved.directory, saved.thread, reason)
             } else if !saved.directory.is_dir() {
                 Pane::closed(
@@ -213,6 +287,7 @@ impl App {
                     ),
                 }
             };
+            pane.name = saved.name;
             app.panes.push(pane);
         }
         if let Some(index) = app.panes.iter().position(|pane| pane.id == snapshot.active) {
@@ -239,6 +314,9 @@ impl App {
                 })
                 .collect(),
             workspace: self.workspace.clone(),
+            rename: self.rename.clone(),
+            picker: self.picker.clone(),
+            navigation: self.navigation,
             prefix: self.prefix,
             notice: self.notice.clone(),
             resizing: self.resizing,
@@ -280,6 +358,9 @@ impl App {
             .unwrap_or(0);
         self.focus(active);
         self.workspace = view.workspace.clone();
+        self.rename = view.rename.clone();
+        self.picker = view.picker.clone();
+        self.navigation = view.navigation;
         self.prefix = view.prefix;
         self.notice = view.notice.clone();
         self.resizing = view.resizing;
@@ -296,6 +377,9 @@ impl App {
             spaces: vec![],
             active: 0,
             workspace: None,
+            rename: None,
+            picker: None,
+            navigation: false,
             space: 0,
             next_id: 1,
             executable,
@@ -318,9 +402,12 @@ impl App {
         }
         let pane = Pane::start(self.next_id, directory.clone(), &self.executable)?;
         self.spaces.push(Space {
+            id: pane.id,
+            name: None,
             directory,
             tabs: vec![Tab {
                 id: pane.id,
+                name: None,
                 layout: Node::Pane(pane.id),
                 selected: pane.id,
                 zoomed: false,
@@ -360,6 +447,7 @@ impl App {
         )?;
         self.spaces[self.space].tabs.push(Tab {
             id: pane.id,
+            name: None,
             layout: Node::Pane(pane.id),
             selected: pane.id,
             zoomed: false,
@@ -470,9 +558,9 @@ impl App {
     }
     fn submit(&mut self) {
         if let Some(path) = self.workspace.clone() {
-            match self.add_space(path.into()) {
+            match self.add_space(path.text.into()) {
                 Ok(()) => self.workspace = None,
-                Err(error) => self.notice = error.to_string(),
+                Err(error) => self.notice = format!("Workspace unavailable: {error}"),
             }
         }
     }
@@ -480,7 +568,10 @@ impl App {
         let old = &self.panes[self.active];
         if old.exited.is_some() {
             match Pane::start(old.id, old.directory.clone(), &self.executable) {
-                Ok(pane) => self.panes[self.active] = pane,
+                Ok(mut pane) => {
+                    pane.name = old.name.clone();
+                    self.panes[self.active] = pane;
+                }
                 Err(error) => self.notice = error.to_string(),
             }
         }
@@ -550,9 +641,213 @@ impl App {
             }
             "Close pane" => return self.close_pane(),
             "Restart exited pane" => self.restart(),
+            "Rename pane" => self.begin_rename(Target::Pane(self.panes[self.active].id)),
+            "Rename tab" => self.begin_rename(Target::Tab(self.tab().id)),
+            "Rename space" => self.begin_rename(Target::Space(self.spaces[self.space].id)),
+            "Close tab" => return self.close_tab(self.tab().id),
+            "Close space" => {
+                let ids: Vec<_> = self.spaces[self.space]
+                    .tabs
+                    .iter()
+                    .map(|tab| tab.id)
+                    .collect();
+                for id in ids {
+                    if self.close_tab(id) {
+                        return true;
+                    }
+                }
+            }
+            "New tab" => {
+                if let Err(error) = self.add_tab() {
+                    self.notice = error.to_string();
+                }
+            }
             _ => {}
         }
         false
+    }
+    fn target_name(&self, target: Target) -> Option<&Option<String>> {
+        match target {
+            Target::Space(id) => self
+                .spaces
+                .iter()
+                .find(|space| space.id == id)
+                .map(|space| &space.name),
+            Target::Tab(id) => self
+                .spaces
+                .iter()
+                .flat_map(|space| &space.tabs)
+                .find(|tab| tab.id == id)
+                .map(|tab| &tab.name),
+            Target::Pane(id) => self
+                .panes
+                .iter()
+                .find(|pane| pane.id == id)
+                .map(|pane| &pane.name),
+        }
+    }
+    fn focus_target(&mut self, target: Target) -> bool {
+        let pane = match target {
+            Target::Space(id) => self
+                .spaces
+                .iter()
+                .find(|space| space.id == id)
+                .and_then(|space| space.tabs.iter().find(|tab| tab.id == space.selected))
+                .map(|tab| tab.selected),
+            Target::Tab(id) => self
+                .spaces
+                .iter()
+                .flat_map(|space| &space.tabs)
+                .find(|tab| tab.id == id)
+                .map(|tab| tab.selected),
+            Target::Pane(id) => Some(id),
+        };
+        if let Some(index) = pane.and_then(|id| self.panes.iter().position(|pane| pane.id == id)) {
+            self.focus(index);
+            self.resizing = false;
+            self.dragging = None;
+            true
+        } else {
+            self.notice = "That item was closed in another terminal".into();
+            false
+        }
+    }
+    fn begin_rename(&mut self, target: Target) {
+        if let Some(name) = self.target_name(target) {
+            self.rename = Some(Rename {
+                target,
+                editor: Editor::new(name.clone().unwrap_or_default()),
+            });
+            self.notice.clear();
+        }
+    }
+    fn save_rename(&mut self) {
+        let Some(rename) = self.rename.clone() else {
+            return;
+        };
+        let name = rename.editor.text.trim();
+        let name = (!name.is_empty()).then(|| name.to_owned());
+        if !valid_name(&name) {
+            self.notice = "Use at most 80 characters for a name".into();
+            return;
+        }
+        if self.target_name(rename.target).is_none() {
+            self.notice = "That item was closed in another terminal".into();
+            self.rename = None;
+            return;
+        }
+        match rename.target {
+            Target::Space(id) => {
+                self.spaces
+                    .iter_mut()
+                    .find(|space| space.id == id)
+                    .unwrap()
+                    .name = name
+            }
+            Target::Tab(id) => {
+                self.spaces
+                    .iter_mut()
+                    .flat_map(|space| &mut space.tabs)
+                    .find(|tab| tab.id == id)
+                    .unwrap()
+                    .name = name
+            }
+            Target::Pane(id) => {
+                self.panes
+                    .iter_mut()
+                    .find(|pane| pane.id == id)
+                    .unwrap()
+                    .name = name
+            }
+        }
+        self.rename = None;
+        self.notice.clear();
+    }
+    fn open_picker(&mut self, help: bool) {
+        self.menu = None;
+        self.picker = Some(Picker {
+            editor: Editor::default(),
+            selected: 0,
+            help,
+        });
+        self.notice.clear();
+    }
+    fn entries(&self, filter: &str) -> Vec<Entry> {
+        let filter = filter.to_lowercase();
+        let mut entries = vec![];
+        for space in &self.spaces {
+            let space_name = space_title(space);
+            let path = space.directory.display().to_string();
+            entries.push(Entry {
+                target: Target::Space(space.id),
+                label: format!("Space · {space_name}"),
+                detail: path.clone(),
+            });
+            for tab in &space.tabs {
+                let tab_name = tab
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Solmu {}", tab.id));
+                let detail = format!("{space_name} · {path}");
+                entries.push(Entry {
+                    target: Target::Tab(tab.id),
+                    label: format!("  Tab · {tab_name}"),
+                    detail: detail.clone(),
+                });
+                for id in tab.layout.ids() {
+                    let pane = self.panes.iter().find(|pane| pane.id == id).unwrap();
+                    entries.push(Entry {
+                        target: Target::Pane(id),
+                        label: format!("    Pane · {} · {}", pane_title(pane), pane.state()),
+                        detail: format!("{tab_name} · {detail}"),
+                    });
+                }
+            }
+        }
+        entries
+            .retain(|entry| matches_filter(&format!("{} {}", entry.label, entry.detail), &filter));
+        entries
+    }
+    fn select_entry(&mut self, index: usize) {
+        if let Some(picker) = &self.picker {
+            if picker.help {
+                self.picker = None;
+                return;
+            }
+            let target = self
+                .entries(&picker.editor.text)
+                .get(index)
+                .map(|entry| entry.target);
+            if let Some(target) = target {
+                self.focus_target(target);
+                self.picker = None;
+            }
+        }
+    }
+    fn menu_action(&mut self, index: usize) -> bool {
+        let Some(menu) = self.menu.take() else {
+            return false;
+        };
+        if !self.focus_target(menu.target) {
+            return false;
+        }
+        menu.target
+            .actions()
+            .get(index)
+            .is_some_and(|label| self.action(label))
+    }
+    pub fn paste(&mut self, text: &str) -> Result<(), Box<dyn Error>> {
+        if let Some(editor) = &mut self.workspace {
+            editor.insert(text);
+        } else if let Some(rename) = &mut self.rename {
+            rename.editor.insert(text);
+        } else if let Some(picker) = &mut self.picker {
+            picker.editor.insert(text);
+            picker.selected = 0;
+        } else if self.menu.is_none() && !self.navigation && !self.prefix && !self.resizing {
+            self.panes[self.active].send(text.as_bytes())?;
+        }
+        Ok(())
     }
     pub fn key(&mut self, key: KeyEvent) -> Result<bool, Box<dyn Error>> {
         if let Some(path) = &mut self.workspace {
@@ -561,29 +856,58 @@ impl App {
                     self.workspace = None;
                     self.notice.clear();
                 }
-                KeyCode::Backspace => {
-                    path.pop();
-                }
                 KeyCode::Enter => self.submit(),
-                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => path.clear(),
-                KeyCode::Char(ch)
-                    if !key.modifiers.contains(KeyModifiers::CONTROL)
-                        || key.modifiers.contains(KeyModifiers::ALT) =>
-                {
-                    path.push(ch)
+                _ => path.key(key),
+            }
+            return Ok(false);
+        }
+        if let Some(rename) = &mut self.rename {
+            match key.code {
+                KeyCode::Esc => {
+                    self.rename = None;
+                    self.notice.clear();
                 }
-                _ => {}
+                KeyCode::Enter => self.save_rename(),
+                _ => rename.editor.key(key),
+            }
+            return Ok(false);
+        }
+        if let Some(picker) = &self.picker {
+            let count = if picker.help {
+                help_rows(&picker.editor.text).len()
+            } else {
+                self.entries(&picker.editor.text).len()
+            };
+            let picker = self.picker.as_mut().unwrap();
+            picker.selected = picker.selected.min(count.saturating_sub(1));
+            match key.code {
+                KeyCode::Esc => self.picker = None,
+                KeyCode::Up | KeyCode::BackTab => {
+                    picker.selected = (picker.selected + count.saturating_sub(1)) % count.max(1)
+                }
+                KeyCode::Down | KeyCode::Tab => {
+                    picker.selected = (picker.selected + 1) % count.max(1)
+                }
+                KeyCode::Enter => {
+                    let selected = picker.selected;
+                    self.select_entry(selected);
+                }
+                _ => {
+                    picker.editor.key(key);
+                    picker.selected = 0;
+                }
             }
             return Ok(false);
         }
         if let Some(menu) = &mut self.menu {
+            let count = menu.target.actions().len();
             match key.code {
                 KeyCode::Esc => self.menu = None,
-                KeyCode::Up => menu.selected = (menu.selected + ACTIONS.len() - 1) % ACTIONS.len(),
-                KeyCode::Down => menu.selected = (menu.selected + 1) % ACTIONS.len(),
+                KeyCode::Up => menu.selected = (menu.selected + count - 1) % count,
+                KeyCode::Down => menu.selected = (menu.selected + 1) % count,
                 KeyCode::Enter => {
                     let selected = menu.selected;
-                    return Ok(self.action(ACTIONS[selected]));
+                    return Ok(self.menu_action(selected));
                 }
                 _ => {}
             }
@@ -605,6 +929,19 @@ impl App {
             let id = self.panes[self.active].id;
             self.tab_mut().layout.resize_near(id, axis, delta);
             return Ok(false);
+        }
+        if self.navigation && !self.prefix {
+            if matches!(
+                key.code,
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q' | 'm')
+            ) {
+                self.navigation = false;
+                return Ok(false);
+            }
+            if key.code != KeyCode::Char('b') || !key.modifiers.contains(KeyModifiers::CONTROL) {
+                self.prefix = true;
+                return self.key(key);
+            }
         }
         if self.prefix {
             self.prefix = false;
@@ -628,7 +965,14 @@ impl App {
                         self.notice = error.to_string();
                     }
                 }
-                KeyCode::Char('w') => self.workspace = Some(String::new()),
+                KeyCode::Char('w') => self.workspace = Some(Editor::default()),
+                KeyCode::Char('W') => self.begin_rename(Target::Space(self.spaces[self.space].id)),
+                KeyCode::Char('T') => self.begin_rename(Target::Tab(self.tab().id)),
+                KeyCode::Char('P') => self.begin_rename(Target::Pane(self.panes[self.active].id)),
+                KeyCode::Char('D') => return Ok(self.action("Close space")),
+                KeyCode::Char('g') => self.open_picker(false),
+                KeyCode::Char('?') => self.open_picker(true),
+                KeyCode::Char('m') => self.navigation = !self.navigation,
                 KeyCode::Tab | KeyCode::Char(']') => self.select_tab((position + 1) % count),
                 KeyCode::BackTab | KeyCode::Char('[' | 'p') => {
                     self.select_tab((position + count - 1) % count)
@@ -700,18 +1044,37 @@ impl App {
             .collect()
     }
     pub fn context_menu(&mut self, area: Rect, x: u16, y: u16) {
-        if self.workspace.is_some() {
+        if self.workspace.is_some() || self.rename.is_some() || self.picker.is_some() {
             return;
         }
-        if let Some((index, _)) = self
+        self.area = area;
+        let target = if x < sidebar_width(area) && y >= 3 {
+            let index = self.space_start(area) + usize::from((y - 3) / 3);
+            let Some(space) = self.spaces.get(index) else {
+                return;
+            };
+            Target::Space(space.id)
+        } else if let Some((id, _)) = self
+            .tabs(area)
+            .into_iter()
+            .find(|(_, rect)| rect.contains((x, y).into()))
+        {
+            Target::Tab(id)
+        } else if let Some((index, _)) = self
             .visible(area)
             .into_iter()
             .find(|(_, rect)| rect.contains((x, y).into()))
         {
-            self.focus(index);
-        }
+            Target::Pane(self.panes[index].id)
+        } else {
+            Target::Pane(self.panes[self.active].id)
+        };
+        self.show_menu(target, area, x, y);
+    }
+    fn show_menu(&mut self, target: Target, area: Rect, x: u16, y: u16) {
+        self.focus_target(target);
         let width = 26.min(area.width);
-        let height = (ACTIONS.len() as u16 + 2).min(area.height);
+        let height = (target.actions().len() as u16 + 2).min(area.height);
         self.menu = Some(Menu {
             area: Rect::new(
                 x.min(area.width.saturating_sub(width)),
@@ -720,6 +1083,7 @@ impl App {
                 height,
             ),
             selected: 0,
+            target,
         });
     }
     pub fn click(&mut self, area: Rect, x: u16, y: u16) -> Result<bool, Box<dyn Error>> {
@@ -727,9 +1091,42 @@ impl App {
         self.area = area;
         if let Some(menu) = &self.menu {
             if menu.area.contains(point) && y > menu.area.y && y < menu.area.bottom() - 1 {
-                return Ok(self.action(ACTIONS[usize::from(y - menu.area.y - 1)]));
+                return Ok(self.menu_action(usize::from(y - menu.area.y - 1)));
             }
             self.menu = None;
+            return Ok(false);
+        }
+        if self.picker.is_some() {
+            let rect = picker_area(area);
+            if y == rect.y && x >= rect.right().saturating_sub(4) && rect.contains(point) {
+                self.picker = None;
+            } else if y >= rect.y + 3 && y < rect.bottom().saturating_sub(2) && rect.contains(point)
+            {
+                let picker = self.picker.as_ref().unwrap();
+                let visible = usize::from(rect.height.saturating_sub(5));
+                let count = if picker.help {
+                    help_rows(&picker.editor.text).len()
+                } else {
+                    self.entries(&picker.editor.text).len()
+                };
+                let start = picker
+                    .selected
+                    .min(count.saturating_sub(1))
+                    .saturating_sub(visible.saturating_sub(1));
+                self.select_entry(start + usize::from(y - rect.y - 3));
+            }
+            return Ok(false);
+        }
+        if self.rename.is_some() {
+            let rect = modal(area);
+            if y == rect.y + 4 {
+                if (rect.x + 2..rect.x + 12).contains(&x) {
+                    self.save_rename();
+                } else if (rect.x + 15..rect.x + 25).contains(&x) {
+                    self.rename = None;
+                    self.notice.clear();
+                }
+            }
             return Ok(false);
         }
         if self.workspace.is_some() {
@@ -746,7 +1143,7 @@ impl App {
         }
         if x < sidebar_width(area) {
             if y == 1 {
-                self.workspace = Some(String::new());
+                self.workspace = Some(Editor::default());
             } else if y >= 3 {
                 let index = self.space_start(area) + usize::from((y - 3) / 3);
                 if index < self.spaces.len() {
@@ -758,13 +1155,18 @@ impl App {
         for (label, rect) in toolbar(area, self.persistent) {
             if rect.contains(point) {
                 match label {
-                    "+ Space" => self.workspace = Some(String::new()),
+                    "+ Space" => self.workspace = Some(Editor::default()),
+                    "Find" => self.open_picker(false),
+                    "Navigate" => self.navigation = !self.navigation,
+                    "Help" => self.open_picker(true),
                     "+ Tab" => {
                         if let Err(error) = self.add_tab() {
                             self.notice = error.to_string();
                         }
                     }
-                    "Split" => self.context_menu(area, x, y + 1),
+                    "Split" => {
+                        self.show_menu(Target::Pane(self.panes[self.active].id), area, x, y + 1)
+                    }
                     "Zoom" => return Ok(self.action("Zoom / restore")),
                     "Restart" => self.restart(),
                     "Quit" | "Detach" => return Ok(true),
@@ -873,11 +1275,7 @@ impl App {
                 break;
             }
             let selected = self.space == index;
-            let title = space
-                .directory
-                .file_name()
-                .unwrap_or(space.directory.as_os_str())
-                .to_string_lossy();
+            let title = space_title(space);
             let states: Vec<_> = space
                 .tabs
                 .iter()
@@ -986,8 +1384,9 @@ impl App {
             };
             frame.render_widget(
                 Paragraph::new(format!(
-                    "{} Solmu {id} {dot}",
-                    if selected { "›" } else { " " }
+                    "{} {} {dot}",
+                    if selected { "›" } else { " " },
+                    tab.name.clone().unwrap_or_else(|| format!("Solmu {id}"))
                 ))
                 .fg(if selected { ACCENT } else { MUTED })
                 .bg(if selected { SELECTED } else { CHROME }),
@@ -1039,9 +1438,9 @@ impl App {
             let pane = &self.panes[index];
             frame.render_widget(
                 Paragraph::new(format!(
-                    "{}Solmu {} · {}{}",
+                    "{}{} · {}{}",
                     if index == self.active { "› " } else { "  " },
-                    pane.id,
+                    pane_header_title(pane, rect.width, self.tab().zoomed),
                     pane.state(),
                     if self.tab().zoomed { " · zoomed" } else { "" }
                 ))
@@ -1062,6 +1461,9 @@ impl App {
             frame.render_widget(TerminalScreen(parser.screen()), inner);
             if index == self.active
                 && self.workspace.is_none()
+                && self.rename.is_none()
+                && self.picker.is_none()
+                && !self.navigation
                 && self.menu.is_none()
                 && !self.resizing
                 && pane.exited.is_none()
@@ -1078,50 +1480,122 @@ impl App {
             } else {
                 "n new tab · w space · v split right · - split down · h/j/k/l focus · H/J/K/L swap · z zoom · r resize/restart · x close pane · q quit"
             }
+        } else if self.navigation {
+            "Navigate: h/j/k/l panes · Up/Down spaces · Tab tabs · g find · ? help · Enter/Esc resumes typing"
         } else if self.resizing {
             "Resize: arrows or h/j/k/l move the nearest divider · Enter/Esc finishes · drag borders with the mouse"
         } else if !self.notice.is_empty() {
             &self.notice
         } else {
-            "Ctrl+b shortcuts · right-click a pane for actions · drag borders to resize"
+            "Ctrl+b ? help · Ctrl+b g find · right-click for actions · drag borders to resize"
         };
         frame.render_widget(
             Paragraph::new(text).fg(MUTED).wrap(Wrap { trim: false }),
             Rect::new(content.x, area.bottom().saturating_sub(2), content.width, 2),
         );
         if let Some(path) = &self.workspace {
-            let modal = modal(area);
-            frame.render_widget(Clear, modal);
+            draw_editor(
+                frame,
+                area,
+                "New workspace",
+                "Workspace path:",
+                path,
+                &self.notice,
+                "Create",
+            );
+        }
+        if let Some(rename) = &self.rename {
+            draw_editor(
+                frame,
+                area,
+                &format!("Rename {}", rename.target.title().to_lowercase()),
+                "Name (empty resets default):",
+                &rename.editor,
+                &self.notice,
+                "Save",
+            );
+        }
+        if let Some(picker) = &self.picker {
+            let rect = picker_area(area);
+            frame.render_widget(Clear, rect);
             frame.render_widget(
-                Paragraph::new(format!(
-                    "Workspace path: {path}\nEnter creates a space · Esc cancels\n{}",
-                    self.notice
-                ))
-                .block(
-                    Block::bordered()
-                        .title(" New workspace ")
-                        .bg(CHROME)
-                        .fg(TEXT),
-                )
-                .wrap(Wrap { trim: false }),
-                modal,
+                Block::bordered()
+                    .title(if picker.help {
+                        " Keyboard help "
+                    } else {
+                        " Find spaces, tabs and panes "
+                    })
+                    .bg(CHROME)
+                    .fg(TEXT),
+                rect,
             );
             frame.render_widget(
-                Paragraph::new(" Create ").fg(ACCENT),
-                Rect::new(modal.x + 2, modal.y + 4, 10, 1),
+                Paragraph::new("×").fg(MUTED).bg(CHROME),
+                Rect::new(rect.right().saturating_sub(4), rect.y, 3, 1),
             );
+            let (query, cursor) = picker.editor.visible(rect.width.saturating_sub(5));
             frame.render_widget(
-                Paragraph::new(" Cancel ").fg(MUTED),
-                Rect::new(modal.x + 15, modal.y + 4, 10, 1),
+                Paragraph::new(format!(" > {query}")).fg(ACCENT),
+                Rect::new(rect.x + 1, rect.y + 1, rect.width.saturating_sub(2), 1),
             );
+            let entries: Vec<_> = if picker.help {
+                help_rows(&picker.editor.text)
+            } else {
+                self.entries(&picker.editor.text)
+                    .into_iter()
+                    .map(|entry| (entry.label, entry.detail))
+                    .collect()
+            };
+            let visible = usize::from(rect.height.saturating_sub(5));
+            let selected = picker.selected.min(entries.len().saturating_sub(1));
+            let start = selected.saturating_sub(visible.saturating_sub(1));
+            for (index, (label, detail)) in entries.iter().enumerate().skip(start).take(visible) {
+                frame.render_widget(
+                    Paragraph::new(format!("{label}    {detail}"))
+                        .fg(if index == selected { ACCENT } else { TEXT })
+                        .bg(if index == selected { SELECTED } else { CHROME }),
+                    Rect::new(
+                        rect.x + 2,
+                        rect.y + 3 + (index - start) as u16,
+                        rect.width.saturating_sub(4),
+                        1,
+                    ),
+                );
+            }
+            if entries.is_empty() {
+                frame.render_widget(
+                    Paragraph::new("No matches").fg(MUTED),
+                    Rect::new(rect.x + 2, rect.y + 3, rect.width.saturating_sub(4), 1),
+                );
+            }
+            frame.render_widget(
+                Paragraph::new(if picker.help {
+                    "Type to filter · ↑/↓ scroll · Enter/Esc closes"
+                } else {
+                    "Type to filter · ↑/↓ select · Enter opens · Esc closes"
+                })
+                .fg(MUTED),
+                Rect::new(
+                    rect.x + 2,
+                    rect.bottom().saturating_sub(2),
+                    rect.width.saturating_sub(4),
+                    1,
+                ),
+            );
+            if rect.height >= 2 && rect.width >= 5 {
+                frame.set_cursor_position((rect.x + 3 + cursor, rect.y + 1));
+            }
         }
         if let Some(menu) = &self.menu {
             frame.render_widget(Clear, menu.area);
             frame.render_widget(
-                Block::bordered().title(" Pane ").bg(CHROME).fg(MUTED),
+                Block::bordered()
+                    .title(format!(" {} ", menu.target.title()))
+                    .bg(CHROME)
+                    .fg(MUTED),
                 menu.area,
             );
-            for (index, label) in ACTIONS.iter().enumerate() {
+            for (index, label) in menu.target.actions().iter().enumerate() {
                 if index as u16 + 2 >= menu.area.height {
                     break;
                 }
@@ -1146,6 +1620,151 @@ impl App {
 }
 fn sidebar_width(area: Rect) -> u16 {
     26.min(area.width / 3)
+}
+fn valid_name(name: &Option<String>) -> bool {
+    name.as_ref().is_none_or(|name| {
+        !name.is_empty() && name.chars().count() <= 80 && !name.chars().any(char::is_control)
+    })
+}
+fn space_title(space: &Space) -> String {
+    space.name.clone().unwrap_or_else(|| {
+        space
+            .directory
+            .file_name()
+            .unwrap_or(space.directory.as_os_str())
+            .to_string_lossy()
+            .into_owned()
+    })
+}
+fn pane_title(pane: &Pane) -> String {
+    pane.name.as_ref().map_or_else(
+        || format!("Solmu {}", pane.id),
+        |name| format!("{name} #{}", pane.id),
+    )
+}
+fn pane_header_title(pane: &Pane, width: u16, zoomed: bool) -> String {
+    if let Some(name) = &pane.name {
+        let suffix = format!(
+            " #{} · {}{}",
+            pane.id,
+            pane.state(),
+            if zoomed { " · zoomed" } else { "" }
+        );
+        let available =
+            usize::from(width).saturating_sub(UnicodeWidthStr::width(suffix.as_str()) + 4);
+        let mut cells = 0;
+        let clipped: String = name
+            .graphemes(true)
+            .take_while(|grapheme| {
+                cells += UnicodeWidthStr::width(*grapheme);
+                cells <= available
+            })
+            .collect();
+        format!("{clipped} #{}", pane.id)
+    } else {
+        pane_title(pane)
+    }
+}
+fn matches_filter(text: &str, filter: &str) -> bool {
+    let text = text.to_lowercase();
+    filter.split_whitespace().all(|part| text.contains(part))
+}
+fn help_rows(filter: &str) -> Vec<(String, String)> {
+    [
+        ("Ctrl+b n / c", "New tab"),
+        ("Ctrl+b w", "New space"),
+        ("Ctrl+b Up / Down", "Previous / next space"),
+        ("Ctrl+b Tab / ]", "Next tab"),
+        ("Ctrl+b Shift+Tab / [ / p", "Previous tab"),
+        ("Ctrl+b 1–8", "Select tab by position"),
+        ("Ctrl+b v / s", "Split right"),
+        ("Ctrl+b -", "Split down"),
+        ("Ctrl+b h/j/k/l", "Focus pane left/down/up/right"),
+        ("Ctrl+b H/J/K/L", "Swap pane left/down/up/right"),
+        ("Ctrl+b z", "Zoom / restore pane"),
+        ("Ctrl+b r", "Resize running pane / restart exited pane"),
+        ("Ctrl+b x", "Close pane"),
+        ("Ctrl+b X", "Close tab"),
+        ("Ctrl+b D", "Close space"),
+        ("Ctrl+b W", "Rename space"),
+        ("Ctrl+b T", "Rename tab"),
+        ("Ctrl+b P", "Rename pane"),
+        ("Ctrl+b g", "Find spaces, tabs and panes"),
+        ("Ctrl+b m", "Navigation mode"),
+        ("Ctrl+b ?", "Search keyboard help"),
+        ("Ctrl+b q", "Detach / quit foreground session"),
+        ("Ctrl+b b", "Send literal Ctrl+b"),
+        (
+            "Left/Right · Home/End",
+            "Edit fields at cursor, by Unicode grapheme",
+        ),
+        ("Alt+b/f · Ctrl+Left/Right", "Move by word in fields"),
+        (
+            "Ctrl+u/k/w · Alt+d",
+            "Cut text before/after cursor, previous/next word",
+        ),
+        ("Ctrl+y", "Insert last cut text in this field"),
+        ("Right-click", "Space / tab / pane actions"),
+        ("Drag divider", "Resize panes"),
+    ]
+    .into_iter()
+    .filter(|(key, label)| matches_filter(&format!("{key} {label}"), &filter.to_lowercase()))
+    .map(|(key, label)| (key.into(), label.into()))
+    .collect()
+}
+fn picker_area(area: Rect) -> Rect {
+    let width = area.width.saturating_sub(4).min(140);
+    let height = area.height.saturating_sub(4).min(26);
+    Rect::new(
+        area.x + (area.width - width) / 2,
+        area.y + (area.height - height) / 2,
+        width,
+        height,
+    )
+}
+fn draw_editor(
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    label: &str,
+    editor: &Editor,
+    notice: &str,
+    confirm: &str,
+) {
+    let rect = modal(area);
+    frame.render_widget(Clear, rect);
+    frame.render_widget(
+        Block::bordered()
+            .title(format!(" {title} "))
+            .bg(CHROME)
+            .fg(TEXT),
+        rect,
+    );
+    let width = rect.width.saturating_sub(4);
+    let (text, cursor) = editor.visible(width);
+    frame.render_widget(
+        Paragraph::new(label).fg(MUTED),
+        Rect::new(rect.x + 2, rect.y + 1, width, 1),
+    );
+    frame.render_widget(
+        Paragraph::new(text).fg(TEXT).bg(SELECTED),
+        Rect::new(rect.x + 2, rect.y + 2, width, 1),
+    );
+    frame.render_widget(
+        Paragraph::new(notice).fg(MUTED),
+        Rect::new(rect.x + 2, rect.y + 3, width, 1),
+    );
+    frame.render_widget(
+        Paragraph::new(format!(" {confirm} ")).fg(ACCENT),
+        Rect::new(rect.x + 2, rect.y + 4, 10, 1),
+    );
+    frame.render_widget(
+        Paragraph::new(" Cancel ").fg(MUTED),
+        Rect::new(rect.x + 15, rect.y + 4, 10, 1),
+    );
+    if rect.height >= 4 && rect.width >= 5 {
+        frame.set_cursor_position((rect.x + 2 + cursor, rect.y + 2));
+    }
 }
 fn content(area: Rect) -> Rect {
     Rect::new(
@@ -1190,6 +1809,9 @@ fn toolbar(area: Rect, persistent: bool) -> Vec<(&'static str, Rect)> {
         "Zoom",
         "Restart",
         if persistent { "Detach" } else { "Quit" },
+        "Find",
+        "Navigate",
+        "Help",
     ]
     .into_iter()
     .filter_map(|label| {

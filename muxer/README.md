@@ -15,6 +15,11 @@ Click **+ Space** to choose a project and **+ Tab** to add a session. Select
 spaces in the sidebar and tabs along the top; **×** closes a tab. Each space
 remembers its selected tab. Split panes right or down, zoom the focused pane,
 and drag dividers to resize. Right-click a pane for its action menu.
+Right-click spaces, tabs, or panes to rename them; names survive restarts.
+**Find** searches names, paths, and statuses across the session. **Navigate**
+lets you move without a prefix until Enter or Esc; **Help** lists shortcuts
+and filters as you type. These controls also have **Ctrl+b g**, **m**, and **?**
+shortcuts. Naming and search fields support Unicode cursor editing and paste.
 Press **Ctrl+b**, then **n** for a new tab, **Tab** to switch tabs, Up/Down to
 switch spaces, **s** to split right, **-** to split down, or **q** to detach.
 Use **Ctrl+b h/j/k/l** to focus panes, **H/J/K/L** to swap them, **z** to zoom,

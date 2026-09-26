@@ -269,6 +269,8 @@ mod panes;
 mod workspaces;
 
 mod layouts;
+mod names;
+mod navigation;
 mod restoration;
 mod sessions;
 mod startup;

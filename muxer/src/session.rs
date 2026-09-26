@@ -400,11 +400,7 @@ fn input(app: &mut App, area: Rect, event: Event) -> Result<bool> {
     match event {
         Event::Key(key) if key.kind != KeyEventKind::Release => app.key(key),
         Event::Paste(text) => {
-            if let Some(path) = &mut app.workspace {
-                path.push_str(&text.replace(['\r', '\n'], ""));
-            } else {
-                app.panes[app.active].send(text.as_bytes())?;
-            }
+            app.paste(&text)?;
             Ok(false)
         }
         Event::Mouse(mouse) => {

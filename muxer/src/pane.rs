@@ -54,6 +54,7 @@ impl vt100::Callbacks for Status {
 
 pub struct Pane {
     pub id: u64,
+    pub name: Option<String>,
     pub directory: PathBuf,
     pub parser: Arc<Mutex<vt100::Parser<Status>>>,
     pub exited: Option<String>,
@@ -130,6 +131,7 @@ impl Pane {
         });
         Ok(Self {
             id,
+            name: None,
             directory,
             parser,
             exited: None,
@@ -153,6 +155,7 @@ impl Pane {
         parser.process(b"This pane is stopped. Use Restart to start a new conversation.");
         Self {
             id,
+            name: None,
             directory,
             parser: Arc::new(Mutex::new(parser)),
             exited: Some(reason),
