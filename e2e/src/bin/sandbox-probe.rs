@@ -5,6 +5,23 @@ use std::{
 
 fn main() {
     let path = std::env::args().nth(1).expect("probe output path");
+    #[cfg(target_os = "linux")]
+    if path == "--limits" {
+        linux_limits();
+        return;
+    }
+    if path == "--sleep" {
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        return;
+    }
+    if path == "--memory-limit" {
+        let mut bytes = vec![0u8; 256 * 1024 * 1024];
+        for byte in bytes.iter_mut().step_by(4096) {
+            *byte = 1;
+        }
+        std::hint::black_box(bytes);
+        panic!("memory limit was not enforced");
+    }
     if path == "--delayed-write" {
         std::thread::sleep(std::time::Duration::from_secs(1));
         std::fs::write(std::env::args().nth(2).unwrap(), "descendant escaped").unwrap();
@@ -28,6 +45,34 @@ fn main() {
         let status = std::fs::read_to_string("/proc/self/status").unwrap();
         assert!(status.contains("CapEff:\t0000000000000000"));
         assert!(status.contains("NoNewPrivs:\t1"));
+        #[cfg(target_os = "linux")]
+        {
+            assert!(status.contains("Seccomp:\t2"));
+            for name in ["CapPrm", "CapInh", "CapAmb"] {
+                assert!(status.contains(&format!("{name}:\t0000000000000000")));
+            }
+            assert_eq!(
+                std::fs::read_to_string("/proc/self/cgroup").unwrap().trim(),
+                "0::/"
+            );
+            // This harmless call normally succeeds; seccomp must reject it.
+            assert_eq!(unsafe { libc::syscall(libc::SYS_unshare, 0) }, -1);
+            assert_eq!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(libc::EPERM)
+            );
+            assert_eq!(
+                unsafe { libc::syscall(libc::SYS_clone3, std::ptr::null::<u8>(), 0) },
+                -1
+            );
+            assert_eq!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(libc::ENOSYS)
+            );
+            std::thread::spawn(|| assert_eq!(unsafe { libc::syscall(libc::SYS_unshare, 0) }, -1))
+                .join()
+                .unwrap();
+        }
         assert!(std::env::var_os("SSH_AUTH_SOCK").is_none());
         assert_eq!(
             std::env::var("OPENAI_API_KEY").unwrap(),
@@ -64,6 +109,44 @@ fn main() {
     }
     println!("Solmu sandbox probe complete");
     std::process::exit(7);
+}
+
+#[cfg(target_os = "linux")]
+fn linux_limits() {
+    let mut children = Vec::new();
+    let exhausted = loop {
+        match std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--sleep")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(child) => {
+                children.push(child);
+                if children.len() >= 32 {
+                    break false;
+                }
+            }
+            Err(error) => {
+                assert_eq!(error.raw_os_error(), Some(libc::EAGAIN));
+                break true;
+            }
+        }
+    };
+    for mut child in children {
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+    assert!(
+        exhausted,
+        "cgroup process limit must stop additional children"
+    );
+    std::fs::write("limits-ready", "ready").unwrap();
+    while !std::path::Path::new("limits-release").exists() {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    println!("process limit enforced");
 }
 
 #[allow(clippy::zombie_processes)] // The launcher must terminate this child after the probe exits.

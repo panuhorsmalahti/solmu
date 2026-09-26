@@ -37,3 +37,6 @@ path = "desktop/tests.rs"
 [[test]]
 name = "sandbox"
 path = "sandbox/tests.rs"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

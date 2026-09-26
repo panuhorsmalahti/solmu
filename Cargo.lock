@@ -4443,6 +4443,7 @@ dependencies = [
  "futures-util",
  "iced",
  "iced_test",
+ "libc",
  "png",
  "portable-pty",
  "reqwest",
@@ -4461,6 +4462,7 @@ name = "solmu-sandbox"
 version = "0.1.0"
 dependencies = [
  "landlock",
+ "libc",
  "windows-sys 0.61.2",
 ]
 

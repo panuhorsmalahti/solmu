@@ -10,11 +10,13 @@ sandbox --cwd /path/to/project -- another-agent
 ```
 
 On Linux, choose container-style isolation with a private process tree and
-filesystem view, a writable workspace, and read-only system files:
+filesystem view, a writable workspace, read-only system files, filtered system
+calls, and CPU/memory/task limits:
 
 ```sh
 sudo apt install bubblewrap
-sandbox --isolated --cwd /path/to/project -- solmu-cli
+systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
+  sandbox --isolated --cwd /path/to/project -- solmu-cli
 ```
 
 Networking stays allowed. This uses the host kernel. Without a program, the

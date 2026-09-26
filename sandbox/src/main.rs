@@ -17,6 +17,10 @@ use windows as platform;
 struct Policy {
     read_only: bool,
     isolated: bool,
+    cpus: Option<u32>,
+    memory_mib: Option<u32>,
+    pids: Option<u32>,
+    cgroup_root: Option<std::path::PathBuf>,
 }
 
 fn main() {
@@ -39,7 +43,7 @@ fn run() -> io::Result<i32> {
     while let Some(argument) = arguments.next() {
         if argument == "--help" || argument == "-h" {
             println!(
-                "Solmu sandbox\n\nUsage: sandbox [--cwd PATH] [--read-only] [--isolated] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu-cli\nDefault permissions: filesystem and all network requests allowed.\n--read-only: kernel-enforced filesystem policy on Linux/macOS.\n--isolated: Linux container-style isolation; only the working directory is shared writable. Requires Bubblewrap. Network remains allowed.\nWindows: kernel Job Object contains the process tree; filesystem/network access is allowed."
+                "Solmu sandbox\n\nUsage: sandbox [--cwd PATH] [--read-only] [--isolated] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu-cli\nDefault permissions: filesystem and all network requests allowed.\n--read-only: kernel-enforced filesystem policy on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem/network access is allowed."
             );
             return Ok(0);
         } else if argument == "--version" {
@@ -49,6 +53,31 @@ fn run() -> io::Result<i32> {
             policy.read_only = true;
         } else if argument == "--isolated" {
             policy.isolated = true;
+        } else if argument == "--cpus" || argument == "--memory-mib" || argument == "--pids" {
+            let value = arguments
+                .next()
+                .and_then(|value| value.to_str().and_then(|text| text.parse::<u32>().ok()))
+                .filter(|value| *value > 0)
+                .ok_or_else(|| {
+                    io::Error::other(format!(
+                        "{} requires a positive integer",
+                        argument.to_string_lossy()
+                    ))
+                })?;
+            if argument == "--cpus" {
+                policy.cpus = Some(value);
+            } else if argument == "--memory-mib" {
+                policy.memory_mib = Some(value);
+            } else {
+                policy.pids = Some(value);
+            }
+        } else if argument == "--cgroup-root" {
+            policy.cgroup_root = Some(
+                arguments
+                    .next()
+                    .ok_or_else(|| io::Error::other("--cgroup-root requires a path"))?
+                    .into(),
+            );
         } else if argument == "--cwd" {
             directory = Some(
                 arguments
@@ -68,6 +97,14 @@ fn run() -> io::Result<i32> {
             command_arguments.extend(arguments);
             break;
         }
+    }
+    if !policy.isolated
+        && (policy.cpus.is_some()
+            || policy.memory_mib.is_some()
+            || policy.pids.is_some()
+            || policy.cgroup_root.is_some())
+    {
+        return Err(io::Error::other("Resource controls require --isolated"));
     }
     #[cfg(not(target_os = "linux"))]
     if policy.isolated {

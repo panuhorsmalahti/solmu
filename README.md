@@ -109,7 +109,8 @@ The volume keeps conversations across container restarts.
 
 The Rust `sandbox` launcher starts Solmu or another program. All network
 requests are allowed. On Linux, `--isolated --cwd /path/to/project` gives it
-private processes and a filesystem view with only the workspace writable.
+private processes and a filesystem view with only the workspace writable,
+filtered system calls, dropped capabilities, and CPU/memory/task limits.
 [Permissions and setup](docs/sandbox.md).
 
 ## Development

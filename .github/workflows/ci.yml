@@ -52,7 +52,15 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo build --workspace --locked
-      - run: cargo test --workspace --all-targets --locked
+      - if: runner.os != 'Linux'
+        run: cargo test --workspace --all-targets --locked
+      - if: runner.os == 'Linux'
+        run: |
+          # Delegate a private hierarchy; test processes live in its supervisor leaf.
+          sudo systemd-run --wait --pipe --collect \
+            -p User="$USER" -p WorkingDirectory="$PWD" \
+            -p Delegate=yes -p DelegateSubgroup=supervisor \
+            /usr/bin/env "PATH=$PATH" cargo test --workspace --all-targets --locked
       - if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:

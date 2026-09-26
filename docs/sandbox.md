@@ -17,16 +17,20 @@ handles retain their access. Windows rejects filesystem restrictions.
 
 ## Linux isolation
 
-Install Bubblewrap (`sudo apt install bubblewrap` on Debian/Ubuntu), then:
+Install Bubblewrap (`sudo apt install bubblewrap` on Debian/Ubuntu). Run with
+a delegated cgroup v2 hierarchy. On systemd 254+:
 
 ```sh
-sandbox --isolated --cwd /path/to/project -- solmu-cli
-sandbox --isolated --cwd /path/to/project -- solmu-backend
-sandbox --isolated --read-only --cwd /path/to/project -- another-agent
+systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
+  sandbox --isolated --cwd /path/to/project -- solmu-cli
+
+# Customize limits; all descendants share the same budget.
+systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
+  sandbox --isolated --cpus 1 --memory-mib 512 --pids 64 --cwd /path/to/project -- solmu-backend
 ```
 
 This mode provides a private process tree, mount view, user namespace, hostname,
-and IPC namespace. It drops kernel capabilities, prevents gaining new privileges
+and IPC and cgroup namespaces. It drops kernel capabilities, prevents gaining new privileges
 and creating more user namespaces, and provides private temporary files.
 System executables, libraries, certificates, and DNS settings are read only.
 Your chosen workspace is shared writable; `--read-only` makes it read only.
@@ -41,10 +45,36 @@ Choose a project directory, not your entire home: the selected workspace is
 accessible to the program.
 
 Networking remains unrestricted, including network access to host services.
-The sandbox shares the host kernel; it is not a VM. CPU, memory, and process
-limits and syscall filtering are not implemented yet. The default permissive
-mode does not protect your files or credentials.
+The sandbox shares the host kernel; it is not a VM. The default permissive
+mode does not protect your files or credentials and applies no resource limits.
+
+### Resource limits and system calls
+
+Isolated mode limits the entire process tree to **2 CPU cores, 2048 MiB of
+memory, no swap, and 256 processes/threads** by default. Use `--cpus N`,
+`--memory-mib N`, and `--pids N` to set positive integer limits. CPU use is
+throttled; exceeding memory can terminate the sandbox; reaching the task limit
+prevents new processes or threads. Limits include Bubblewrap's helper processes.
+Remaining descendants are terminated and the per-run cgroup is removed on exit.
+
+Seccomp rejects namespace creation, mount changes, tracing, kernel modules,
+kernel keyrings, BPF, io_uring, and other privileged kernel operations. Ordinary
+processes, threads, file operations within the workspace, and network requests
+remain available. Linux x86_64 and aarch64 are supported.
+
+Systemd delegation is detected automatically. Your user service manager must
+have the `cpu`, `memory`, and `pids` controllers delegated by the host. If it
+does not, an administrator can run the same command as a system service using
+`sudo systemd-run --pty --same-dir -p User="$(id -un)" -p Delegate=yes
+-p DelegateSubgroup=supervisor ...`.
+
+For an existing delegated hierarchy, pass `--cgroup-root PATH` or set
+`SOLMU_CGROUP_ROOT`. It must be a real, writable cgroup v2 parent with all three
+controllers available, no processes directly in it, and the launcher already
+running in a child cgroup. Solmu manages only its own per-run children. It does
+not move other host processes or change unrelated cgroups.
 
 Linux isolation requires enabled unprivileged user namespaces and a Bubblewrap
-version supporting `--disable-userns`. Startup fails if controls cannot be
+version supporting `--disable-userns`, and cgroup v2 with `cgroup.kill`
+(Linux 5.14+). Startup fails if controls cannot be
 applied; there is no unprotected fallback. `--isolated` is Linux only.

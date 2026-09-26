@@ -3,7 +3,17 @@ use landlock::{
     ABI, Access, AccessFs, CompatLevel, Compatible, PathBeneath, PathFd, Ruleset, RulesetAttr,
     RulesetCreatedAttr,
 };
-use std::{io, os::unix::process::CommandExt, process::Command};
+use std::{
+    io,
+    os::{
+        fd::AsRawFd,
+        unix::process::{CommandExt, ExitStatusExt},
+    },
+    process::Command,
+};
+
+mod cgroup;
+mod seccomp;
 
 pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     if policy.isolated {
@@ -52,6 +62,7 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         "--unshare-pid",
         "--unshare-ipc",
         "--unshare-uts",
+        "--unshare-cgroup",
         "--disable-userns",
         "--cap-drop",
         "ALL",
@@ -150,8 +161,34 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         .arg("/opt/solmu/agent")
         .args(command.get_args());
     // No network namespace is created: host networking stays available.
-    let error = sandbox.exec();
-    Err(io::Error::other(format!(
-        "Linux isolation requires Bubblewrap (bwrap) and enabled user namespaces: {error}"
-    )))
+    let group = cgroup::Group::create(&policy)?;
+    let filter = seccomp::filter()?;
+    let filter_fd = filter.as_raw_fd();
+    let group_fd = group.as_raw_fd();
+    // Options must precede the agent separator.
+    let mut supervised = Command::new("bwrap");
+    supervised
+        .arg("--seccomp")
+        .arg(filter_fd.to_string())
+        .args(sandbox.get_args());
+    // SAFETY: callback uses only write/fcntl and errno access; descriptors stay
+    // alive until the child has completed, and attachment precedes exec.
+    unsafe {
+        supervised.pre_exec(move || {
+            cgroup::attach(group_fd)?;
+            if libc::fcntl(filter_fd, libc::F_SETFD, 0) < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let status = supervised.status().map_err(|error| {
+        io::Error::other(format!(
+            "Could not start Bubblewrap with enforced cgroup limits: {error}"
+        ))
+    })?;
+    group.cleanup()?;
+    Ok(status
+        .code()
+        .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
 }
