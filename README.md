@@ -5,6 +5,8 @@ native desktop, and web clients that share your conversations.
 
 [Website](https://panuhorsmalahti.github.io/solmu/) · [Client guide](docs/clients.md) · [Configuration](docs/configuration.md) · [Releases](https://github.com/panuhorsmalahti/solmu/releases)
 
+Licensed under [MIT](LICENSE).
+
 - Stream replies from OpenAI, Anthropic, Gemini, and other providers.
 - Save conversations locally in SQLite, with automatic thread names.
 - Create, open, rename, and delete threads in every client.
