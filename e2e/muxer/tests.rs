@@ -153,7 +153,7 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     let mut tui = Terminal::start(&backend, &[]);
     tui.wait("Ready ·").await;
     tui.command("/rename First workspace");
-    tui.wait("First workspace").await;
+    tui.wait("SOLMU    First workspace").await;
     tui.wait("Ready ·").await;
     let id = backend.threads().await["items"][0]["id"]
         .as_str()
@@ -166,7 +166,7 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.wait("Solmu 2 · idle").await;
     tui.wait("Ready ·").await;
     tui.command("/ren\tSecond workspace");
-    tui.wait("Second workspace").await;
+    tui.wait("SOLMU    Second workspace").await;
     tui.wait("Ready ·").await;
     tui.prefix('1');
     tui.wait("Hello from Solmu").await;
@@ -179,16 +179,16 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
         2
     );
     tui.prefix('s');
-    tui.wait("Second workspace").await;
-    tui.wait("First workspace").await;
+    tui.wait("SOLMU    Second workspace").await;
+    tui.wait("SOLMU    First workspace").await;
     solmu_e2e::support::capture_terminal(tui.screen.lock().unwrap().screen(), "muxer");
     tui.resize(44, 200);
-    tui.wait("First workspace").await;
-    tui.wait("Second workspace").await;
+    tui.wait("SOLMU    First workspace").await;
+    tui.wait("SOLMU    Second workspace").await;
     // Click the second sidebar entry; keystrokes must reach that pane only.
     tui.send(b"\x1b[<0;3;6M\x1b[<0;3;6m");
     tui.command("/rename Clicked workspace");
-    tui.wait("Clicked workspace").await;
+    tui.wait("SOLMU    Clicked workspace").await;
     tui.prefix('s');
     tui.command(&format!("/open {id}"));
     tui.wait("Hello from pane one").await;
@@ -198,7 +198,7 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.wait(&id).await;
     tui.wait("Ready ·").await;
     tui.command("/new Third conversation");
-    tui.wait("Third conversation").await;
+    tui.wait("SOLMU    Third conversation").await;
     tui.wait("Ready ·").await;
     tui.command("/delete");
     tui.wait("No conversation").await;
@@ -209,7 +209,7 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.wait("Solmu 2 · idle").await;
     tui.wait("Ready ·").await;
     tui.prefix('x');
-    tui.wait("First workspace").await;
+    tui.wait("SOLMU    First workspace").await;
     assert!(!tui.contents().contains("Solmu 2 ·"));
     tui.exit().await;
     assert_eq!(
@@ -247,7 +247,7 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
     tui.command("FAIL_STREAM");
     tui.wait("Solmu 3 · error").await;
     tui.command("/new Stop conversation");
-    tui.wait("Stop conversation").await;
+    tui.wait("SOLMU    Stop conversation").await;
     tui.wait("Ready ·").await;
     tui.command("Hello to stop");
     tui.wait("SOLMU · streaming").await;
@@ -273,7 +273,7 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
     tui.wait("Solmu 2 · idle").await;
     tui.wait("Ready ·").await;
     tui.command("/rename Quit cleanup");
-    tui.wait("Quit cleanup").await;
+    tui.wait("SOLMU    Quit cleanup").await;
     tui.wait("Ready ·").await;
     let threads = backend.threads().await;
     let cleanup_id = threads["items"]

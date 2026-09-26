@@ -172,7 +172,7 @@ async fn cli_streaming_thread_commands_history_and_exit() {
         "Hello from Solmu"
     );
     terminal.command("/ren\tTerminal planning");
-    terminal.wait("Terminal planning").await;
+    terminal.wait("SOLMU    Terminal planning").await;
     terminal.ready().await;
     backend
         .client
@@ -183,10 +183,10 @@ async fn cli_streaming_thread_commands_history_and_exit() {
         .unwrap()
         .error_for_status()
         .unwrap();
-    terminal.wait("Across clients").await;
+    terminal.wait("SOLMU    Across clients").await;
     terminal.ready().await;
     terminal.command("/rename Terminal planning");
-    terminal.wait("Terminal planning").await;
+    terminal.wait("SOLMU    Terminal planning").await;
     terminal.ready().await;
     terminal.screenshot_source();
     terminal.command("/threads");
@@ -194,7 +194,7 @@ async fn cli_streaming_thread_commands_history_and_exit() {
     terminal.wait(&id).await;
     terminal.ready().await;
     terminal.command("/new Another idea");
-    terminal.wait("Another idea").await;
+    terminal.wait("SOLMU    Another idea").await;
     terminal.ready().await;
     assert_eq!(
         backend.threads().await["items"].as_array().unwrap().len(),
@@ -234,7 +234,7 @@ async fn cli_shows_provider_and_membership_errors_and_can_exit_while_streaming()
     terminal.command("/open missing");
     terminal.wait("not found").await;
     terminal.command("/new Recovery");
-    terminal.wait("Recovery").await;
+    terminal.wait("SOLMU    Recovery").await;
     terminal.ready().await;
     terminal.command("Try again");
     terminal.wait("SOLMU · streaming").await;
@@ -322,7 +322,7 @@ async fn cli_keeps_enter_while_a_conversation_operation_finishes() {
     let mut terminal = Terminal::start(&backend);
     terminal.ready().await;
     terminal.command("/new Pending operation\r/rename Preserved submission");
-    terminal.wait("Preserved submission").await;
+    terminal.wait("SOLMU    Preserved submission").await;
     terminal.ready().await;
     assert!(
         backend.threads().await["items"]
