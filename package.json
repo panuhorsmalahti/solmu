@@ -13,6 +13,7 @@
     "dev:website": "node website/serve.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "fflate": "0.8.3"
   }
 }

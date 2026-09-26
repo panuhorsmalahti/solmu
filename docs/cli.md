@@ -12,10 +12,14 @@ repeated Tab cycles through matches. For example, `/ren` + Tab completes `/renam
 Use `/threads` to list conversations and `/open <id>` to continue one.
 `/new [title]` creates a conversation, `/rename <title>` changes its title,
 and `/delete` deletes it and its messages. `/help` shows commands.
+Conversation changes from other clients appear automatically over WebSockets.
+New threads are named automatically after the first user message.
 `/exit` or Ctrl+C exits without deleting conversations.
 
 Provider errors appear above the input. The user message is retained; partial
 assistant replies are not saved. Wait for a reply to finish before another
-message or conversation change. You can exit during a reply.
+message or conversation change. Press Esc or use `/stop` to cancel a response;
+the saved user message remains, and the unfinished reply is discarded.
+You can exit during a reply.
 
 See the [CLI README](../clients/cli/README.md) for the full setup.

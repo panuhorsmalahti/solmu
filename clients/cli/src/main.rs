@@ -1,37 +1,84 @@
-use std::{error::Error, io};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures_util::StreamExt;
-use ratatui::{Frame, layout::{Constraint, Layout}, style::{Color, Style, Stylize}, text::{Line, Span}, widgets::{Block, Borders, Paragraph, Wrap}};
+use ratatui::{
+    Frame,
+    layout::{Constraint, Layout},
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph, Wrap},
+};
 use solmu_client::{Action, Api, Connection, Session, Update};
+use std::{error::Error, io};
 use tokio::sync::mpsc;
 
-const COMMANDS: &[&str] = &["/delete", "/exit", "/help", "/new", "/open", "/rename", "/stop", "/threads"];
+const COMMANDS: &[&str] = &[
+    "/delete", "/exit", "/help", "/new", "/open", "/rename", "/stop", "/threads",
+];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 fn main() -> Result<(), Box<dyn Error>> {
-    if let Err(error) = dotenvy::dotenv() { if !error.not_found() { return Err("Could not load .env".into()); } }
+    if let Err(error) = dotenvy::dotenv()
+        && !error.not_found()
+    {
+        return Err("Could not load .env".into());
+    }
     run()
 }
 
-fn launch(session: &mut Session, action: Action, sender: &mpsc::UnboundedSender<Update>) -> Option<tokio::task::JoinHandle<()>> {
-    let updates = if matches!(action, Action::Refresh) { session.refresh() } else { session.begin(action) };
+fn launch(
+    session: &mut Session,
+    action: Action,
+    sender: &mpsc::UnboundedSender<Update>,
+) -> Option<tokio::task::JoinHandle<()>> {
+    let updates = if matches!(action, Action::Refresh) {
+        session.refresh()
+    } else {
+        session.begin(action)
+    };
     if let Some(mut updates) = updates {
         let sender = sender.clone();
-        Some(tokio::spawn(async move { while let Some(update) = updates.next().await { if sender.send(update).is_err() { break; } } }))
-    } else { None }
+        Some(tokio::spawn(async move {
+            while let Some(update) = updates.next().await {
+                if sender.send(update).is_err() {
+                    break;
+                }
+            }
+        }))
+    } else {
+        None
+    }
 }
 
-fn stop(session: &mut Session, active: &mut Option<tokio::task::JoinHandle<()>>, sender: &mpsc::UnboundedSender<Update>) {
-    if !session.responding { return; }
-    if let Some(task) = active.take() { task.abort(); }
+fn stop(
+    session: &mut Session,
+    active: &mut Option<tokio::task::JoinHandle<()>>,
+    sender: &mpsc::UnboundedSender<Update>,
+) {
+    if !session.responding {
+        return;
+    }
+    if let Some(task) = active.take() {
+        task.abort();
+    }
     session.stopping();
     let api = session.api.clone();
-    let id = session.current.as_ref().expect("selected thread").id.clone();
+    let id = session
+        .current
+        .as_ref()
+        .expect("selected thread")
+        .id
+        .clone();
     let sender = sender.clone();
-    *active = Some(tokio::spawn(async move { let update = match api.stop(&id).await { Ok(()) => Update::Stopped, Err(error) => Update::Failed(error) }; let _ = sender.send(update); }));
+    *active = Some(tokio::spawn(async move {
+        let update = match api.stop(&id).await {
+            Ok(()) => Update::Stopped,
+            Err(error) => Update::Failed(error),
+        };
+        let _ = sender.send(update);
+    }));
 }
 
-#[tokio::main]
+#[tokio::main(worker_threads = 2)]
 async fn run() -> Result<(), Box<dyn Error>> {
     let mut terminal = ratatui::init();
     let result = async {
@@ -97,7 +144,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
                                 "/open" if !argument.is_empty() => { show_threads = false; Action::Open(argument.into()) },
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /delete · /exit".into()); continue; },
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -110,34 +157,120 @@ async fn run() -> Result<(), Box<dyn Error>> {
         }
         Ok::<_, io::Error>(())
     }.await;
-    ratatui::restore(); result?; Ok(())
+    ratatui::restore();
+    result?;
+    Ok(())
 }
 
-fn draw(frame: &mut Frame<'_>, session: &Session, input: &str, show_threads: bool, scroll: u16, spinner: usize, connected: bool) {
+fn draw(
+    frame: &mut Frame<'_>,
+    session: &Session,
+    input: &str,
+    show_threads: bool,
+    scroll: u16,
+    spinner: usize,
+    connected: bool,
+) {
     let [header, conversation, status, composer, footer] = Layout::vertical([
-        Constraint::Length(3), Constraint::Min(3), Constraint::Length(2), Constraint::Length(3), Constraint::Length(1)
-    ]).areas(frame.area());
-    let title = session.current.as_ref().map(|thread| thread.title.as_str()).unwrap_or("No conversation");
-    frame.render_widget(Paragraph::new(Line::from(vec![Span::styled(" SOLMU ", Style::new().fg(Color::Black).bg(Color::Cyan).bold()), Span::raw(format!("   {title}"))])).block(Block::new().borders(Borders::BOTTOM)), header);
+        Constraint::Length(3),
+        Constraint::Min(3),
+        Constraint::Length(2),
+        Constraint::Length(3),
+        Constraint::Length(1),
+    ])
+    .areas(frame.area());
+    let title = session
+        .current
+        .as_ref()
+        .map(|thread| thread.title.as_str())
+        .unwrap_or("No conversation");
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(
+                " SOLMU ",
+                Style::new().fg(Color::Black).bg(Color::Cyan).bold(),
+            ),
+            Span::raw(format!("   {title}")),
+        ]))
+        .block(Block::new().borders(Borders::BOTTOM)),
+        header,
+    );
     let mut lines = Vec::new();
     if show_threads {
-        lines.push(Line::from("Conversations · /open <id> to continue".cyan().bold()));
-        for thread in &session.threads { lines.push(Line::from(format!("{}  {}", thread.id, thread.title))); }
+        lines.push(Line::from(
+            "Conversations · /open <id> to continue".cyan().bold(),
+        ));
+        for thread in &session.threads {
+            lines.push(Line::from(format!("{}  {}", thread.id, thread.title)));
+        }
     } else if session.messages.is_empty() {
-        lines.extend([Line::from(""), Line::from("A little space for your next big idea.".cyan().bold()), Line::from(""), Line::from("Send a message to begin. Your conversation is saved automatically."), Line::from("Use /help for conversation commands.")]);
+        lines.extend([
+            Line::from(""),
+            Line::from("A little space for your next big idea.".cyan().bold()),
+            Line::from(""),
+            Line::from("Send a message to begin. Your conversation is saved automatically."),
+            Line::from("Use /help for conversation commands."),
+        ]);
     } else {
         for message in &session.messages {
-            lines.push(Line::from(if message.role == "user" { "YOU".cyan().bold() } else { "SOLMU".green().bold() }));
-            lines.extend(message.content.lines().map(|line| Line::from(line.to_owned()))); lines.push(Line::from(""));
+            lines.push(Line::from(if message.role == "user" {
+                "YOU".cyan().bold()
+            } else {
+                "SOLMU".green().bold()
+            }));
+            lines.extend(
+                message
+                    .content
+                    .lines()
+                    .map(|line| Line::from(line.to_owned())),
+            );
+            lines.push(Line::from(""));
         }
     }
-    if !session.partial.is_empty() { lines.push(Line::from("SOLMU · streaming".green().bold())); lines.extend(session.partial.lines().map(|line| Line::from(line.to_owned()))); }
+    if !session.partial.is_empty() {
+        lines.push(Line::from("SOLMU · streaming".green().bold()));
+        lines.extend(
+            session
+                .partial
+                .lines()
+                .map(|line| Line::from(line.to_owned())),
+        );
+    }
     let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
     let content_height = paragraph.line_count(conversation.width) as u16;
-    let offset = content_height.saturating_sub(conversation.height).saturating_sub(scroll);
+    let offset = content_height
+        .saturating_sub(conversation.height)
+        .saturating_sub(scroll);
     frame.render_widget(paragraph.scroll((offset, 0)), conversation);
-    let notice = session.error.as_deref().unwrap_or(if session.busy { SPINNER[spinner % SPINNER.len()] } else if !connected { "Reconnecting to live updates…" } else { "Ready · conversation saved locally" });
-    frame.render_widget(Paragraph::new(notice).style(Style::new().fg(if session.error.is_some() { Color::Red } else { Color::DarkGray })).wrap(Wrap { trim: false }), status);
-    frame.render_widget(Paragraph::new(format!("> {input}")).block(Block::bordered().border_style(Style::new().fg(Color::Cyan))), composer);
-    frame.render_widget(Paragraph::new(if session.responding { "Esc stop   /stop stop reply   /exit quit" } else { "Enter send   Tab complete   /help commands   PageUp/PageDown scroll   /exit quit" }).dark_gray(), footer);
+    let notice = session.error.as_deref().unwrap_or(if session.busy {
+        SPINNER[spinner % SPINNER.len()]
+    } else if !connected {
+        "Reconnecting to live updates…"
+    } else {
+        "Ready · conversation saved locally"
+    });
+    frame.render_widget(
+        Paragraph::new(notice)
+            .style(Style::new().fg(if session.error.is_some() {
+                Color::Red
+            } else {
+                Color::DarkGray
+            }))
+            .wrap(Wrap { trim: false }),
+        status,
+    );
+    frame.render_widget(
+        Paragraph::new(format!("> {input}"))
+            .block(Block::bordered().border_style(Style::new().fg(Color::Cyan))),
+        composer,
+    );
+    frame.render_widget(
+        Paragraph::new(if session.responding {
+            "Esc stop   /stop stop reply   /exit quit"
+        } else {
+            "Enter send   Tab complete   /help commands   PageUp/PageDown scroll   /exit quit"
+        })
+        .dark_gray(),
+        footer,
+    );
 }

@@ -29,16 +29,29 @@ pub async fn create(
     }
     let message = messages::create(&state.pool, &id, "user", &input.content, None).await?;
     state.changed(&id);
-    let (count,): (i64,) = sqlx::query_as("SELECT count(*) FROM messages WHERE thread_id = ? AND role = 'user'")
-        .bind(&id).fetch_one(&state.pool).await.map_err(crate::storage::StoreError::from)?;
-    if count == 1 && crate::storage::threads::get(&state.pool, &id).await?.title == "New conversation" {
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM messages WHERE thread_id = ? AND role = 'user'")
+            .bind(&id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(crate::storage::StoreError::from)?;
+    if count == 1
+        && crate::storage::threads::get(&state.pool, &id).await?.title == "New conversation"
+    {
         let content = input.content;
         tokio::spawn(async move {
             if let Some(title) = state.llm.title(&content).await {
                 // A concurrent rename or deletion takes precedence over generated titles.
-                let updated = sqlx::query("UPDATE threads SET title = ? WHERE id = ? AND title = 'New conversation'")
-                    .bind(title).bind(&id).execute(&state.pool).await;
-                if updated.is_ok_and(|result| result.rows_affected() > 0) { state.changed(&id); }
+                let updated = sqlx::query(
+                    "UPDATE threads SET title = ? WHERE id = ? AND title = 'New conversation'",
+                )
+                .bind(title)
+                .bind(&id)
+                .execute(&state.pool)
+                .await;
+                if updated.is_ok_and(|result| result.rows_affected() > 0) {
+                    state.changed(&id);
+                }
             }
         });
     }

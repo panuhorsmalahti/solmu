@@ -20,6 +20,7 @@ serde_json = "1.0.151"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite"] }
 tempfile = "3"
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "net", "sync", "time"] }
+tokio-tungstenite = "0.29"
 
 [[test]]
 name = "api"
@@ -32,3 +33,7 @@ path = "cli/tests.rs"
 [[test]]
 name = "desktop"
 path = "desktop/tests.rs"
+
+[[test]]
+name = "sandbox"
+path = "sandbox/tests.rs"

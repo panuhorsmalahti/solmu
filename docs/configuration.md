@@ -16,7 +16,8 @@ ignored by Git. Keep provider credentials on the backend; clients never need the
 | `SOLMU_BACKEND_URL` | `http://127.0.0.1:3000` | Same | Backend address used by Rust clients. |
 
 See [the API guide](api.md) for conversation endpoints. Replies currently stream
-over Server-Sent Events. WebSocket support is compiled in for future endpoints.
+over Server-Sent Events. All clients use `/api/v1/events` WebSocket notifications
+to update conversations when another client changes them, with automatic reconnect.
 
 Change the address for a local run in PowerShell:
 

@@ -12,6 +12,7 @@ test('sidebar threads, incremental replies, generated title, history, rename and
   const threads = await (await request.get('/api/v1/threads')).json()
   expect(threads.items).toHaveLength(1)
   const id = threads.items[0].id
+  await expect(page).toHaveURL(new RegExp(`/threads/${id}$`))
   await page.getByLabel('Message Solmu', { exact: true }).fill('Help me plan a thoughtful project.\nLet’s start with an idea.')
   await page.getByRole('button', { name: 'Send message' }).click()
   await expect(page.getByLabel('Streaming reply')).toContainText('Hello')
@@ -22,6 +23,9 @@ test('sidebar threads, incremental replies, generated title, history, rename and
   await page.getByLabel('Conversation title').fill('A thoughtful project')
   await page.getByRole('button', { name: 'Rename thread' }).click()
   await expect(page.getByLabel('Thread selector').getByText('A thoughtful project')).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('Hello from Solmu', { exact: true })).toBeVisible()
+  expect((await (await request.get('/api/v1/threads')).json()).items).toHaveLength(1)
   if (process.env.SOLMU_CAPTURE_SCREENSHOTS) {
     await mkdir('docs/screenshots', { recursive: true })
     await page.screenshot({ path: 'docs/screenshots/web.png' })
@@ -29,6 +33,13 @@ test('sidebar threads, incremental replies, generated title, history, rename and
   await page.getByRole('button', { name: 'New thread', exact: true }).click()
   await expect(page.getByText('A little space for your')).toBeVisible()
   await expect(page.getByLabel('Message Solmu', { exact: true })).toBeEnabled()
+  const secondUrl = page.url()
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/threads/${id}$`))
+  await expect(page.getByText('Hello from Solmu', { exact: true })).toBeVisible()
+  await page.goForward()
+  await expect(page).toHaveURL(secondUrl)
+  await expect(page.getByText('A little space for your')).toBeVisible()
   await page.getByLabel('Thread selector').getByRole('button', { name: 'A thoughtful project' }).click()
   await expect(page.getByText('Hello from Solmu', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Delete thread' }).click()
@@ -38,7 +49,7 @@ test('sidebar threads, incremental replies, generated title, history, rename and
   await expect(page.getByLabel('Message Solmu', { exact: true })).toBeEnabled()
 })
 
-test('provider failure keeps user message; Enter, suggestions, refresh, and mobile layout', async ({ page, request }) => {
+test('provider failure keeps user message; Enter, suggestions, live updates, and mobile layout', async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
   await expect(page.getByRole('button', { name: 'Explore an idea' })).toBeEnabled()
@@ -51,7 +62,23 @@ test('provider failure keeps user message; Enter, suggestions, refresh, and mobi
   const thread = (await (await request.get('/api/v1/threads')).json()).items[0]
   expect((await (await request.get(`/api/v1/threads/${thread.id}/messages`)).json()).items).toHaveLength(1)
   await request.patch(`/api/v1/threads/${thread.id}`, { data: { title: 'Updated elsewhere' } })
-  await page.getByRole('button', { name: 'Refresh conversations' }).click()
+  await expect(page.getByRole('button', { name: 'Refresh conversations' })).toHaveCount(0)
   await expect(page.getByLabel('Conversation title')).toHaveValue('Updated elsewhere')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('Stop cancels the backend reply and preserves the user message', async ({ page, request }) => {
+  await page.goto('/')
+  await expect(page.getByLabel('Message Solmu', { exact: true })).toBeEnabled()
+  await page.getByLabel('Message Solmu', { exact: true }).fill('A reply I will stop')
+  await page.getByRole('button', { name: 'Send message' }).click()
+  await expect(page.getByLabel('Streaming reply')).toContainText('Hello')
+  await page.getByRole('button', { name: 'Stop response' }).click()
+  await expect(page.getByLabel('Message Solmu', { exact: true })).toBeEnabled()
+  await expect(page.getByLabel('Streaming reply')).toHaveCount(0)
+  const id = page.url().split('/').pop()
+  expect((await (await request.get(`/api/v1/threads/${id}/messages`)).json()).items).toHaveLength(1)
+  await page.getByLabel('Message Solmu', { exact: true }).fill('Continue after stopping')
+  await page.getByRole('button', { name: 'Send message' }).click()
+  await expect(page.getByText('Hello from Solmu', { exact: true })).toBeVisible()
 })

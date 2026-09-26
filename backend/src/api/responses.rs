@@ -56,7 +56,13 @@ pub async fn create(
         None
       }) => result.ok().flatten(),
     }
-        .ok_or_else(|| ApiError::new(axum::http::StatusCode::BAD_GATEWAY, "provider_error", "LLM request failed; check provider credentials, model, and endpoint"))?;
+    .ok_or_else(|| {
+        ApiError::new(
+            axum::http::StatusCode::BAD_GATEWAY,
+            "provider_error",
+            "LLM request failed; check provider credentials, model, and endpoint",
+        )
+    })?;
     let stream = async_stream::stream! {
         let _permit = permit;
         yield Ok(event("start", json!({"message_id": input.message_id})));
@@ -101,10 +107,17 @@ pub async fn create(
 }
 
 fn stopped() -> ApiError {
-    ApiError::new(axum::http::StatusCode::CONFLICT, "response_stopped", "Response stopped")
+    ApiError::new(
+        axum::http::StatusCode::CONFLICT,
+        "response_stopped",
+        "Response stopped",
+    )
 }
 
-pub async fn stop(State(state): State<AppState>, Path(id): Path<String>) -> Result<axum::http::StatusCode, ApiError> {
+pub async fn stop(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<axum::http::StatusCode, ApiError> {
     crate::storage::threads::get(&state.pool, &id).await?;
     state.stop(&id);
     Ok(axum::http::StatusCode::NO_CONTENT)

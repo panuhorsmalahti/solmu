@@ -39,10 +39,7 @@ pub async fn create(
     let title = validate_title(input.title.as_deref().unwrap_or("New conversation"))?;
     let thread = threads::create(&state.pool, title).await?;
     state.changed(&thread.id);
-    Ok((
-        StatusCode::CREATED,
-        Json(thread),
-    ))
+    Ok((StatusCode::CREATED, Json(thread)))
 }
 
 pub async fn list(

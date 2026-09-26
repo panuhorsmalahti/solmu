@@ -145,7 +145,9 @@ impl Backend {
         if let Some(provider) = &self.explicit_provider {
             command.env("LLM_PROVIDER", provider);
         }
-        if let Some(model) = &self.title_model { command.env("LLM_TITLE_MODEL", model); }
+        if let Some(model) = &self.title_model {
+            command.env("LLM_TITLE_MODEL", model);
+        }
         self.child = Some(
             command
                 .spawn()
@@ -262,13 +264,27 @@ async fn anthropic(State(requests): State<Requests>, Json(body): Json<Value>) ->
 }
 
 fn provider_response(kind: &'static str, requests: Requests, body: Value) -> Response {
-    let fail = body.to_string().contains("FAIL");
-    let truncate = body.to_string().contains("TRUNCATE");
+    let latest_user = body["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages
+                .iter()
+                .rev()
+                .find(|message| message["role"] == "user")
+        })
+        .map(|message| message["content"].to_string())
+        .unwrap_or_default();
+    let fail = latest_user.contains("FAIL");
+    let truncate = latest_user.contains("TRUNCATE");
     let non_stream = body["stream"] != true;
     let model = body["model"].as_str().unwrap_or_default().to_owned();
     requests.lock().unwrap().push((kind.into(), body));
     if model == "unknown-title-model" {
-        return (StatusCode::NOT_FOUND, Json(json!({"error":{"message":"Unknown model"}}))).into_response();
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error":{"message":"Unknown model"}})),
+        )
+            .into_response();
     }
     if fail {
         return (

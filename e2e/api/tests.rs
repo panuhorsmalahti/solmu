@@ -265,6 +265,135 @@ async fn replies_stream_before_completion_and_are_saved_with_history() {
     );
     assert!(captured[1].1.to_string().contains("Hello from Solmu"));
     assert!(captured[1].1.to_string().contains("Follow up"));
+    assert_eq!(captured[0].1["messages"][0]["role"], "system");
+    assert_eq!(
+        captured[0].1["messages"][0]["content"],
+        "You are Solmu, an autonomous agent."
+    );
+}
+
+#[tokio::test]
+async fn truncated_provider_stream_discards_partial_reply_and_releases_thread() {
+    let backend = Backend::start().await;
+    let thread = backend.create_thread("Interrupted reply").await;
+    let id = thread["id"].as_str().unwrap();
+    let message = backend.send_message(id, "TRUNCATE").await;
+    let events = complete_reply(&backend, id, &message).await;
+    assert!(events.contains(&"delta".to_owned()));
+    assert!(events.contains(&"error".to_owned()));
+    assert!(!events.contains(&"done".to_owned()));
+    assert_eq!(
+        backend.messages(id).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let next = backend
+        .send_message(id, "Continue after interruption")
+        .await;
+    assert!(
+        complete_reply(&backend, id, &next)
+            .await
+            .contains(&"done".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn websocket_notifications_cover_thread_message_title_and_delete_changes() {
+    let backend = Backend::start().await;
+    let (mut socket, _) = tokio_tungstenite::connect_async(format!(
+        "{}/api/v1/events",
+        backend.url.replacen("http", "ws", 1)
+    ))
+    .await
+    .unwrap();
+    assert!(
+        socket
+            .next()
+            .await
+            .unwrap()
+            .unwrap()
+            .to_text()
+            .unwrap()
+            .contains("ready")
+    );
+    let thread = backend.create_thread("New conversation").await;
+    let id = thread["id"].as_str().unwrap();
+    let notification = tokio::time::timeout(Duration::from_secs(5), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(notification.to_text().unwrap().contains(id));
+    backend.send_message(id, "Name this thread").await;
+    for _ in 0..2 {
+        let notification = tokio::time::timeout(Duration::from_secs(5), socket.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert!(
+            notification
+                .to_text()
+                .unwrap()
+                .contains("conversation_changed")
+        );
+    }
+    backend
+        .client
+        .delete(backend.endpoint(&format!("/api/v1/threads/{id}")))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), socket.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap()
+            .to_text()
+            .unwrap()
+            .contains(id)
+    );
+}
+
+#[tokio::test]
+async fn stop_discards_partial_assistant_and_releases_the_thread() {
+    let backend = Backend::start().await;
+    let thread = backend.create_thread("Stopping").await;
+    let id = thread["id"].as_str().unwrap();
+    let message = backend.send_message(id, "Stop this reply").await;
+    let response = backend
+        .client
+        .post(backend.endpoint(&format!("/api/v1/threads/{id}/responses")))
+        .json(&json!({"message_id":message["id"]}))
+        .send()
+        .await
+        .unwrap();
+    let mut events = response.bytes_stream().eventsource();
+    assert_eq!(events.next().await.unwrap().unwrap().event, "start");
+    assert_eq!(events.next().await.unwrap().unwrap().event, "delta");
+    assert_eq!(
+        backend
+            .client
+            .post(backend.endpoint(&format!("/api/v1/threads/{id}/stop")))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(events.next().await.unwrap().unwrap().event, "stopped");
+    assert!(events.next().await.is_none());
+    assert_eq!(
+        backend.messages(id).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    backend.send_message(id, "Continue").await;
 }
 
 #[tokio::test]
@@ -329,29 +458,56 @@ async fn missing_credentials_and_provider_failures_preserve_user_messages() {
 
 #[tokio::test]
 async fn automatic_names_use_the_cheap_model_fall_back_and_preserve_manual_titles() {
-    for cheap in [None, Some("title-fixture-model"), Some("unknown-title-model")] {
+    for cheap in [
+        None,
+        Some("title-fixture-model"),
+        Some("unknown-title-model"),
+    ] {
         let mut backend = Backend::start().await;
-        if let Some(model) = cheap { backend.set_title_model(model).await; }
+        if let Some(model) = cheap {
+            backend.set_title_model(model).await;
+        }
         let thread = backend.create_thread("New conversation").await;
         let id = thread["id"].as_str().unwrap();
         assert_eq!(thread["title"], "New conversation");
         backend.send_message(id, "Plan my next idea").await;
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
-                if backend.threads().await["items"][0]["title"] == "A new idea" { break; }
+                if backend.threads().await["items"][0]["title"] == "A new idea" {
+                    break;
+                }
                 tokio::time::sleep(Duration::from_millis(30)).await;
             }
-        }).await.unwrap();
-        let requests = backend.requests.lock().unwrap();
-        assert_eq!(requests[0].1["model"], cheap.unwrap_or("test-model"));
-        assert_eq!(requests.last().unwrap().1["model"], if cheap == Some("unknown-title-model") { "test-model" } else { cheap.unwrap_or("test-model") });
-        drop(requests);
+        })
+        .await
+        .unwrap();
+        {
+            let requests = backend.requests.lock().unwrap();
+            assert_eq!(requests[0].1["model"], cheap.unwrap_or("test-model"));
+            assert_eq!(
+                requests.last().unwrap().1["model"],
+                if cheap == Some("unknown-title-model") {
+                    "test-model"
+                } else {
+                    cheap.unwrap_or("test-model")
+                }
+            );
+        }
         let before = backend.requests.lock().unwrap().len();
         backend.send_message(id, "Follow up").await;
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert_eq!(backend.requests.lock().unwrap().len(), before, "Only the first user message names the thread");
+        assert_eq!(
+            backend.requests.lock().unwrap().len(),
+            before,
+            "Only the first user message names the thread"
+        );
         let manual = backend.create_thread("My chosen name").await;
-        backend.send_message(manual["id"].as_str().unwrap(), "Hello").await;
-        assert_eq!(backend.threads().await["items"][0]["title"], "My chosen name");
+        backend
+            .send_message(manual["id"].as_str().unwrap(), "Hello")
+            .await;
+        assert_eq!(
+            backend.threads().await["items"][0]["title"],
+            "My chosen name"
+        );
     }
 }

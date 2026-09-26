@@ -11,6 +11,7 @@ COPY clients/common ./clients/common
 COPY clients/cli ./clients/cli
 COPY clients/desktop ./clients/desktop
 COPY e2e ./e2e
+COPY sandbox ./sandbox
 RUN cargo build --release --locked -p solmu-backend
 
 FROM debian:bookworm-slim AS runtime

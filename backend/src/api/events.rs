@@ -1,14 +1,29 @@
-use axum::{extract::{State, WebSocketUpgrade, ws::{Message, WebSocket}}, response::Response};
-use tokio::sync::broadcast;
 use super::state::AppState;
+use axum::{
+    extract::{
+        State, WebSocketUpgrade,
+        ws::{Message, WebSocket},
+    },
+    response::Response,
+};
+use tokio::sync::broadcast;
 
 pub async fn connect(State(state): State<AppState>, upgrade: WebSocketUpgrade) -> Response {
     let events = state.events.subscribe();
     upgrade.on_upgrade(move |socket| notifications(socket, events))
 }
 
-async fn notifications(mut socket: WebSocket, mut events: broadcast::Receiver<super::state::Change>) {
-    if socket.send(Message::Text("{\"type\":\"ready\"}".into())).await.is_err() { return; }
+async fn notifications(
+    mut socket: WebSocket,
+    mut events: broadcast::Receiver<super::state::Change>,
+) {
+    if socket
+        .send(Message::Text("{\"type\":\"ready\"}".into()))
+        .await
+        .is_err()
+    {
+        return;
+    }
     loop {
         tokio::select! {
             incoming = socket.recv() => match incoming {

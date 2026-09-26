@@ -51,6 +51,7 @@ export async function* reply(thread: string, message: string, signal: AbortSigna
         if (!data) continue
         const payload = JSON.parse(data)
         if (event === 'error') throw new Error(payload.error?.message ?? 'The reply failed')
+        if (event === 'stopped') return
         if (event === 'delta') yield { event, data: payload }
         if (event === 'done') { completed = true; yield { event, data: payload } }
       }

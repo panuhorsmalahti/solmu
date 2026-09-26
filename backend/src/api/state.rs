@@ -4,10 +4,10 @@ use std::{
 };
 
 use axum::http::StatusCode;
-use sqlx::SqlitePool;
-use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
-use tokio::sync::broadcast;
 use serde::Serialize;
+use sqlx::SqlitePool;
+use tokio::sync::broadcast;
+use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Serialize)]
@@ -43,20 +43,43 @@ impl AppState {
     }
 
     pub fn changed(&self, id: &str) {
-        let _ = self.events.send(Change { kind: "conversation_changed", thread_id: Some(id.to_owned()) });
+        let _ = self.events.send(Change {
+            kind: "conversation_changed",
+            thread_id: Some(id.to_owned()),
+        });
     }
 
-    pub fn resync() -> Change { Change { kind: "conversation_changed", thread_id: None } }
+    pub fn resync() -> Change {
+        Change {
+            kind: "conversation_changed",
+            thread_id: None,
+        }
+    }
 
     pub fn response(&self, id: &str) -> Result<ResponsePermit, ApiError> {
         let guard = self.lock_thread(id)?;
         let token = CancellationToken::new();
-        self.responses.lock().unwrap_or_else(|error| error.into_inner()).insert(id.to_owned(), token.clone());
-        Ok(ResponsePermit { state: self.clone(), id: id.to_owned(), token, _guard: guard })
+        self.responses
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .insert(id.to_owned(), token.clone());
+        Ok(ResponsePermit {
+            state: self.clone(),
+            id: id.to_owned(),
+            token,
+            _guard: guard,
+        })
     }
 
     pub fn stop(&self, id: &str) {
-        if let Some(token) = self.responses.lock().unwrap_or_else(|error| error.into_inner()).get(id) { token.cancel(); }
+        if let Some(token) = self
+            .responses
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .get(id)
+        {
+            token.cancel();
+        }
     }
 
     pub fn lock_thread(&self, id: &str) -> Result<OwnedMutexGuard<()>, ApiError> {
@@ -90,6 +113,10 @@ pub struct ResponsePermit {
 impl Drop for ResponsePermit {
     fn drop(&mut self) {
         self.token.cancel();
-        self.state.responses.lock().unwrap_or_else(|error| error.into_inner()).remove(&self.id);
+        self.state
+            .responses
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(&self.id);
     }
 }

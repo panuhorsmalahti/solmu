@@ -25,6 +25,9 @@ docker run --rm --name solmu --env-file .env \
   -p 127.0.0.1:3000:3000 -v solmu-data:/data solmu
 ```
 
+You can also use the published image `ghcr.io/panuhorsmalahti/solmu:latest`
+instead of building locally. See [installation and releases](releases.md).
+
 The named volume keeps conversations when the container stops. Provider keys
 are supplied at runtime and excluded from the image. Stop with
 `docker stop solmu`. Change the host port to connect clients on another port,

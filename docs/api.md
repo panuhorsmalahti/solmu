@@ -14,6 +14,8 @@ authentication is not implemented.
 | POST | `/api/v1/threads/{id}/messages` | `{ "content": "Hello" }`. Saved user message (201). |
 | GET | `/api/v1/threads/{id}/messages` | Saved messages in conversation order. |
 | POST | `/api/v1/threads/{id}/responses` | `{ "message_id": "saved-user-message-id" }`. Streams an assistant reply. |
+| POST | `/api/v1/threads/{id}/stop` | Cancels the active response (204). Safe to repeat. |
+| GET | `/api/v1/events` | WebSocket connection for live conversation updates. |
 
 List endpoints accept `limit` (1–100, default 50) and `offset` (default 0).
 Results have `{ "items": [], "limit": 50, "offset": 0 }`.
@@ -32,6 +34,7 @@ The response is `text/event-stream` with JSON payloads:
 | `delta` | `{ "text": "a piece of the reply" }` |
 | `done` | The complete, persisted assistant message. |
 | `error` | `{ "error": { "code": "...", "message": "..." } }` |
+| `stopped` | Empty object; the response was cancelled. |
 
 The assistant message is saved before `done`. Partial replies are not saved on
 failure or disconnect. A thread is locked while its reply streams: concurrent
@@ -40,3 +43,12 @@ messages, title changes, deletion, and additional replies return 409.
 HTTP errors use `{ "error": { "code": "...", "message": "..." } }`.
 Missing resources return 404, invalid input 400/422, a missing provider 503,
 and provider request failures 502. Streaming failures arrive as `error` events.
+
+## Live updates
+
+Connect to `ws://127.0.0.1:3000/api/v1/events` (use `wss` behind HTTPS).
+The server sends `{ "type": "ready" }`, then
+`{ "type": "conversation_changed", "thread_id": "..." }` for thread changes,
+saved messages, completed replies, and generated names. Reload affected data
+after these notifications. A null thread ID means reload everything. Reconnect
+and reload after a lost connection; events are not replayed.

@@ -23,8 +23,9 @@ the trash icon deletes the thread and its messages.
 
 Type a message and press Enter or the send arrow. Shift+Enter adds a new line.
 Replies stream as they arrive. Threads get an automatic name after the first
-message unless you chose a name manually. **Refresh conversations** reloads
-changes from other clients. Errors appear above the composer.
+message unless you chose a name manually. Changes from other clients appear
+automatically over WebSockets. **Stop** cancels a response. Each conversation
+has a linkable `/threads/{id}` URL. Errors appear above the composer.
 
 ## Build
 
@@ -34,7 +35,8 @@ npm run build:web
 ```
 
 The static build is in `clients/web/dist`. In production, serve it on the same
-origin as the backend and proxy `/api` to Solmu. The web client does not embed
+origin as the backend and proxy `/api` to Solmu, including WebSocket upgrades.
+Serve `index.html` for `/threads/*`. The web client does not embed
 provider keys or connect directly to LLM providers.
 
 See [web usage](../../docs/web.md).

@@ -20,7 +20,8 @@ The app creates a new conversation on startup. Use the **+** icon in the left
 sidebar for another thread, or select an existing thread to resume its history.
 Edit the title and click **Rename**, or **Delete** to remove a conversation.
 Type a message and press Enter or **Send**; replies appear as they stream.
-Use **Refresh** to load changes made in another client. Errors appear above
+Use **Stop** while waiting to cancel a response. Conversations update live
+when another client changes them. Errors appear above
 the message input. Close the window to exit; conversations remain saved.
 
 See [desktop usage](../../docs/desktop.md) and [configuration](../../docs/configuration.md).

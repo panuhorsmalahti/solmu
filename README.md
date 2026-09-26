@@ -1,44 +1,122 @@
 # Solmu
 
-Solmu is an autonomous agent with a Rust backend and multiple frontend applications.
+An open-source autonomous agent, taking shape. A Rust backend with terminal,
+native desktop, and web clients that share your conversations.
 
-```text
-backend/          Rust binary crate (solmu-backend)
-  Cargo.toml
-  src/main.rs     API server
-clients/          Frontend applications
-docs/             Usage and configuration
-```
+[Website](https://panuhorsmalahti.github.io/solmu/) · [Client guide](docs/clients.md) · [Configuration](docs/configuration.md) · [Releases](https://github.com/panuhorsmalahti/solmu/releases)
 
-## Run locally
+- Stream replies from OpenAI, Anthropic, Gemini, and other providers.
+- Save conversations locally in SQLite, with automatic thread names.
+- Create, open, rename, and delete threads in every client.
+- See changes across clients instantly and stop responses anytime.
+- Link directly to conversations in the web client.
+- Run locally, in Docker, or in a Linux sandbox workspace.
 
-With a Rust toolchain installed, run the backend from the repository root:
+## Install
 
-```sh
-cargo run --manifest-path backend/Cargo.toml
-```
-
-## Run with Docker
-
-Install [Docker](https://docs.docker.com/get-started/get-docker/) and start it.
-On Windows, use Docker Desktop with Linux containers.
-
-From the repository root, build the image and run Solmu:
+Linux/macOS:
 
 ```sh
-docker build -t solmu .
-docker run --rm -p 127.0.0.1:3000:3000 solmu
+curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.sh | sh
 ```
 
-The Docker build installs Rust and compiles the backend inside the container;
-Rust does not need to be installed on your computer for this workflow.
+Windows PowerShell:
 
-Solmu listens on `http://127.0.0.1:3000`. The API has no routes yet, so requests
-return `404 Not Found`. WebSocket support is enabled for future streaming
-endpoints; no WebSocket endpoint exists yet.
+```powershell
+irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.ps1 | iex
+```
 
-Stop a local run with Ctrl+C. For a container, use `docker stop <container-id>`
-from another terminal.
+Installs the backend, CLI, desktop, and sandbox from the latest production
+release, with checksum verification. **Before the first release, use the source
+instructions below.** See [installation options](docs/releases.md).
 
-See [configuration](docs/configuration.md) for the listen address and LLM provider
-environment variables.
+Create `.env` in your working directory:
+
+```dotenv
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your-api-key
+LLM_MODEL=gpt-6-sol
+LLM_TITLE_MODEL=gpt-6-luna
+```
+
+Run `solmu-backend`, then `solmu-cli` or `solmu-desktop` in another terminal.
+The default backend address is `http://127.0.0.1:3000`.
+
+## From source
+
+Install Rust and Node.js 24 (Node is needed only for the web client).
+Copy `.env.example` to `.env` if you have not created it, then fill your key.
+From the repository root:
+
+```sh
+cargo run -p solmu-backend
+```
+
+In another terminal, choose a client:
+
+```sh
+cargo run -p solmu-cli
+cargo run -p solmu-desktop
+```
+
+For the web client:
+
+```sh
+npm ci
+npm run dev:web
+```
+
+Open `http://127.0.0.1:5173`. Provider keys stay on the backend.
+
+## Clients
+
+### Terminal
+
+A Rust TUI with streamed replies, an animated spinner, Tab command completion,
+`/threads`, `/open`, `/new`, and `/exit`. Esc or `/stop` cancels a reply.
+[Run and use the CLI](clients/cli/README.md).
+
+![Solmu terminal client](docs/screenshots/cli.png)
+
+### Desktop
+
+A native Rust app built with Iced. Select conversations in the left sidebar,
+create one with **+**, and stop a response with **Stop**.
+[Run and use the desktop client](clients/desktop/README.md).
+
+![Solmu desktop client](docs/screenshots/desktop.png)
+
+### Web
+
+React with shadcn/ui. Saved threads, live updates, response controls, and
+linkable `/threads/{id}` conversation pages.
+[Run and use the web client](clients/web/README.md).
+
+![Solmu web client](docs/screenshots/web.png)
+
+## Docker
+
+```sh
+docker run --rm --env-file .env -p 127.0.0.1:3000:3000 \
+  -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest
+```
+
+Or build with `docker build -t solmu .` and use `solmu` as the image name.
+The volume keeps conversations across container restarts.
+[Docker setup](docs/running.md).
+
+## Sandbox
+
+The Rust `sandbox` launcher starts Solmu or another program. All network
+requests are allowed. On Linux, `--isolated --cwd /path/to/project` gives it
+private processes and a filesystem view with only the workspace writable.
+[Permissions and setup](docs/sandbox.md).
+
+## Development
+
+The backend exposes REST APIs, SSE responses, and WebSocket notifications.
+All clients have scoped end-to-end tests. GitHub Actions builds, lints, and tests
+on Linux, Windows, and macOS, publishes the website and Docker image, and offers
+an explicit manual production release workflow.
+
+[API](docs/api.md) · [Build and test](docs/development.md) · [Release workflow](docs/releases.md)

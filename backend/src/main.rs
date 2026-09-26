@@ -10,15 +10,15 @@ mod prompt;
 mod storage;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    if let Err(error) = dotenvy::dotenv() {
-        if !error.not_found() {
-            return Err("Could not load .env; check its syntax and permissions".into());
-        }
+    if let Err(error) = dotenvy::dotenv()
+        && !error.not_found()
+    {
+        return Err("Could not load .env; check its syntax and permissions".into());
     }
     run()
 }
 
-#[tokio::main]
+#[tokio::main(worker_threads = 2)]
 async fn run() -> Result<(), Box<dyn Error>> {
     let config = config::Config::from_env()?;
     let llm = llm::Llm::from_env()?;

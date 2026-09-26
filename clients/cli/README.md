@@ -34,11 +34,13 @@ such as `/ren` and press Tab to complete it. Repeated Tab cycles matching comman
 | `/rename <title>` | Rename the current conversation. |
 | `/delete` | Delete the current conversation and its messages. |
 | `/help` | Show commands. |
+| `/stop` | Cancel the current response. Esc also stops it. |
 | `/exit` | Exit. Ctrl+C also exits. |
 
 Wait for a reply to finish before sending again or changing conversations.
 `/exit` still works during streaming. Errors are shown above the input; user
-messages remain saved after provider failures.
+messages remain saved after provider failures or cancellation. Conversations
+update automatically when another client changes them.
 
 See [CLI usage](../../docs/cli.md), [configuration](../../docs/configuration.md),
 and [Docker instructions](../../docs/running.md).

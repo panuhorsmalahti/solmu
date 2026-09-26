@@ -1,4 +1,4 @@
-#[tokio::main]
+#[tokio::main(worker_threads = 2)]
 async fn main() {
     let backend = solmu_e2e::support::Backend::start().await;
     println!("{}", backend.url);
