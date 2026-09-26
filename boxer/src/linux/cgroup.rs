@@ -30,7 +30,7 @@ impl Group {
         let root = match requested {
             Some(path) => path.canonicalize()?,
             None => current.ancestors().find(|path| delegated(path)).map(PathBuf::from)
-                .ok_or_else(|| io::Error::other("No delegated cgroup v2 parent. Start with systemd-run -p Delegate=yes -p DelegateSubgroup=supervisor, or set SOLMU_CGROUP_ROOT (see docs/sandbox.md)."))?,
+                .ok_or_else(|| io::Error::other("No delegated cgroup v2 parent. Start with systemd-run -p Delegate=yes -p DelegateSubgroup=supervisor, or set SOLMU_CGROUP_ROOT (see docs/boxer.md)."))?,
         };
         let name = CString::new(root.as_os_str().as_bytes()).map_err(io::Error::other)?;
         let mut stat = std::mem::MaybeUninit::<libc::statfs>::uninit();

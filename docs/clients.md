@@ -3,6 +3,9 @@
 All clients connect to the same backend and share saved conversations.
 Provider credentials and SQLite data stay on the backend.
 
+Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
+[Web](screenshots/web.png) · [Muxer](screenshots/muxer.png).
+
 | Client | Start from repository root | Guide |
 | --- | --- | --- |
 | CLI | `cargo run -p solmu-cli` | [Terminal client](cli.md) |

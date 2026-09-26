@@ -27,7 +27,7 @@ fn main() {
     let code = match run() {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("Solmu sandbox: {error}");
+            eprintln!("Solmu Boxer: {error}");
             125
         }
     };
@@ -43,11 +43,11 @@ fn run() -> io::Result<i32> {
     while let Some(argument) = arguments.next() {
         if argument == "--help" || argument == "-h" {
             println!(
-                "Solmu sandbox\n\nUsage: sandbox [--cwd PATH] [--read-only] [--isolated] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu-cli\nDefault permissions: filesystem and all network requests allowed.\n--read-only: kernel-enforced filesystem policy on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem/network access is allowed."
+                "Solmu Boxer\n\nUsage: boxer [--cwd PATH] [--read-only] [--isolated] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu-cli\nDefault permissions: filesystem and all network requests allowed.\n--read-only: kernel-enforced filesystem policy on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem/network access is allowed."
             );
             return Ok(0);
         } else if argument == "--version" {
-            println!("Solmu sandbox {}", env!("CARGO_PKG_VERSION"));
+            println!("Solmu Boxer {}", env!("CARGO_PKG_VERSION"));
             return Ok(0);
         } else if argument == "--read-only" {
             policy.read_only = true;

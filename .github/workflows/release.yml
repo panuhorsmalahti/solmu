@@ -33,7 +33,7 @@ jobs:
           import os, tomllib
           from pathlib import Path
           expected = os.environ['VERSION']
-          for path in ['backend', 'clients/cli', 'clients/desktop', 'sandbox', 'muxer']:
+          for path in ['backend', 'clients/cli', 'clients/desktop', 'boxer', 'muxer']:
               data = tomllib.loads(Path(path, 'Cargo.toml').read_text())
               assert data['package']['version'] == expected, f'Bump {path}/Cargo.toml to {expected} before releasing'
           PY
@@ -74,7 +74,7 @@ jobs:
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --locked --target ${{ matrix.target }} -p solmu-backend -p solmu-cli -p solmu-desktop -p solmu-sandbox -p solmu-muxer
+      - run: cargo build --release --locked --target ${{ matrix.target }} -p solmu-backend -p solmu-cli -p solmu-desktop -p solmu-boxer -p solmu-muxer
       - name: Package Unix executables
         if: runner.os != 'Windows'
         env:
@@ -83,7 +83,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p artifacts
-          tar -C "target/$TARGET/release" -czf "artifacts/solmu-v$VERSION-$PLATFORM.tar.gz" solmu-backend solmu-cli solmu-desktop sandbox muxer
+          tar -C "target/$TARGET/release" -czf "artifacts/solmu-v$VERSION-$PLATFORM.tar.gz" solmu-backend solmu-cli solmu-desktop boxer muxer
       - name: Package Windows executables
         if: runner.os == 'Windows'
         env:
@@ -91,7 +91,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           New-Item -ItemType Directory artifacts | Out-Null
-          $binaries = @('solmu-backend.exe', 'solmu-cli.exe', 'solmu-desktop.exe', 'sandbox.exe', 'muxer.exe') | ForEach-Object { Join-Path "target/$env:TARGET/release" $_ }
+          $binaries = @('solmu-backend.exe', 'solmu-cli.exe', 'solmu-desktop.exe', 'boxer.exe', 'muxer.exe') | ForEach-Object { Join-Path "target/$env:TARGET/release" $_ }
           Compress-Archive -LiteralPath $binaries -DestinationPath "artifacts/solmu-v$env:VERSION-windows-x86_64.zip"
       - uses: actions/upload-artifact@v4
         with:
@@ -141,7 +141,7 @@ jobs:
           pattern: release-*
           path: artifacts
           merge-multiple: true
-      - name: Publish GitHub Release
+      - name: Publish GitHub Release with automatic changelog
         env:
           VERSION: ${{ needs.validate.outputs.version }}
           GH_TOKEN: ${{ github.token }}

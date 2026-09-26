@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use iced::{Program, Size, Theme};
+use iced::{Program, Size};
 use iced_test::{
     Emulator, Instruction,
     emulator::{Event, Mode},
@@ -203,12 +203,37 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     ui.wait("Hello from Solmu").await;
     ui.wait("Ready · conversations saved locally").await;
     // iced_test::Emulator::screenshot consumes its layout cache. Capture last.
-    if std::env::var_os("SOLMU_CAPTURE_SCREENSHOTS").is_some() {
+    ui.step("click \"Message Solmu…\"").await;
+    ui.step("type \"A little more to explore\"").await;
+    ui.wait_enabled("Send ↑").await;
+    {
         let screenshot =
             ui.emulator
                 .as_mut()
                 .unwrap()
-                .screenshot(&ui.program, &Theme::TokyoNight, 1.0);
+                .screenshot(&ui.program, &solmu_desktop::theme(), 1.0);
+        for expected in [
+            [250, 251, 248],
+            [240, 243, 236],
+            [225, 233, 220],
+            [241, 244, 237],
+            [39, 101, 81],
+        ] {
+            let count = screenshot
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|pixel| pixel[..3] == expected)
+                .count();
+            assert!(
+                count > 100,
+                "Desktop must render the web palette color {expected:?}; found {count} pixels"
+            );
+        }
+        if std::env::var_os("SOLMU_CAPTURE_SCREENSHOTS").is_none() {
+            return;
+        }
         let path = solmu_e2e::support::root().join("docs/screenshots/desktop.png");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let mut encoder = png::Encoder::new(

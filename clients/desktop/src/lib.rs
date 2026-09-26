@@ -5,6 +5,9 @@ use iced::{
 };
 use solmu_client::{Action, Api, Connection, Session, Update};
 
+mod appearance;
+pub use appearance::theme;
+
 pub struct Desktop {
     pub session: Session,
     draft: String,
@@ -34,7 +37,7 @@ pub fn application(
         Desktop::view,
     )
     .title("Solmu")
-    .theme(Theme::TokyoNight)
+    .theme(theme())
     .subscription(|state| {
         iced::Subscription::run_with(state.session.api.base(), |base| {
             Api::new(base).changes().map(Event::Connection)
@@ -168,9 +171,11 @@ impl Desktop {
     pub fn view(&self) -> Element<'_, Event> {
         let enabled = !self.session.busy;
         let new = tooltip(
-            button(text("+").size(27)).on_press_maybe(
-                enabled.then(|| Event::Action(Action::New("New conversation".into()))),
-            ),
+            button(text("+").size(27))
+                .style(appearance::ghost)
+                .on_press_maybe(
+                    enabled.then(|| Event::Action(Action::New("New conversation".into()))),
+                ),
             "New thread",
             tooltip::Position::Bottom,
         );
@@ -193,11 +198,7 @@ impl Desktop {
                 button(text(&thread.title).size(14))
                     .width(Length::Fill)
                     .padding(12)
-                    .style(if selected {
-                        button::primary
-                    } else {
-                        button::text
-                    })
+                    .style(move |theme, status| appearance::thread(theme, status, selected))
                     .on_press_maybe(
                         enabled.then(|| Event::Action(Action::Open(thread.id.clone()))),
                     ),
@@ -208,14 +209,16 @@ impl Desktop {
                 text("solmu").size(32),
                 iced::widget::space().height(22),
                 scrollable(list).height(Length::Fill),
-                text("YOUR IDEAS, CONNECTED").size(10)
+                text("YOUR IDEAS, CONNECTED")
+                    .size(10)
+                    .color(appearance::MUTED)
             ]
             .spacing(8),
         )
         .padding(24)
         .width(270)
         .height(Length::Fill)
-        .style(container::rounded_box);
+        .style(appearance::sidebar);
 
         let mut history = column![].spacing(22).padding(12);
         if self.session.messages.is_empty() {
@@ -223,8 +226,12 @@ impl Desktop {
                 container(
                     column![
                         text("A little space for your\nnext big idea.").size(36),
-                        text("Start a conversation. Follow the thread.").size(17),
-                        text("Your history stays with you, in every Solmu client.").size(13)
+                        text("Start a conversation. Follow the thread.")
+                            .size(17)
+                            .color(appearance::MUTED),
+                        text("Your history stays with you, in every Solmu client.")
+                            .size(13)
+                            .color(appearance::MUTED)
                     ]
                     .spacing(18),
                 )
@@ -238,37 +245,50 @@ impl Desktop {
                 "SOLMU"
             };
             history = history.push(
-                container(column![text(role).size(11), text(&message.content).size(17)].spacing(8))
-                    .padding(20)
-                    .width(Length::Fill)
-                    .style(container::rounded_box),
+                container(
+                    column![
+                        text(role).size(11).color(if message.role == "user" {
+                            appearance::MUTED
+                        } else {
+                            appearance::PRIMARY
+                        }),
+                        text(&message.content).size(17)
+                    ]
+                    .spacing(8),
+                )
+                .padding(20)
+                .width(Length::Fill)
+                .style(move |theme| appearance::message(theme, message.role == "user")),
             );
         }
         if !self.session.partial.is_empty() {
             history = history.push(
                 container(
                     column![
-                        text("SOLMU · streaming").size(11),
+                        text("SOLMU · streaming")
+                            .size(11)
+                            .color(appearance::PRIMARY),
                         text(&self.session.partial).size(17)
                     ]
                     .spacing(8),
                 )
                 .padding(20)
                 .width(Length::Fill)
-                .style(container::rounded_box),
+                .style(|theme| appearance::message(theme, false)),
             );
         }
         let has_thread = self.session.current.is_some();
         let heading = row![
             text_input("Conversation title", &self.title)
+                .style(appearance::input)
                 .on_input(Event::Title)
                 .width(Length::Fill),
-            button("Rename").style(button::text).on_press_maybe(
+            button("Rename").style(appearance::ghost).on_press_maybe(
                 (enabled && has_thread && !self.title.trim().is_empty())
                     .then(|| Event::Action(Action::Rename(self.title.clone())))
             ),
             button("Delete")
-                .style(button::danger)
+                .style(appearance::danger)
                 .on_press_maybe((enabled && has_thread).then_some(Event::Action(Action::Delete))),
         ]
         .spacing(8)
@@ -287,11 +307,12 @@ impl Desktop {
         let send: Element<'_, Event> = if self.session.responding {
             button(text("Stop ■"))
                 .padding(16)
-                .style(button::danger)
+                .style(appearance::danger)
                 .on_press(Event::Stop)
                 .into()
         } else {
             button(text("Send ↑"))
+                .style(appearance::primary)
                 .padding(16)
                 .on_press_maybe(
                     (enabled && has_thread && !self.draft.trim().is_empty()).then_some(Event::Send),
@@ -300,6 +321,7 @@ impl Desktop {
         };
         let composer = row![
             text_input("Message Solmu…", &self.draft)
+                .style(appearance::input)
                 .on_input(Event::Draft)
                 .on_submit(Event::Send)
                 .padding(16)
@@ -312,9 +334,17 @@ impl Desktop {
             column![
                 heading,
                 scrollable(history).height(Length::Fill),
-                text(status).size(12),
+                text(status)
+                    .size(12)
+                    .color(if self.session.error.is_some() {
+                        appearance::DANGER
+                    } else {
+                        appearance::MUTED
+                    }),
                 composer,
-                text("Enter to send · Provider credentials stay on your backend").size(11)
+                text("Enter to send · Provider credentials stay on your backend")
+                    .size(11)
+                    .color(appearance::MUTED)
             ]
             .spacing(16),
         )

@@ -1,11 +1,11 @@
 [package]
-name = "solmu-sandbox"
+name = "solmu-boxer"
 version = "0.1.0"
 edition = "2024"
 license.workspace = true
 
 [[bin]]
-name = "sandbox"
+name = "boxer"
 path = "src/main.rs"
 
 [target.'cfg(target_os = "linux")'.dependencies]

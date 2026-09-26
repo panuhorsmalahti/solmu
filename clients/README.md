@@ -2,6 +2,9 @@
 
 Three frontend applications connect to the same backend:
 
+Screenshots: [CLI](../docs/screenshots/cli.png) ·
+[Desktop](../docs/screenshots/desktop.png) · [Web](../docs/screenshots/web.png).
+
 - [CLI](cli/README.md): a Rust terminal interface.
 - [Desktop](desktop/README.md): a native Rust app using Iced.
 - [Web](web/README.md): React with shadcn/ui.

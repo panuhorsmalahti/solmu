@@ -29,7 +29,7 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.ps1 | iex
 ```
 
-Installs the backend, CLI, desktop, sandbox, and muxer from the latest production
+Installs the backend, CLI, desktop, Boxer, and Muxer from the latest production
 release, with checksum verification. **Before the first release, use the source
 instructions below.** See [installation options](docs/releases.md).
 
@@ -107,6 +107,20 @@ Press **Ctrl+b n** for a new pane, **Ctrl+b s** to split, and **Ctrl+b q** to qu
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)
 
+## Boxer
+
+The Rust `boxer` launcher starts Solmu or another program. All network
+requests are allowed. On Linux, `--isolated --cwd /path/to/project` gives it
+private processes and a filesystem view with only the workspace writable,
+filtered system calls, dropped capabilities, and CPU/memory/task limits.
+[Permissions and setup](docs/boxer.md).
+
+Example (uses default permissions):
+
+```sh
+boxer --cwd /path/to/project -- solmu-cli
+```
+
 ## Docker
 
 ```sh
@@ -117,14 +131,6 @@ docker run --rm --env-file .env -p 127.0.0.1:3000:3000 \
 Or build with `docker build -t solmu .` and use `solmu` as the image name.
 The volume keeps conversations across container restarts.
 [Docker setup](docs/running.md).
-
-## Sandbox
-
-The Rust `sandbox` launcher starts Solmu or another program. All network
-requests are allowed. On Linux, `--isolated --cwd /path/to/project` gives it
-private processes and a filesystem view with only the workspace writable,
-filtered system calls, dropped capabilities, and CPU/memory/task limits.
-[Permissions and setup](docs/sandbox.md).
 
 ## Development
 

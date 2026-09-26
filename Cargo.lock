@@ -4398,6 +4398,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "solmu-boxer"
+version = "0.1.0"
+dependencies = [
+ "landlock",
+ "libc",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "solmu-cli"
 version = "0.1.0"
 dependencies = [
@@ -4466,15 +4475,6 @@ dependencies = [
  "portable-pty",
  "ratatui",
  "vt100",
-]
-
-[[package]]
-name = "solmu-sandbox"
-version = "0.1.0"
-dependencies = [
- "landlock",
- "libc",
- "windows-sys 0.61.2",
 ]
 
 [[package]]

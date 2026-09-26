@@ -25,3 +25,5 @@ when another client changes them. Errors appear above
 the message input. Close the window to exit; conversations remain saved.
 
 See [desktop usage](../../docs/desktop.md) and [configuration](../../docs/configuration.md).
+
+![Solmu client screenshot](../../docs/screenshots/desktop.png)

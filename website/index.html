@@ -41,7 +41,12 @@
         <article><span class="feature-symbol" aria-hidden="true">↗</span><h3>See it take shape</h3><p>Replies arrive as they’re written. Stop anytime. Keep your own pace.</p></article>
         <article><span class="feature-symbol" aria-hidden="true">⌁</span><h3>Follow your threads</h3><p>Saved history, automatic names, and live updates across every client. Link straight to a conversation on the web.</p></article>
         <article><span class="feature-symbol" aria-hidden="true">✳</span><h3>Bring your model</h3><p>OpenAI, Anthropic, Gemini, and more. Choose the model that works for you.</p></article>
-        <article><span class="feature-symbol" aria-hidden="true">◌</span><h3>Make it yours</h3><p>Your backend, your conversation data. Run locally, start with Docker, or choose a Linux sandbox workspace with resource limits.</p></article>
+        <article><span class="feature-symbol" aria-hidden="true">◌</span><h3>Make it yours</h3><p>Your backend, your conversation data. Run locally, choose a Boxer sandbox workspace, or start with Docker.</p></article>
+      </div>
+      <div class="screenshots" aria-label="Solmu client screenshots">
+        <figure><a href="screenshots/cli.png"><img src="screenshots/cli.png" alt="Solmu terminal client showing a conversation" loading="lazy" width="1000" height="688"/></a><figcaption>Terminal · stay in your flow</figcaption></figure>
+        <figure><a href="screenshots/desktop.png"><img src="screenshots/desktop.png" alt="Solmu desktop client with saved conversations and a reply" loading="lazy" width="1120" height="760"/></a><figcaption>Desktop · a place for your ideas</figcaption></figure>
+        <figure><a href="screenshots/web.png"><img src="screenshots/web.png" alt="Solmu web client with a conversation sidebar" loading="lazy" width="1440" height="1000"/></a><figcaption>Web · pick up the thread anywhere</figcaption></figure>
       </div>
     </section>
     <section id="your-space" class="spaces wrap" aria-labelledby="spaces-title">
@@ -52,7 +57,22 @@
         <a class="client" href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/web"><span class="client-icon" aria-hidden="true">◎</span><h3>Web <span aria-hidden="true">↗</span></h3><p>Open a tab. Open a possibility.<br/>The same conversations, in your browser.</p><span class="client-caption">A FRESH WAY TO CONNECT</span></a>
       </div>
       <div class="closing"><p>Start small.<br/><em>See where the thread takes you.</em></p><a class="primary" href="https://github.com/panuhorsmalahti/solmu#install">Get started <span aria-hidden="true">↗</span></a></div>
-      <p class="footnote">Several threads at once? <a href="https://github.com/panuhorsmalahti/solmu/tree/main/muxer">Solmu muxer</a> brings real terminal sessions, workspace switching, split views, and live activity states into one window.</p>
+    </section>
+    <section class="tools wrap" aria-labelledby="tools-title">
+      <div class="section-heading"><span class="eyebrow">ROOM TO EXPLORE</span><h2 id="tools-title">Your workspace, your way.</h2></div>
+      <div class="tool-grid">
+        <article><h3>Boxer</h3><p>Launch Solmu or another agent with native OS controls. On Linux, opt into an isolated workspace with private processes and resource limits. Network access stays allowed.</p><pre><code>boxer --cwd /path/to/project -- solmu-cli</code></pre><p>Running <code>boxer</code> alone opens the Solmu terminal client. Permissions are unrestricted by default.</p><a class="subtle" href="https://github.com/panuhorsmalahti/solmu/tree/main/docs/boxer.md">Choose your sandbox permissions ↗</a></article>
+        <article><h3>Docker</h3><p>Run your backend in a container and keep conversations in a persistent volume. Connect from any Solmu client.</p><a class="subtle" href="https://github.com/panuhorsmalahti/solmu/tree/main/docs/running.md">Run with Docker ↗</a></article>
+        <article class="muxer-feature"><div><h3>Muxer</h3><p>Several threads at once? Real terminal sessions, workspace switching, split views, and live activity states in one window.</p><pre><code>muxer</code></pre><a class="subtle" href="https://github.com/panuhorsmalahti/solmu/tree/main/muxer">Solmu Muxer ↗</a></div><a href="screenshots/muxer.png"><img src="screenshots/muxer.png" alt="Solmu Muxer with two live terminal panes" loading="lazy" width="1700" height="848"/></a></article>
+      </div>
+    </section>
+    <section id="install" class="installation wrap" aria-labelledby="install-title">
+      <div class="section-heading"><span class="eyebrow">MAKE YOURSELF AT HOME</span><h2 id="install-title">Start with a single command.</h2></div>
+      <div class="install-grid">
+        <article><h3>Linux &amp; macOS</h3><pre><code>curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.sh | sh</code></pre></article>
+        <article><h3>Windows PowerShell</h3><pre><code>irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.ps1 | iex</code></pre></article>
+      </div>
+      <p class="footnote">Installs the backend, clients, Boxer, and Muxer from the latest production release. Before the first release, <a href="https://github.com/panuhorsmalahti/solmu#from-source">build from source</a>. Then add your provider key and start the backend.</p>
     </section>
   </main>
   <footer class="footer wrap"><span class="wordmark">solmu</span><span>YOUR IDEAS, CONNECTED.</span><a href="https://github.com/panuhorsmalahti/solmu/tree/main/docs">Read the guide <span aria-hidden="true">↗</span></a></footer>

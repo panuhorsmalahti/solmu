@@ -32,7 +32,7 @@ try {
     if ($actual -ne $expected) { throw 'Release checksum mismatch' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($archive)
-    $binaries = @('solmu-backend.exe', 'solmu-cli.exe', 'solmu-desktop.exe', 'sandbox.exe', 'muxer.exe')
+    $binaries = @('solmu-backend.exe', 'solmu-cli.exe', 'solmu-desktop.exe', 'boxer.exe', 'muxer.exe')
     try {
         foreach ($entry in $zip.Entries) { if ($entry.FullName -notin $binaries) { throw 'Unexpected file in release archive' } }
     } finally { $zip.Dispose() }

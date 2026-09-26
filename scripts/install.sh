@@ -29,11 +29,11 @@ elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$temporary/
 else echo 'A SHA-256 utility is required' >&2; exit 1; fi
 [ "$actual" = "$expected" ] || { echo 'Release checksum mismatch' >&2; exit 1; }
 tar -tzf "$temporary/$asset" | while IFS= read -r entry; do
-  case "$entry" in solmu-backend|solmu-cli|solmu-desktop|sandbox|muxer) ;; *) echo 'Unexpected file in release archive' >&2; exit 1 ;; esac
+  case "$entry" in solmu-backend|solmu-cli|solmu-desktop|boxer|muxer) ;; *) echo 'Unexpected file in release archive' >&2; exit 1 ;; esac
 done
 tar -xzf "$temporary/$asset" -C "$temporary"
 mkdir -p "$destination"
-for binary in solmu-backend solmu-cli solmu-desktop sandbox muxer; do
+for binary in solmu-backend solmu-cli solmu-desktop boxer muxer; do
   [ -f "$temporary/$binary" ] && [ ! -L "$temporary/$binary" ] || { echo "Missing binary: $binary" >&2; exit 1; }
   cp "$temporary/$binary" "$destination/$binary"
   chmod 755 "$destination/$binary"

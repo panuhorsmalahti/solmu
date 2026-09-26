@@ -40,3 +40,5 @@ Serve `index.html` for `/threads/*`. The web client does not embed
 provider keys or connect directly to LLM providers.
 
 See [web usage](../../docs/web.md).
+
+![Solmu client screenshot](../../docs/screenshots/web.png)

@@ -44,3 +44,5 @@ update automatically when another client changes them.
 
 See [CLI usage](../../docs/cli.md), [configuration](../../docs/configuration.md),
 and [Docker instructions](../../docs/running.md).
+
+![Solmu client screenshot](../../docs/screenshots/cli.png)

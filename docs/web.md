@@ -26,3 +26,5 @@ WebSocket upgrades for `/api/v1/events`. Serve `index.html` for `/threads/*`
 so conversation links and reloads work. Keep all
 provider credentials on the backend. The marketing website on GitHub Pages
 is separate from this client and does not host a backend or conversations.
+
+![Solmu client screenshot](screenshots/web.png)

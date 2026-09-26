@@ -66,3 +66,5 @@ This first implementation supports **Solmu only** and foreground sessions.
 There is no background server or detach/reattach yet. Closing muxer terminates
 its launched CLIs; conversations remain saved in the backend. `/exit` leaves
 an exited pane visible so its final terminal contents can be read or restarted.
+
+![Solmu client screenshot](screenshots/muxer.png)

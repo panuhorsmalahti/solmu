@@ -1,0 +1,167 @@
+use super::*;
+
+#[tokio::test]
+async fn thread_crud_messages_pagination_and_persistence() {
+    let mut backend = Backend::configured(None, false, false).await;
+    let thread = backend.create_thread("First thread").await;
+    let id = thread["id"].as_str().unwrap();
+    let second = backend.create_thread("Second thread").await;
+    let message = backend.send_message(id, "hello 🧶\nsecond line").await;
+    assert_eq!(message["role"], "user");
+    assert_eq!(message["thread_id"], id);
+    let response = backend
+        .client
+        .patch(backend.endpoint(&format!("/api/v1/threads/{id}")))
+        .json(&json!({"title":"Renamed"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.json::<Value>().await.unwrap()["title"], "Renamed");
+    let page: Value = backend
+        .client
+        .get(backend.endpoint("/api/v1/threads?limit=1&offset=1"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(page["items"].as_array().unwrap().len(), 1);
+    assert_eq!(page["offset"], 1);
+    assert_eq!(
+        backend.messages(second["id"].as_str().unwrap()).await["items"],
+        json!([])
+    );
+    backend.restart().await;
+    let stored: Value = backend
+        .client
+        .get(backend.endpoint(&format!("/api/v1/threads/{id}")))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(stored["title"], "Renamed");
+    assert_eq!(
+        backend.messages(id).await["items"][0]["content"],
+        "hello 🧶\nsecond line"
+    );
+    let response = backend
+        .client
+        .delete(backend.endpoint(&format!("/api/v1/threads/{id}")))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        backend
+            .client
+            .get(backend.endpoint(&format!("/api/v1/threads/{id}")))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let url = format!(
+        "sqlite://{}",
+        backend
+            .directory
+            .path()
+            .join("solmu.db")
+            .to_string_lossy()
+            .replace('\\', "/")
+    );
+    let mut database = sqlx::SqliteConnection::connect(&url).await.unwrap();
+    let count: (i64,) = sqlx::query_as("SELECT count(*) FROM messages WHERE thread_id = ?")
+        .bind(id)
+        .fetch_one(&mut database)
+        .await
+        .unwrap();
+    assert_eq!(count.0, 0, "Deleting a thread must delete its messages");
+    database.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn invalid_requests_and_thread_membership_are_enforced() {
+    let backend = Backend::configured(None, false, false).await;
+    let thread = backend.create_thread("Validation").await;
+    let id = thread["id"].as_str().unwrap();
+    for (path, body, status) in [
+        (
+            "/api/v1/threads".to_owned(),
+            json!({"title":" "}),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            format!("/api/v1/threads/{id}/messages"),
+            json!({"content":" "}),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            format!("/api/v1/threads/{id}/messages"),
+            json!({"content":"hello", "role":"assistant"}),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            "/api/v1/threads/missing/messages".to_owned(),
+            json!({"content":"hello"}),
+            StatusCode::NOT_FOUND,
+        ),
+    ] {
+        let response = backend
+            .client
+            .post(backend.endpoint(&path))
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), status);
+        assert!(response.json::<Value>().await.unwrap()["error"]["code"].is_string());
+    }
+    assert_eq!(
+        backend
+            .client
+            .get(backend.endpoint("/api/v1/threads?limit=0"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        backend
+            .client
+            .get(backend.endpoint("/api/v1/threads?offset=invalid"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        backend
+            .client
+            .get(backend.endpoint("/api/v1/threads/missing/messages"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let message = backend.send_message(id, "user message").await;
+    let other = backend.create_thread("Other").await;
+    let response = backend
+        .client
+        .post(backend.endpoint(&format!(
+            "/api/v1/threads/{}/responses",
+            other["id"].as_str().unwrap()
+        )))
+        .json(&json!({"message_id":message["id"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

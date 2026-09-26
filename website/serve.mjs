@@ -6,8 +6,11 @@ const root = resolve('website')
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url, 'http://localhost')
-    const path = resolve(root, `.${decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)}`)
-    if (!path.startsWith(root + sep)) { response.writeHead(403).end(); return }
+    const pathname = decodeURIComponent(url.pathname)
+    const assetRoot = pathname.startsWith('/screenshots/') ? resolve('docs/screenshots') : root
+    const relative = assetRoot === root ? (pathname === '/' ? '/index.html' : pathname) : pathname.slice('/screenshots'.length)
+    const path = resolve(assetRoot, `.${relative}`)
+    if (!path.startsWith(assetRoot + sep)) { response.writeHead(403).end(); return }
     const mime = { '.html':'text/html', '.css':'text/css', '.js':'text/javascript', '.svg':'image/svg+xml', '.png':'image/png' }
     response.setHeader('Content-Type', mime[extname(path)] ?? 'application/octet-stream')
     response.end(await readFile(path))

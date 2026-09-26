@@ -17,7 +17,9 @@ npm run test:e2e
 Build the binaries before e2e tests. Tests launch a real Solmu backend with
 temporary SQLite files and a local provider fixture; they never use your keys
 or make paid model requests. Tests live in `e2e/api`, `e2e/cli`, `e2e/desktop`,
-`e2e/web`, `e2e/website`, `e2e/sandbox`, and `e2e/muxer`.
+`e2e/web`, `e2e/website`, `e2e/boxer`, and `e2e/muxer`.
+Within each client, keep feature tests in separate files such as `conversations`,
+`responses`, `input`, and `workspaces`; share terminal helpers in `mod.rs`.
 Muxer tests use a real outer terminal and real Solmu CLI processes in nested
 pseudo-terminals, with the same local backend fixture.
 
@@ -30,7 +32,7 @@ systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervis
   cargo test --workspace --all-targets --locked
 ```
 
-See [sandbox setup](sandbox.md) if user delegation is unavailable.
+See [sandbox setup](boxer.md) if user delegation is unavailable.
 Desktop tests exercise Iced widgets and real
 network tasks in its headless runtime. Browser tests use Playwright.
 On Linux, install `libxkbcommon-dev`, `libwayland-dev`, and

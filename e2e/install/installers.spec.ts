@@ -10,7 +10,7 @@ import { gzipSync, zipSync, strToU8 } from 'fflate'
 
 const execute = promisify(execFile)
 const windows = process.platform === 'win32'
-const names = ['solmu-backend', 'solmu-cli', 'solmu-desktop', 'sandbox', 'muxer'].map(name => name + (windows ? '.exe' : ''))
+const names = ['solmu-backend', 'solmu-cli', 'solmu-desktop', 'boxer', 'muxer'].map(name => name + (windows ? '.exe' : ''))
 const files = Object.fromEntries(names.map(name => [name, strToU8(`Solmu release fixture: ${name}\n`)]))
 
 function tarball() {

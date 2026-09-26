@@ -16,3 +16,5 @@ All Solmu conversation commands work inside panes, including `/stop` and `/exit`
 
 Run `muxer --help` or read the [muxer guide](../docs/muxer.md) for workspace
 selection, configuration, shortcuts, and session lifetime.
+
+![Solmu client screenshot](../docs/screenshots/muxer.png)

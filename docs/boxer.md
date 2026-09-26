@@ -1,8 +1,10 @@
-# Sandbox
+# Boxer
 
-Build with `cargo build -p solmu-sandbox`. Run `sandbox -- solmu-cli`,
-`sandbox -- solmu-backend`, or `sandbox -- another-agent`. Without a program,
-it starts `solmu-cli`. `--cwd PATH` chooses the workspace. Terminal input/output
+Build with `cargo build -p solmu-boxer`. Run `boxer -- solmu-cli`,
+`boxer -- solmu-backend`, or `boxer -- another-agent`. Running `boxer`
+by itself is equivalent to `boxer -- solmu-cli`: it opens the Solmu terminal
+client. Name another program after `--` to launch it instead.
+`--cwd PATH` chooses the workspace. Terminal input/output
 and the program's exit status are preserved.
 
 ## Default permissions
@@ -22,11 +24,11 @@ a delegated cgroup v2 hierarchy. On systemd 254+:
 
 ```sh
 systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
-  sandbox --isolated --cwd /path/to/project -- solmu-cli
+  boxer --isolated --cwd /path/to/project -- solmu-cli
 
 # Customize limits; all descendants share the same budget.
 systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
-  sandbox --isolated --cpus 1 --memory-mib 512 --pids 64 --cwd /path/to/project -- solmu-backend
+  boxer --isolated --cpus 1 --memory-mib 512 --pids 64 --cwd /path/to/project -- solmu-backend
 ```
 
 This mode provides a private process tree, mount view, user namespace, hostname,

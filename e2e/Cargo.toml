@@ -25,23 +25,23 @@ tokio-tungstenite = "0.29"
 
 [[test]]
 name = "api"
-path = "api/tests.rs"
+path = "api/mod.rs"
 
 [[test]]
 name = "cli"
-path = "cli/tests.rs"
+path = "cli/mod.rs"
 
 [[test]]
 name = "desktop"
 path = "desktop/tests.rs"
 
 [[test]]
-name = "sandbox"
-path = "sandbox/tests.rs"
+name = "boxer"
+path = "boxer/mod.rs"
 
 [[test]]
 name = "muxer"
-path = "muxer/tests.rs"
+path = "muxer/mod.rs"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

@@ -26,3 +26,5 @@ the saved user message remains, and the unfinished reply is discarded.
 You can exit during a reply.
 
 See the [CLI README](../clients/cli/README.md) for the full setup.
+
+![Solmu client screenshot](screenshots/cli.png)

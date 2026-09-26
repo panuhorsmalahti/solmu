@@ -5,7 +5,7 @@ to locate its CLI executable. See [muxer configuration](muxer.md).
 
 For the Linux sandbox launcher, `SOLMU_CGROUP_ROOT` optionally chooses an
 existing delegated cgroup v2 parent. Systemd delegation is detected automatically
-when this variable is unset. See [sandbox setup and limits](sandbox.md).
+when this variable is unset. See [sandbox setup and limits](boxer.md).
 
 Solmu loads `.env` from the working directory (or a parent directory) at startup.
 Environment variables already set in your shell take precedence. Restart the
