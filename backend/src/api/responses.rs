@@ -36,10 +36,16 @@ pub async fn create(
     Path(thread_id): Path<String>,
     ApiJson(input): ApiJson<CreateResponse>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let guard = state.lock_thread(&thread_id)?;
+    let permit = state.response(&thread_id)?;
+    let token = permit.token.clone();
     let history = messages::history_for_reply(&state.pool, &thread_id, &input.message_id).await?;
-    let mut reply = state.llm.stream(&history).await?;
-    let first = tokio::time::timeout(Duration::from_secs(30), async {
+    let mut reply = tokio::select! {
+        result = state.llm.stream(&history) => result?,
+        _ = token.cancelled() => return Err(stopped()),
+    };
+    let first = tokio::select! {
+      _ = token.cancelled() => return Err(stopped()),
+      result = tokio::time::timeout(Duration::from_secs(30), async {
         while let Some(event) = reply.stream.next().await {
             match event {
                 Ok(event @ ChatStreamEvent::Chunk(_)) => return Some(event),
@@ -48,16 +54,23 @@ pub async fn create(
             }
         }
         None
-    }).await.ok().flatten()
+      }) => result.ok().flatten(),
+    }
         .ok_or_else(|| ApiError::new(axum::http::StatusCode::BAD_GATEWAY, "provider_error", "LLM request failed; check provider credentials, model, and endpoint"))?;
     let stream = async_stream::stream! {
-        let _guard = guard;
+        let _permit = permit;
         yield Ok(event("start", json!({"message_id": input.message_id})));
         let mut content = String::new();
         let mut finished = false;
         let mut pending = Some(first);
         loop {
-            let next = if let Some(first) = pending.take() { Ok(Some(Ok(first))) } else { tokio::time::timeout(Duration::from_secs(60), reply.stream.next()).await };
+            if token.is_cancelled() { yield Ok(event("stopped", json!({"message_id": input.message_id}))); return; }
+            let next = if let Some(first) = pending.take() { Ok(Some(Ok(first))) } else {
+                tokio::select! {
+                    _ = token.cancelled() => { yield Ok(event("stopped", json!({"message_id": input.message_id}))); return; },
+                    result = tokio::time::timeout(Duration::from_secs(60), reply.stream.next()) => result,
+                }
+            };
             match next {
                 Ok(Some(Ok(ChatStreamEvent::Chunk(chunk)))) => {
                     content.push_str(&chunk.content);
@@ -77,7 +90,7 @@ pub async fn create(
             return;
         }
         match messages::create(&state.pool, &thread_id, "assistant", &content, Some(&input.message_id)).await {
-            Ok(message) => yield Ok(event("done", message)),
+            Ok(message) => { state.changed(&thread_id); yield Ok(event("done", message)); },
             Err(error) => {
                 let error = ApiError::from(error);
                 yield Ok(event("error", json!({"error": {"code": error.code, "message": error.message}})));
@@ -85,4 +98,14 @@ pub async fn create(
         }
     };
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+fn stopped() -> ApiError {
+    ApiError::new(axum::http::StatusCode::CONFLICT, "response_stopped", "Response stopped")
+}
+
+pub async fn stop(State(state): State<AppState>, Path(id): Path<String>) -> Result<axum::http::StatusCode, ApiError> {
+    crate::storage::threads::get(&state.pool, &id).await?;
+    state.stop(&id);
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }

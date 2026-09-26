@@ -81,6 +81,7 @@ pub struct Backend {
     explicit_provider: Option<String>,
     credentials: bool,
     dotenv: bool,
+    title_model: Option<String>,
 }
 
 impl Backend {
@@ -110,6 +111,7 @@ impl Backend {
             explicit_provider: provider.map(str::to_owned),
             credentials,
             dotenv,
+            title_model: None,
         };
         if dotenv {
             std::fs::write(backend.directory.path().join(".env"), format!("LLM_PROVIDER=openai\nLLM_MODEL=test-model\nLLM_ENDPOINT={}\nOPENAI_API_KEY=fixture-key\nANTHROPIC_API_KEY=fixture-key\nSOLMU_BIND_ADDR=invalid-dotenv-value\n", backend.endpoint)).unwrap();
@@ -143,6 +145,7 @@ impl Backend {
         if let Some(provider) = &self.explicit_provider {
             command.env("LLM_PROVIDER", provider);
         }
+        if let Some(model) = &self.title_model { command.env("LLM_TITLE_MODEL", model); }
         self.child = Some(
             command
                 .spawn()
@@ -175,6 +178,11 @@ impl Backend {
     pub async fn restart(&mut self) {
         self.stop();
         self.launch().await;
+    }
+
+    pub async fn set_title_model(&mut self, model: &str) {
+        self.title_model = Some(model.to_owned());
+        self.restart().await;
     }
 
     pub fn stop(&mut self) {

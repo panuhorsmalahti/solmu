@@ -49,7 +49,7 @@ impl<P: Program + 'static> Ui<P> {
 #[tokio::test(flavor = "multi_thread")]
 async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     let backend = Backend::start().await;
-    let mut ui = Ui::new(solmu_desktop::application(Api::new(&backend.url)));
+    let mut ui = tokio::task::block_in_place(|| Ui::new(solmu_desktop::application(Api::new(&backend.url))));
     ui.wait("Ready · conversations saved locally").await;
     let first = backend.threads().await;
     assert_eq!(first["items"].as_array().unwrap().len(), 1);
@@ -62,7 +62,7 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     assert_eq!(backend.messages(id).await["items"].as_array().unwrap().len(), 1);
     ui.wait("Hello from Solmu").await;
     ui.wait("Ready · conversations saved locally").await;
-    ui.step("click \"New conversation\"").await;
+    ui.step("click (460, 52)").await;
     for _ in 0..16 { ui.step("type backspace").await; }
     ui.step("type \"Desktop planning\"").await;
     ui.step("click \"Rename\"").await;
@@ -93,7 +93,7 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     ui.step("type \"FAIL\"").await;
     ui.step("type enter").await;
     ui.wait("LLM request failed; check provider credentials, model, and endpoint").await;
-    ui.step("click \"Refresh\"").await;
-    ui.wait("Ready · conversations saved locally").await;
+    backend.create_thread("From another client").await;
+    ui.wait("From another client").await;
     ui.wait("FAIL").await;
 }

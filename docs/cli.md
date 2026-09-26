@@ -6,6 +6,8 @@ and creates a new conversation every time it opens.
 
 Type a message and press Enter to receive a streamed reply. Conversations and
 completed replies are saved by the backend. Use PageUp/PageDown to scroll.
+An animated spinner shows progress. Tab completes a slash command prefix;
+repeated Tab cycles through matches. For example, `/ren` + Tab completes `/rename`.
 
 Use `/threads` to list conversations and `/open <id>` to continue one.
 `/new [title]` creates a conversation, `/rename <title>` changes its title,

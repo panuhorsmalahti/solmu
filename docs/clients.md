@@ -1,0 +1,29 @@
+# Solmu clients
+
+All clients connect to the same backend and share saved conversations.
+Provider credentials and SQLite data stay on the backend.
+
+| Client | Start from repository root | Guide |
+| --- | --- | --- |
+| CLI | `cargo run -p solmu-cli` | [Terminal client](cli.md) |
+| Desktop | `cargo run -p solmu-desktop` | [Desktop client](desktop.md) |
+| Web | `npm ci`, then `npm run dev:web` | [Web client](web.md) |
+
+Start the backend first with `cargo run -p solmu-backend`, or use
+[Docker](running.md). The default backend address is `http://127.0.0.1:3000`.
+Rust clients load `SOLMU_BACKEND_URL` from `.env` or the environment. Set it in
+the Vite process environment for web development.
+
+Every client supports creating, listing, opening, renaming, and deleting threads;
+reading saved history; sending messages; receiving streamed replies; and seeing
+provider errors. Desktop and web have a thread selector on the left and a **+**
+control for new threads. CLI uses `/threads`, `/open`, and `/new`.
+
+Threads begin as “New conversation” and get a generated name after the first
+user message. A manually chosen name is preserved. See
+[configuration](configuration.md) to choose the title model.
+
+WebSocket notifications keep conversation changes synchronized across clients.
+The web client uses `/threads/{id}` links for individual conversations. Stop
+controls cancel a pending reply; the CLI uses `/stop` or Esc. `/exit` quits the
+CLI. Closing another client leaves saved conversations on the backend.

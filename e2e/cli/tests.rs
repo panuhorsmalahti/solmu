@@ -74,7 +74,7 @@ async fn cli_streaming_thread_commands_history_and_exit() {
     terminal.wait("Hello from Solmu").await;
     terminal.ready().await;
     assert_eq!(backend.messages(&id).await["items"][1]["content"], "Hello from Solmu");
-    terminal.command("/rename Terminal planning"); terminal.wait("Terminal planning").await; terminal.ready().await;
+    terminal.command("/ren\tTerminal planning"); terminal.wait("Terminal planning").await; terminal.ready().await;
     terminal.command("/threads"); terminal.wait("Conversations ·").await; terminal.wait(&id).await; terminal.ready().await;
     terminal.command("/new Another idea"); terminal.wait("Another idea").await; terminal.ready().await;
     assert_eq!(backend.threads().await["items"].as_array().unwrap().len(), 2);

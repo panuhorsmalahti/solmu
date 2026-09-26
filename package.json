@@ -2,12 +2,17 @@
   "name": "solmu",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["clients/web"],
+  "workspaces": [
+    "clients/web"
+  ],
   "scripts": {
     "dev:web": "npm run dev --workspace @solmu/web",
     "build:web": "npm run build --workspace @solmu/web",
     "lint:web": "npm run lint --workspace @solmu/web",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "dev:website": "node website/serve.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
   }
 }

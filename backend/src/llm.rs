@@ -86,9 +86,10 @@ impl Llm {
 
     pub async fn stream(&self, history: &[Message]) -> Result<ChatStreamResponse, ApiError> {
         let model = self.main_model().await?;
-        let request = ChatRequest::new(history.iter().map(|message| {
+        let messages = std::iter::once(ChatMessage::system(crate::prompt::SYSTEM_PROMPT)).chain(history.iter().map(|message| {
             if message.role == "assistant" { ChatMessage::assistant(&message.content) } else { ChatMessage::user(&message.content) }
-        }).collect());
+        })).collect();
+        let request = ChatRequest::new(messages);
         tokio::time::timeout(Duration::from_secs(30), self.client.exec_chat_stream(&model, request, None))
             .await.map_err(|_| provider_error())?.map_err(|_| provider_error())
     }

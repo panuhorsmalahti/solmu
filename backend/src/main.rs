@@ -6,6 +6,7 @@ mod api;
 mod config;
 mod db;
 mod llm;
+mod prompt;
 mod storage;
 
 fn main() -> Result<(), Box<dyn Error>> {

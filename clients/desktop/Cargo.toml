@@ -6,4 +6,5 @@ edition = "2024"
 [dependencies]
 solmu-client = { path = "../common" }
 dotenvy = "0.15.7"
+futures-util = "0.3.34"
 iced = { version = "0.14.0", default-features = false, features = ["tiny-skia", "tokio", "fira-sans", "x11", "wayland"] }

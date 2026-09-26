@@ -37,9 +37,11 @@ pub async fn create(
     ApiJson(input): ApiJson<CreateThread>,
 ) -> Result<(StatusCode, Json<Thread>), ApiError> {
     let title = validate_title(input.title.as_deref().unwrap_or("New conversation"))?;
+    let thread = threads::create(&state.pool, title).await?;
+    state.changed(&thread.id);
     Ok((
         StatusCode::CREATED,
-        Json(threads::create(&state.pool, title).await?),
+        Json(thread),
     ))
 }
 
@@ -69,7 +71,9 @@ pub async fn update(
 ) -> Result<Json<Thread>, ApiError> {
     let _guard = state.lock_thread(&id)?;
     let title = validate_title(&input.title)?;
-    Ok(Json(threads::update(&state.pool, &id, title).await?))
+    let thread = threads::update(&state.pool, &id, title).await?;
+    state.changed(&id);
+    Ok(Json(thread))
 }
 
 pub async fn delete(
@@ -78,5 +82,6 @@ pub async fn delete(
 ) -> Result<StatusCode, ApiError> {
     let _guard = state.lock_thread(&id)?;
     threads::delete(&state.pool, &id).await?;
+    state.changed(&id);
     Ok(StatusCode::NO_CONTENT)
 }

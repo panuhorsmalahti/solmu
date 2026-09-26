@@ -326,3 +326,32 @@ async fn missing_credentials_and_provider_failures_preserve_user_messages() {
     let next = backend.send_message(id, "This is still allowed").await;
     assert_eq!(next["role"], "user", "Failure must release the thread lock");
 }
+
+#[tokio::test]
+async fn automatic_names_use_the_cheap_model_fall_back_and_preserve_manual_titles() {
+    for cheap in [None, Some("title-fixture-model"), Some("unknown-title-model")] {
+        let mut backend = Backend::start().await;
+        if let Some(model) = cheap { backend.set_title_model(model).await; }
+        let thread = backend.create_thread("New conversation").await;
+        let id = thread["id"].as_str().unwrap();
+        assert_eq!(thread["title"], "New conversation");
+        backend.send_message(id, "Plan my next idea").await;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if backend.threads().await["items"][0]["title"] == "A new idea" { break; }
+                tokio::time::sleep(Duration::from_millis(30)).await;
+            }
+        }).await.unwrap();
+        let requests = backend.requests.lock().unwrap();
+        assert_eq!(requests[0].1["model"], cheap.unwrap_or("test-model"));
+        assert_eq!(requests.last().unwrap().1["model"], if cheap == Some("unknown-title-model") { "test-model" } else { cheap.unwrap_or("test-model") });
+        drop(requests);
+        let before = backend.requests.lock().unwrap().len();
+        backend.send_message(id, "Follow up").await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(backend.requests.lock().unwrap().len(), before, "Only the first user message names the thread");
+        let manual = backend.create_thread("My chosen name").await;
+        backend.send_message(manual["id"].as_str().unwrap(), "Hello").await;
+        assert_eq!(backend.threads().await["items"][0]["title"], "My chosen name");
+    }
+}

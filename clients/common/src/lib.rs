@@ -14,11 +14,33 @@ pub struct Message { pub id: String, pub role: String, pub content: String }
 pub struct Api { client: Client, base: String }
 
 impl Api {
+    pub fn base(&self) -> String { self.base.clone() }
+    pub fn changes(&self) -> Pin<Box<dyn Stream<Item = Connection> + Send>> {
+        let url = format!("{}/api/v1/events", self.base.replacen("http", "ws", 1));
+        Box::pin(async_stream::stream! {
+            loop {
+                if let Ok((mut socket, _)) = tokio_tungstenite::connect_async(&url).await {
+                    yield Connection::Connected;
+                    while let Some(Ok(message)) = socket.next().await {
+                        if message.is_close() { break; }
+                        if let Ok(text) = message.to_text() {
+                            if serde_json::from_str::<Value>(text).ok().is_some_and(|event| event["type"] == "conversation_changed") { yield Connection::Changed; }
+                        }
+                    }
+                }
+                yield Connection::Disconnected;
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        })
+    }
     pub fn new(base: impl Into<String>) -> Self {
         Self { client: Client::builder().connect_timeout(Duration::from_secs(10)).build().expect("HTTP client"), base: base.into().trim_end_matches('/').to_owned() }
     }
     pub fn from_env() -> Self {
         Self::new(std::env::var("SOLMU_BACKEND_URL").unwrap_or_else(|_| "http://127.0.0.1:3000".into()))
+    }
+    pub async fn stop(&self, id: &str) -> Result<(), String> {
+        self.request(Method::POST, &format!("/threads/{id}/stop"), None, false).await.map(|_| ())
     }
     async fn request(&self, method: Method, path: &str, body: Option<Value>, stream: bool) -> Result<Response, String> {
         let mut request = self.client.request(method, format!("{}/api/v1{path}", self.base));
@@ -48,6 +70,7 @@ impl Api {
         let api = self.clone();
         Box::pin(async_stream::stream! {
             match action {
+                Action::List => match api.list("/threads").await { Ok(threads) => yield Update::Threads(threads), Err(error) => { yield Update::Failed(error); return; } },
                 Action::Send(content) => {
                     let Some(thread) = current else { yield Update::Failed("Create or open a conversation first".into()); return; };
                     let message: Message = match api.json(Method::POST, &format!("/threads/{}/messages", thread.id), Some(json!({"content": content}))).await {
@@ -70,6 +93,7 @@ impl Api {
                                 completed = true;
                             },
                             "error" => { yield Update::Failed(data["error"]["message"].as_str().unwrap_or("Reply failed").into()); return; },
+                            "stopped" => { yield Update::Stopped; return; },
                             _ => {},
                         }
                     }
@@ -90,8 +114,12 @@ impl Api {
                                 api.request(Method::DELETE, &format!("/threads/{}", thread.id), None, false).await?;
                                 Ok(None)
                             },
-                            Action::Refresh => Ok(current),
+                            Action::Refresh => {
+                                let threads: Vec<Thread> = api.list("/threads").await?;
+                                Ok(current.and_then(|current| threads.into_iter().find(|thread| thread.id == current.id)))
+                            },
                             Action::Send(_) => unreachable!(),
+                            Action::List => unreachable!(),
                         }
                     }.await;
                     let thread = match result { Ok(thread) => thread, Err(error) => { yield Update::Failed(error); return; } };
@@ -109,22 +137,32 @@ impl Api {
 
 pub type Updates = Pin<Box<dyn Stream<Item = Update> + Send>>;
 #[derive(Clone, Debug)]
-pub enum Action { New(String), Open(String), Rename(String), Delete, Refresh, Send(String) }
+pub enum Connection { Connected, Changed, Disconnected }
 #[derive(Clone, Debug)]
-pub enum Update { Opened(Option<Thread>, Vec<Message>), Threads(Vec<Thread>), Saved(Message), Delta(String), Failed(String), Finished }
+pub enum Action { New(String), Open(String), Rename(String), Delete, Refresh, List, Send(String) }
+#[derive(Clone, Debug)]
+pub enum Update { Opened(Option<Thread>, Vec<Message>), Threads(Vec<Thread>), Saved(Message), Delta(String), Failed(String), Finished, Stopped }
 
 pub struct Session {
-    pub api: Api, pub current: Option<Thread>, pub threads: Vec<Thread>, pub messages: Vec<Message>, pub partial: String, pub error: Option<String>, pub busy: bool,
+    pub api: Api, pub current: Option<Thread>, pub threads: Vec<Thread>, pub messages: Vec<Message>, pub partial: String, pub error: Option<String>, pub busy: bool, pub responding: bool,
 }
 impl Session {
     pub fn new(api: Api) -> Self {
-        Self { api, current: None, threads: Vec::new(), messages: Vec::new(), partial: String::new(), error: None, busy: false }
+        Self { api, current: None, threads: Vec::new(), messages: Vec::new(), partial: String::new(), error: None, busy: false, responding: false }
     }
     pub fn begin(&mut self, action: Action) -> Option<Updates> {
         if self.busy { return None; }
+        self.responding = matches!(action, Action::Send(_));
         self.busy = true; self.error = None; self.partial.clear();
         Some(self.api.run(self.current.clone(), action))
     }
+    pub fn refresh(&mut self) -> Option<Updates> {
+        let error = self.error.clone();
+        let updates = self.begin(Action::Refresh);
+        self.error = error;
+        updates
+    }
+    pub fn stopping(&mut self) { self.responding = false; self.partial.clear(); self.error = None; self.busy = true; }
     pub fn apply(&mut self, update: Update) {
         match update {
             Update::Opened(thread, messages) => { self.current = thread; self.messages = messages; },
@@ -136,8 +174,9 @@ impl Session {
             },
             Update::Saved(message) => { if message.role == "assistant" { self.partial.clear(); } self.messages.push(message); },
             Update::Delta(text) => self.partial.push_str(&text),
-            Update::Failed(error) => { self.error = Some(error); self.busy = false; self.partial.clear(); },
-            Update::Finished => self.busy = false,
+            Update::Failed(error) => { self.error = Some(error); self.busy = false; self.responding = false; self.partial.clear(); },
+            Update::Finished => { self.busy = false; self.responding = false; },
+            Update::Stopped => { self.busy = false; self.responding = false; self.partial.clear(); },
         }
     }
 }

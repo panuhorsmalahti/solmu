@@ -23,6 +23,8 @@ or your shell to connect elsewhere. Provider keys belong to the backend.
 
 Type a message and press Enter. Replies appear as they stream and are saved
 when complete. PageUp and PageDown scroll the conversation.
+An animated spinner indicates that Solmu is working. Type a command prefix
+such as `/ren` and press Tab to complete it. Repeated Tab cycles matching commands.
 
 | Command | Action |
 | --- | --- |

@@ -19,7 +19,6 @@ button:disabled { cursor:default; }
 .sidebar { width:276px; flex-shrink:0; background:#f0f3ec; padding:34px 20px 20px; display:flex; flex-direction:column; border-right:1px solid var(--border); }
 .brand { display:flex; gap:12px; align-items:center; font-size:30px; font-weight:650; letter-spacing:-1.6px; padding:0 12px; }
 .brand-mark { width:29px; height:29px; color:#34735d; }
-.tagline { margin:9px 12px 45px; font-size:12px; color:var(--muted-foreground); }
 .sidebar-label { display:flex; align-items:center; justify-content:space-between; padding:0 12px 12px; font-size:10px; font-weight:650; letter-spacing:1.4px; text-transform:uppercase; }
 .threads { overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:5px; }
 .thread { width:100%; text-align:left; display:flex; align-items:center; gap:10px; padding:13px 12px; border:0; border-radius:8px; background:transparent; color:#65786b; font-size:13px; }

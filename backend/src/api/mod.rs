@@ -1,4 +1,5 @@
 pub mod error;
+mod events;
 mod messages;
 mod responses;
 pub mod state;
@@ -39,6 +40,8 @@ pub struct ListResponse<T> {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/api/v1/events", get(events::connect))
+        .route("/api/v1/threads/{thread_id}/stop", post(responses::stop))
         .route("/api/v1/threads", get(threads::list).post(threads::create))
         .route(
             "/api/v1/threads/{thread_id}",
