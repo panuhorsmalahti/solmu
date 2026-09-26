@@ -16,6 +16,9 @@ Stop the backend with Ctrl+C. Conversations survive restarts in `solmu.db`.
 
 ## Docker backend
 
+For agent sandboxing, Solmu recommends [Boxer](boxer.md) over Docker.
+Use Docker to package and run the backend.
+
 Install and start Docker (Linux containers on Windows). Rust is not needed on
 the host for the container build.
 

@@ -5,6 +5,9 @@ Open [Profile](profile.md) to edit the shared system prompt and optional default
 model. Every client also supports per-thread model selection.
 Provider credentials and SQLite data stay on the backend.
 
+The CLI and desktop show **Ready** when available, with progress and errors
+shown as needed.
+
 Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
 [Web](screenshots/web.png) · [Muxer](screenshots/muxer.png).
 

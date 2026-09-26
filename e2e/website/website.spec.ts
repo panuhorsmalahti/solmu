@@ -12,6 +12,8 @@ test('website describes Solmu features and links to every client and installatio
   expect(await page.getByRole('heading', { level: 3 }).allTextContents()).toEqual(expect.arrayContaining(['Boxer', 'Docker', 'Muxer']))
   expect(await page.locator('.tool-grid > article h3').allTextContents()).toEqual(['Boxer', 'Docker', 'Muxer'])
   await expect(page.locator('pre').filter({ hasText: 'boxer --cwd /path/to/project -- solmu-cli' })).toBeVisible()
+  await expect(page.locator('pre').filter({ hasText: 'docker run --rm --env-file .env -p 127.0.0.1:3000:3000 -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest' })).toBeVisible()
+  await expect(page.getByText('Boxer is the recommended agent sandbox.', { exact: false })).toBeVisible()
   for (const script of ['install.sh', 'install.ps1']) await expect(page.locator('#install pre').filter({ hasText: `https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/${script}` })).toBeVisible()
   for (const client of ['cli', 'desktop', 'web', 'muxer']) {
     const image = page.locator(`img[src="screenshots/${client}.png"]`)

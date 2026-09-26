@@ -5,7 +5,7 @@ async fn desktop_profile_edits_prompt_model_and_tracks_live_changes() {
     let backend = Backend::start().await;
     let mut ui =
         tokio::task::block_in_place(|| Ui::new(solmu_desktop::application(Api::new(&backend.url))));
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     ui.step("click \"+\"").await;
     assert_eq!(
         backend.threads().await["items"].as_array().unwrap().len(),

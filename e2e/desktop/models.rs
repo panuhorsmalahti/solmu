@@ -5,7 +5,7 @@ async fn desktop_model_picker_saves_and_clears_thread_overrides() {
     let backend = Backend::start().await;
     let mut ui =
         tokio::task::block_in_place(|| Ui::new(solmu_desktop::application(Api::new(&backend.url))));
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     let id = backend.threads().await["items"][0]["id"]
         .as_str()
         .unwrap()
@@ -15,7 +15,7 @@ async fn desktop_model_picker_saves_and_clears_thread_overrides() {
     ui.wait_enabled("GPT 6 Luna").await;
     ui.step("click \"GPT 6 Luna\"").await;
     ui.wait("gpt-6-luna").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     let thread: serde_json::Value = backend
         .client
         .get(backend.endpoint(&format!("/api/v1/threads/{id}")))
@@ -31,7 +31,7 @@ async fn desktop_model_picker_saves_and_clears_thread_overrides() {
     ui.wait_enabled("Default model").await;
     ui.step("click \"Default model\"").await;
     ui.wait("Default model").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     let thread: serde_json::Value = backend
         .client
         .get(backend.endpoint(&format!("/api/v1/threads/{id}")))

@@ -5,6 +5,15 @@ async fn cli_streaming_thread_commands_history_and_exit() {
     let backend = Backend::start().await;
     let mut terminal = Terminal::start(&backend);
     terminal.ready().await;
+    assert!(
+        !terminal
+            .screen
+            .lock()
+            .unwrap()
+            .screen()
+            .contents()
+            .contains("saved locally")
+    );
     let threads = backend.threads().await;
     assert_eq!(threads["items"].as_array().unwrap().len(), 1);
     let id = threads["items"][0]["id"].as_str().unwrap().to_owned();

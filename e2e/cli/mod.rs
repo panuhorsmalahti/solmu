@@ -110,7 +110,7 @@ impl Terminal {
         });
     }
     async fn ready(&self) {
-        self.wait("Ready ·").await;
+        self.wait("Ready").await;
     }
     fn screenshot_source(&self) {
         solmu_e2e::support::capture_terminal(self.screen.lock().unwrap().screen(), "cli");

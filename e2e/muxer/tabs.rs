@@ -6,17 +6,17 @@ async fn mouse_controls_group_tabs_by_space_preserve_focus_and_close_sessions() 
     let other = backend.directory.path().join("Another project");
     std::fs::create_dir(&other).unwrap();
     let mut tui = Terminal::start(&backend, &[]);
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("/rename First tab");
     tui.wait("SOLMU    First tab").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.click("+ Tab").await;
     tui.wait("Solmu 2 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.wait("2 tabs").await;
     tui.command("/rename Second tab");
     tui.wait("SOLMU    Second tab").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.click("Solmu 1").await;
     tui.wait("SOLMU    First tab").await;
     tui.click("+ Space").await;
@@ -29,13 +29,13 @@ async fn mouse_controls_group_tabs_by_space_preserve_focus_and_close_sessions() 
     tui.wait("Another project").await;
     tui.click("Create").await;
     tui.wait("Solmu 3 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.click("+ Tab").await;
     tui.wait("Solmu 4 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("/model gpt-6-luna");
     tui.wait("Model: gpt-6-luna").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     let threads = backend.threads().await;
     assert_eq!(threads["items"].as_array().unwrap().len(), 4);
     let model_thread = threads["items"]
@@ -68,7 +68,7 @@ async fn mouse_controls_group_tabs_by_space_preserve_focus_and_close_sessions() 
     tui.wait("Solmu 4 · exited 0").await;
     tui.click("Restart").await;
     tui.wait("Solmu 4 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     assert_eq!(
         backend.threads().await["items"].as_array().unwrap().len(),
         5

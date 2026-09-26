@@ -5,7 +5,12 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     let backend = Backend::start().await;
     let mut ui =
         tokio::task::block_in_place(|| Ui::new(solmu_desktop::application(Api::new(&backend.url))));
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
+    assert!(
+        iced_test::simulator(ui.emulator.as_ref().unwrap().view(&ui.program))
+            .find("Ready · conversations saved locally")
+            .is_err()
+    );
     let first = backend.threads().await;
     assert_eq!(first["items"].as_array().unwrap().len(), 1);
     let id = first["items"][0]["id"].as_str().unwrap();
@@ -22,7 +27,7 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
         1
     );
     ui.wait("Hello from Solmu").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     ui.step("click (460, 52)").await;
     for _ in 0..16 {
         ui.step("type backspace").await;
@@ -30,26 +35,26 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     ui.step("type \"Desktop planning\"").await;
     ui.step("click \"Rename\"").await;
     ui.wait("Desktop planning").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     ui.step("click \"+\"").await;
     ui.wait("A little space for your\nnext big idea.").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     assert_eq!(
         backend.threads().await["items"].as_array().unwrap().len(),
         2
     );
     ui.step("click \"Desktop planning\"").await;
     ui.wait("Hello from the desktop").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     ui.step("click \"Delete\"").await;
     ui.wait("A little space for your\nnext big idea.").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     assert_eq!(
         backend.threads().await["items"].as_array().unwrap().len(),
         1
     );
     ui.step("click \"New conversation\"").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     ui.step("click \"Message Solmu…\"").await;
     ui.step("type \"FAIL\"").await;
     ui.step("type enter").await;
@@ -60,7 +65,7 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     ui.wait("FAIL").await;
     ui.wait_enabled("From another client").await;
     ui.step("click \"From another client\"").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     let stop_id = backend.threads().await["items"]
         .as_array()
         .unwrap()
@@ -75,7 +80,7 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     ui.step("type enter").await;
     ui.wait("Hello").await;
     ui.step("click \"Stop ■\"").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     assert_eq!(
         backend.messages(&stop_id).await["items"]
             .as_array()
@@ -87,7 +92,7 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     ui.step("type \"Hello from the desktop\"").await;
     ui.step("type enter").await;
     ui.wait("Hello from Solmu").await;
-    ui.wait("Ready · conversations saved locally").await;
+    ui.wait("Ready").await;
     // iced_test::Emulator::screenshot consumes its layout cache. Capture last.
     ui.step("click \"Message Solmu…\"").await;
     ui.step("type \"A little more to explore\"").await;

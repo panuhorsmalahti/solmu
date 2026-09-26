@@ -318,7 +318,7 @@ fn draw(
     } else if !connected {
         "Reconnecting to live updates…"
     } else {
-        "Ready · conversation saved locally"
+        "Ready"
     });
     frame.render_widget(
         Paragraph::new(notice)

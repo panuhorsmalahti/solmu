@@ -9,7 +9,7 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
     tui.wait("Solmu 1 · idle").await;
     tui.send(b"\x02\x1b[B");
     tui.wait("Solmu 2 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.prefix('w');
     tui.wait("Workspace path:").await;
     tui.command("solmu-missing-workspace");
@@ -22,16 +22,16 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
     tui.prefix('w');
     tui.command(other.to_str().unwrap());
     tui.wait("Solmu 3 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("FAIL_STREAM");
     tui.wait("Solmu 3 · error").await;
     tui.command("/new Stop conversation");
     tui.wait("SOLMU    Stop conversation").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("Hello to stop");
     tui.wait("SOLMU · streaming").await;
     tui.command("/stop");
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     let threads = backend.threads().await;
     let id = threads["items"]
         .as_array()
@@ -50,10 +50,10 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
     );
     tui.send(b"\x02\x1b[A");
     tui.wait("Solmu 2 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("/rename Quit cleanup");
     tui.wait("SOLMU    Quit cleanup").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     let threads = backend.threads().await;
     let cleanup_id = threads["items"]
         .as_array()

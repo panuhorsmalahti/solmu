@@ -616,7 +616,7 @@ impl Desktop {
             } else if !self.connected {
                 "Reconnecting to live updates…"
             } else {
-                "Ready · conversations saved locally"
+                "Ready"
             });
         let send: Element<'_, Event> = if self.session.responding {
             button(text("Stop ■"))

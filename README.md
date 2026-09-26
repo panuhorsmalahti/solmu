@@ -126,6 +126,9 @@ boxer --cwd /path/to/project -- solmu-cli
 
 ## Docker
 
+For agent sandboxing, Solmu recommends [Boxer](docs/boxer.md) over Docker.
+Docker provides a convenient way to run the backend.
+
 ```sh
 docker run --rm --env-file .env -p 127.0.0.1:3000:3000 \
   -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest

@@ -4,10 +4,11 @@ use super::*;
 async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_features() {
     let backend = Backend::start().await;
     let mut tui = Terminal::start(&backend, &[]);
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
+    assert!(!tui.contents().contains("saved locally"));
     tui.command("/rename First workspace");
     tui.wait("SOLMU    First workspace").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     let id = backend.threads().await["items"][0]["id"]
         .as_str()
         .unwrap()
@@ -17,13 +18,13 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.wait("SOLMU · streaming").await;
     tui.prefix('n');
     tui.wait("Solmu 2 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("/ren\tSecond workspace");
     tui.wait("SOLMU    Second workspace").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.prefix('1');
     tui.wait("Hello from Solmu").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     assert_eq!(
         backend.messages(&id).await["items"]
             .as_array()
@@ -66,22 +67,22 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.prefix('s');
     tui.command(&format!("/open {id}"));
     tui.wait("Hello from pane one").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("/threads");
     tui.wait("Conversations ·").await;
     tui.wait(&id).await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("/new Third conversation");
     tui.wait("SOLMU    Third conversation").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("/delete");
     tui.wait("No conversation").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.command("/exit");
     tui.wait("Solmu 2 · exited 0").await;
     tui.prefix('r');
     tui.wait("Solmu 2 · idle").await;
-    tui.wait("Ready ·").await;
+    tui.wait("Ready").await;
     tui.prefix('x');
     tui.wait("SOLMU    First workspace").await;
     assert!(!tui.contents().contains("Solmu 2 ·"));
