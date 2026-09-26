@@ -52,8 +52,11 @@ for (const corrupt of [false, true]) {
     const address = server.address() as { port: number }
     const base = `http://127.0.0.1:${address.port}`
     try {
+      // PowerShell 7 CI must not pass its incompatible module paths to 5.1.
+      const installerEnvironment = { ...process.env }
+      delete installerEnvironment.PSModulePath
       const installation = windows
-        ? execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.resolve('scripts/install.ps1'), '-InstallDir', destination, '-ReleaseApi', `${base}/api`, '-DownloadBase', `${base}/download`, '-NoPath'], { timeout: 20_000 })
+        ? execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.resolve('scripts/install.ps1'), '-InstallDir', destination, '-ReleaseApi', `${base}/api`, '-DownloadBase', `${base}/download`, '-NoPath'], { timeout: 20_000, env: installerEnvironment })
         : execute('sh', [path.resolve('scripts/install.sh')], { timeout: 20_000, env: { ...process.env, SOLMU_VERSION: '', SOLMU_INSTALL_DIR: destination, SOLMU_RELEASE_API: `${base}/api`, SOLMU_RELEASE_BASE_URL: `${base}/download` } })
       if (corrupt) {
         await expect(installation).rejects.toThrow(/checksum mismatch/)

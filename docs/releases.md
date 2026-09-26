@@ -16,6 +16,8 @@ curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/
 
 Windows PowerShell:
 
+Use Windows PowerShell 5.1 or PowerShell 7:
+
 ```powershell
 irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.ps1 | iex
 ```
@@ -53,5 +55,4 @@ docker run --rm --env-file .env -p 127.0.0.1:3000:3000 \
   -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest
 ```
 
-GitHub initially creates container packages as private. Set the `solmu`
-package visibility to **Public** in GitHub package settings for anonymous pulls.
+The image is public and can be pulled without a GitHub registry login.

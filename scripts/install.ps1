@@ -25,14 +25,18 @@ try {
     $checksum = ($checksums -split "`n" | Where-Object { $_.Trim() -match ("^[a-f0-9]{64}\s+" + [regex]::Escape($asset) + '$') })
     if (-not $checksum) { throw 'Missing release checksum' }
     $expected = ($checksum.Trim() -split '\s+')[0]
-    if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Release checksum mismatch' }
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    $inputStream = [System.IO.File]::OpenRead($archive)
+    try { $actual = [BitConverter]::ToString($hasher.ComputeHash($inputStream)).Replace('-', '').ToLowerInvariant() }
+    finally { $inputStream.Dispose(); $hasher.Dispose() }
+    if ($actual -ne $expected) { throw 'Release checksum mismatch' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($archive)
     $binaries = @('solmu-backend.exe', 'solmu-cli.exe', 'solmu-desktop.exe', 'sandbox.exe')
     try {
         foreach ($entry in $zip.Entries) { if ($entry.FullName -notin $binaries) { throw 'Unexpected file in release archive' } }
     } finally { $zip.Dispose() }
-    Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $solmuTemporary 'files')
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($archive, (Join-Path $solmuTemporary 'files'))
     foreach ($binary in $binaries) { if (-not (Test-Path -LiteralPath (Join-Path $solmuTemporary "files\$binary") -PathType Leaf)) { throw "Missing binary: $binary" } }
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     foreach ($binary in $binaries) { Copy-Item -LiteralPath (Join-Path $solmuTemporary "files\$binary") -Destination (Join-Path $InstallDir $binary) -Force }

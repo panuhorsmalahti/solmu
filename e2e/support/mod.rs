@@ -69,6 +69,7 @@ pub fn binary(name: &str) -> PathBuf {
 }
 
 pub type Requests = Arc<Mutex<Vec<(String, Value)>>>;
+static STARTUP_LIMIT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 
 pub struct Backend {
     pub url: String,
@@ -121,6 +122,9 @@ impl Backend {
     }
 
     async fn launch(&mut self) {
+        // Bound simultaneous native launches (not test execution), avoiding
+        // slow executable/certificate scans overwhelming Windows runners.
+        let _startup = STARTUP_LIMIT.acquire().await.unwrap();
         let mut command = Command::new(binary("solmu-backend"));
         command
             .current_dir(self.directory.path())
