@@ -43,6 +43,8 @@ Provider project/region settings, GitHub Models tokens, and network proxy
 settings are forwarded too.
 Choose a project directory, not your entire home: the selected workspace is
 accessible to the program.
+Kernel control directories (`/sys`, `/proc`, `/dev`) and the delegated cgroup
+hierarchy cannot be selected as the workspace.
 
 Networking remains unrestricted, including network access to host services.
 The sandbox shares the host kernel; it is not a VM. The default permissive
@@ -55,7 +57,9 @@ memory, no swap, and 256 processes/threads** by default. Use `--cpus N`,
 `--memory-mib N`, and `--pids N` to set positive integer limits. CPU use is
 throttled; exceeding memory can terminate the sandbox; reaching the task limit
 prevents new processes or threads. Limits include Bubblewrap's helper processes.
-Remaining descendants are terminated and the per-run cgroup is removed on exit.
+Remaining descendants are terminated and the per-run cgroup is removed on exit,
+including Ctrl+C, termination signals, and hangups. Forced termination such as
+SIGKILL cannot run cleanup; a service manager should own the delegated hierarchy.
 
 Seccomp rejects namespace creation, mount changes, tracing, kernel modules,
 kernel keyrings, BPF, io_uring, and other privileged kernel operations. Ordinary

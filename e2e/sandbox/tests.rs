@@ -213,6 +213,47 @@ fn isolated_limits_are_enforced_and_invalid_cgroup_roots_fail_closed() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(!group.exists(), "owned cgroup must be removed on exit");
+    for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        let mut interrupted = Command::new(binary("sandbox"))
+            .args(["--isolated", "--cwd"])
+            .arg(workspace.path())
+            .arg("--")
+            .arg(binary("sandbox-probe"))
+            .arg("--sleep")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let prefix = format!("solmu-{}-", interrupted.id());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let group = loop {
+            if let Some(path) = std::fs::read_dir(&root)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .find(|path| {
+                    path.file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with(&prefix)
+                })
+                && std::fs::read_to_string(path.join("cgroup.procs"))
+                    .is_ok_and(|value| !value.trim().is_empty())
+            {
+                break path;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "signal probe failed to start"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        assert_eq!(unsafe { libc::kill(interrupted.id() as i32, signal) }, 0);
+        assert_eq!(interrupted.wait().unwrap().code(), Some(128 + signal));
+        assert!(
+            !group.exists(),
+            "signal cancellation must remove its cgroup"
+        );
+    }
     let output = Command::new(binary("sandbox"))
         .args(["--isolated", "--memory-mib", "32", "--cwd"])
         .arg(workspace.path())
@@ -357,9 +398,11 @@ async fn isolated_linux_workspace_network_and_host_process_boundary() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(!workspace.path().join("blocked.txt").exists());
-    let output = Command::new(binary("sandbox"))
-        .args(["--isolated", "--cwd", "/", "--", "true"])
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(125));
+    for directory in ["/", "/sys", "/proc", "/dev"] {
+        let output = Command::new(binary("sandbox"))
+            .args(["--isolated", "--cwd", directory, "--", "true"])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(125));
+    }
 }

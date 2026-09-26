@@ -103,8 +103,22 @@ impl Group {
         }
     }
 
+    pub fn terminate(&self) -> io::Result<()> {
+        fs::write(self.path.join("cgroup.kill"), "1")
+    }
+
+    pub fn validate_workspace(&self, workspace: &Path) -> io::Result<()> {
+        let root = self.path.parent().expect("owned cgroup parent");
+        if workspace.starts_with(root) || root.starts_with(workspace) {
+            return Err(io::Error::other(
+                "Workspace must not expose the delegated cgroup hierarchy",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn cleanup(&self) -> io::Result<()> {
-        fs::write(self.path.join("cgroup.kill"), "1")?;
+        self.terminate()?;
         for _ in 0..100 {
             if fs::read_to_string(self.path.join("cgroup.events"))?.contains("populated 0") {
                 return fs::remove_dir(&self.path);

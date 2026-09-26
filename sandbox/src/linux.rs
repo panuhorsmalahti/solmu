@@ -15,6 +15,11 @@ use std::{
 mod cgroup;
 mod seccomp;
 
+static INTERRUPTED: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+extern "C" fn interrupted(signal: i32) {
+    INTERRUPTED.store(signal, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     if policy.isolated {
         return isolated(command, policy);
@@ -51,9 +56,14 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         .map(std::path::PathBuf::from)
         .unwrap_or(std::env::current_dir()?)
         .canonicalize()?;
-    if !directory.is_dir() || directory == std::path::Path::new("/") {
+    if !directory.is_dir()
+        || directory == std::path::Path::new("/")
+        || ["/sys", "/proc", "/dev"]
+            .iter()
+            .any(|path| directory.starts_with(path))
+    {
         return Err(io::Error::other(
-            "--isolated requires a workspace directory other than /",
+            "--isolated requires a project workspace outside /, /sys, /proc, and /dev",
         ));
     }
     let mut sandbox = Command::new("bwrap");
@@ -162,6 +172,7 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         .args(command.get_args());
     // No network namespace is created: host networking stays available.
     let group = cgroup::Group::create(&policy)?;
+    group.validate_workspace(&directory)?;
     let filter = seccomp::filter()?;
     let filter_fd = filter.as_raw_fd();
     let group_fd = group.as_raw_fd();
@@ -182,12 +193,34 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
             Ok(())
         });
     }
-    let status = supervised.status().map_err(|error| {
+    for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
+        // SAFETY: the handler only writes a lock-free atomic. The single-threaded
+        // launcher installs it before spawning; exec resets caught handlers.
+        if unsafe { libc::signal(signal, interrupted as *const () as usize) } == libc::SIG_ERR {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    let mut child = supervised.spawn().map_err(|error| {
         io::Error::other(format!(
             "Could not start Bubblewrap with enforced cgroup limits: {error}"
         ))
     })?;
+    let mut cancelled = 0;
+    let status = loop {
+        let signal = INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed);
+        if signal != 0 && cancelled == 0 {
+            cancelled = signal;
+            group.terminate()?;
+        }
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
     group.cleanup()?;
+    if cancelled != 0 {
+        return Ok(128 + cancelled);
+    }
     Ok(status
         .code()
         .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
