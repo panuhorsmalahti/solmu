@@ -123,7 +123,7 @@ impl Backend {
 
     async fn launch(&mut self) {
         // Bound simultaneous native launches (not test execution), avoiding
-        // slow executable/certificate scans overwhelming Windows runners.
+        // startup resource contention on Windows runners.
         let _startup = STARTUP_LIMIT.acquire().await.unwrap();
         let mut command = Command::new(binary("solmu-backend"));
         command

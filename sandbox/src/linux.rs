@@ -117,7 +117,24 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         let name = key.to_string_lossy();
         if matches!(
             name.as_ref(),
-            "PATH" | "TERM" | "LANG" | "LC_ALL" | "COLORTERM"
+            "PATH"
+                | "TERM"
+                | "LANG"
+                | "LC_ALL"
+                | "COLORTERM"
+                | "VERTEX_PROJECT_ID"
+                | "VERTEX_LOCATION"
+                | "AWS_REGION"
+                | "AWS_DEFAULT_REGION"
+                | "GITHUB_TOKEN"
+                | "HTTP_PROXY"
+                | "HTTPS_PROXY"
+                | "ALL_PROXY"
+                | "NO_PROXY"
+                | "http_proxy"
+                | "https_proxy"
+                | "all_proxy"
+                | "no_proxy"
         ) || name.starts_with("LLM_")
             || name.starts_with("SOLMU_")
             || name.ends_with("_API_KEY")

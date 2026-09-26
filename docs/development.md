@@ -36,4 +36,5 @@ directories; they do not change your PATH or installed applications.
 GitHub Actions runs formatting, lint, builds, and e2e tests on pushes and pull
 requests. Rust is checked on Linux, Windows, and macOS. The website workflow
 tests the site before deploying it; the container workflow publishes backend
-images to GitHub Container Registry after relevant `main` changes.
+images to GitHub Container Registry after relevant `main` changes. It starts
+the published container and checks thread CRUD and persistence across restart.

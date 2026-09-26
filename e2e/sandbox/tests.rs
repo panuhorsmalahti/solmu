@@ -89,6 +89,71 @@ fn kernel_policy_denies_writes_or_reports_unsupported_and_invalid_commands_fail(
             .status
             .success()
     );
+    #[cfg(not(target_os = "linux"))]
+    assert_eq!(
+        Command::new(binary("sandbox"))
+            .args(["--isolated", "--", "solmu-nonexistent-program"])
+            .output()
+            .unwrap()
+            .status
+            .code(),
+        Some(125)
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_job_terminates_descendants_after_the_agent_exits() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("escaped.txt");
+    let output = Command::new(binary("sandbox"))
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("--spawn-descendant")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(7),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("spawned descendant"));
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    assert!(!path.exists(), "Descendant outlived the sandbox");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn read_only_policy_still_allows_network_requests() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut request = [0; 4096];
+        assert!(socket.read(&mut request).await.unwrap() > 0);
+        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\nConnection: close\r\n\r\nnetwork allowed").await.unwrap();
+    });
+    let output = tokio::task::spawn_blocking(move || {
+        Command::new(binary("sandbox"))
+            .args(["--read-only", "--"])
+            .arg(binary("sandbox-probe"))
+            .arg("--no-write")
+            .env("SOLMU_TEST_NETWORK", address.to_string())
+            .output()
+            .unwrap()
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(7),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("network allowed"));
+    server.await.unwrap();
 }
 
 #[cfg(target_os = "linux")]
@@ -118,6 +183,8 @@ async fn isolated_linux_workspace_network_and_host_process_boundary() {
         .env("SOLMU_TEST_HIDDEN_FILE", private.path())
         .env("SOLMU_TEST_HOST_PID", std::process::id().to_string())
         .env("SOLMU_TEST_NETWORK", address.to_string())
+        .env("OPENAI_API_KEY", "sandbox-fixture-key")
+        .env("AWS_REGION", "sandbox-fixture-region")
         .env("SSH_AUTH_SOCK", "/host/agent.sock");
     let output = tokio::task::spawn_blocking(move || command.output().unwrap())
         .await

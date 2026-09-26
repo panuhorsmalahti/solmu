@@ -35,6 +35,8 @@ The executable is shared read only, including when installed in your home.
 Your home, SSH agent, host process list, and host runtime sockets are not exposed.
 Provider credentials (`*_API_KEY`, `*_AUTH_TOKEN`), `LLM_*`, `SOLMU_*`, and basic
 terminal settings are forwarded. A `.env` inside the workspace is available.
+Provider project/region settings, GitHub Models tokens, and network proxy
+settings are forwarded too.
 Choose a project directory, not your entire home: the selected workspace is
 accessible to the program.
 

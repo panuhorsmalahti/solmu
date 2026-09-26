@@ -5,6 +5,15 @@ use std::{
 
 fn main() {
     let path = std::env::args().nth(1).expect("probe output path");
+    if path == "--delayed-write" {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::fs::write(std::env::args().nth(2).unwrap(), "descendant escaped").unwrap();
+        return;
+    }
+    if path == "--spawn-descendant" {
+        spawn_descendant();
+        std::process::exit(7);
+    }
     if std::env::var_os("SOLMU_TEST_ISOLATION").is_some() {
         let hidden = std::env::var("SOLMU_TEST_HIDDEN_FILE").unwrap();
         assert!(
@@ -20,6 +29,14 @@ fn main() {
         assert!(status.contains("CapEff:\t0000000000000000"));
         assert!(status.contains("NoNewPrivs:\t1"));
         assert!(std::env::var_os("SSH_AUTH_SOCK").is_none());
+        assert_eq!(
+            std::env::var("OPENAI_API_KEY").unwrap(),
+            "sandbox-fixture-key"
+        );
+        assert_eq!(
+            std::env::var("AWS_REGION").unwrap(),
+            "sandbox-fixture-region"
+        );
         println!("processes, filesystem and privileges isolated");
     }
     if path != "--no-write" {
@@ -47,4 +64,17 @@ fn main() {
     }
     println!("Solmu sandbox probe complete");
     std::process::exit(7);
+}
+
+#[allow(clippy::zombie_processes)] // The launcher must terminate this child after the probe exits.
+fn spawn_descendant() {
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .arg("--delayed-write")
+        .arg(std::env::args().nth(2).unwrap())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    println!("spawned descendant {}", child.id());
 }

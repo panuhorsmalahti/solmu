@@ -39,3 +39,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Check the published backend container
+        env:
+          IMAGE: ghcr.io/panuhorsmalahti/solmu:${{ inputs.tag || 'latest' }}
+        run: sh e2e/api/docker-smoke.sh "$IMAGE"
