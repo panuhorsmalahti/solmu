@@ -19,8 +19,9 @@ temporary SQLite files and a local provider fixture; they never use your keys
 or make paid model requests. Tests live in `e2e/api`, `e2e/cli`, `e2e/desktop`,
 `e2e/web`, `e2e/website`, and `e2e/sandbox`.
 
-The CLI tests use a real pseudo-terminal. Desktop tests exercise Iced widgets
-and real network tasks in its headless runtime. Browser tests use Playwright.
+The CLI tests use a real pseudo-terminal; on Linux they also run the client
+inside the isolated sandbox. Desktop tests exercise Iced widgets and real
+network tasks in its headless runtime. Browser tests use Playwright.
 On Linux, install `libxkbcommon-dev`, `libwayland-dev`, and
 `libfontconfig1-dev` for desktop builds and `bubblewrap` for Linux sandbox tests;
 enable unprivileged user namespaces for those isolation tests.
