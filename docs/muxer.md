@@ -1,9 +1,10 @@
 # Solmu muxer
 
-Muxer runs up to eight **real Solmu CLI terminals** in one Rust TUI, on Linux,
-macOS, and Windows. Every pane creates a new conversation and keeps running
-while you focus another pane. The sidebar shows each workspace and whether
-Solmu is starting, working, idle, showing an error, or exited.
+Muxer groups **real Solmu CLI terminals** into spaces on Linux, macOS, and
+Windows. Each space is a working directory and can hold up to eight tabs;
+up to eight spaces can be open. Every tab creates a new conversation and keeps
+running while you switch tabs or spaces. The sidebar shows spaces and their
+tab counts; tabs show activity, and the focused terminal shows its status.
 
 Start the backend, then build and launch from the repository root:
 
@@ -22,9 +23,16 @@ muxer --cwd /path/to/project --cwd "/path/to/another project"
 ```
 
 The default workspace is your working directory. **Ctrl+b w** opens a path
-prompt for a new workspace; Enter starts a Solmu pane there and Esc cancels.
-Directories must already exist. **Ctrl+b n** starts another pane in the current
-workspace. New panes are selected automatically.
+prompt for a new space; Enter or **Create** starts its first tab and Esc or
+**Cancel** dismisses it. Directories must already exist. **Ctrl+b n** or **+ Tab**
+starts another tab in the current space. New tabs are selected automatically.
+
+Click a sidebar space to switch projects. Each space remembers its selected
+tab. Click a tab to focus it, or its **×** icon to close and terminate that CLI.
+Closing a background tab preserves the current tab. Closing a space's last
+tab removes the space; closing the final tab quits Muxer. Saved conversations
+remain in the backend. Toolbar buttons also create spaces/tabs, toggle split
+view, restart an exited CLI, or quit.
 
 ## Controls
 
@@ -32,27 +40,31 @@ Press **Ctrl+b**, release it, then press the second key:
 
 | Second key | Action |
 | --- | --- |
-| `n` | New Solmu pane in the current workspace |
-| `w` | New workspace path prompt |
-| Tab or `]` | Next pane |
-| Shift+Tab or `[` | Previous pane |
-| `1`–`8` | Select a pane by its sidebar position |
-| `s` | Toggle between focused view and two panes side by side |
+| `n` | New Solmu tab in the current space |
+| `w` | New space path prompt |
+| Up / Down | Previous / next space |
+| Tab or `]` | Next tab in the space |
+| Shift+Tab or `[` | Previous tab in the space |
+| `1`–`8` | Select a tab by its position within the space |
+| `s` | Toggle between focused view and two tabs side by side |
 | `x` | Close and terminate the selected CLI |
 | `r` | Restart an exited CLI; creates a new conversation |
 | `q` | Quit muxer and terminate its CLIs |
 | `b` | Send a literal Ctrl+b to the selected CLI |
 
-Click a sidebar entry or visible pane to focus it. Only the focused pane
-receives typing. Split view shows the focused pane and the next pane;
-the terminal dimensions follow resizing and view changes.
+Only the focused tab receives typing. Split view shows the focused tab and
+the next tab within the same space. Click a visible terminal to focus it.
+Terminal dimensions follow resizing and view changes; tab strips keep the
+selected tab visible in narrow windows.
 
 Use all [CLI conversation commands](cli.md) inside a pane: send messages,
 receive streaming replies, create/open/rename/delete threads, complete commands
 with Tab, stop with Esc or `/stop`, and quit that CLI with `/exit`. Enter pressed
 during a finishing conversation operation or live refresh is preserved until
 the CLI is ready. Saved conversations and WebSocket updates are shared with
-desktop and web too.
+desktop and web too. `/profile` edits the shared system prompt and optional
+default model; `/model` selects a model for the current thread. Tabs use their
+space's directory as the thread workspace.
 
 ## Configuration and lifetime
 

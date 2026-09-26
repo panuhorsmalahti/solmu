@@ -35,17 +35,32 @@ async fn real_solmu_panes_stream_switch_split_resize_and_keep_conversation_featu
     tui.wait("SOLMU    Second workspace").await;
     tui.wait("SOLMU    First workspace").await;
     solmu_e2e::support::capture_terminal(tui.screen.lock().unwrap().screen(), "muxer");
+    {
+        let parser = tui.screen.lock().unwrap();
+        let screen = parser.screen();
+        let (rows, columns) = screen.size();
+        let colored = (0..rows)
+            .flat_map(|row| (0..columns).map(move |column| (row, column)))
+            .filter(|(row, column)| {
+                screen.cell(*row, *column).is_some_and(|cell| {
+                    cell.bgcolor() != vt100::Color::Default
+                        || cell.fgcolor() != vt100::Color::Default
+                })
+            })
+            .count();
+        assert!(colored > 100, "Muxer must render its theme colors");
+    }
     tui.resize(44, 200);
     tui.wait_resized(200).await;
     tui.wait("SOLMU    First workspace").await;
     tui.wait("SOLMU    Second workspace").await;
     // Confirm native resize/focus transitions before sending the next action.
     tui.send(b"\x1b[<0;160;6M\x1b[<0;160;6m");
-    tui.wait("› 2 Solmu 2").await;
-    tui.send(b"\x1b[<0;3;3M\x1b[<0;3;3m");
-    tui.wait("› 1 Solmu 1").await;
-    tui.send(b"\x1b[<0;3;6M\x1b[<0;3;6m");
-    tui.wait("› 2 Solmu 2").await;
+    tui.wait("› Solmu 2").await;
+    tui.send(b"\x1b[<0;30;3M\x1b[<0;30;3m");
+    tui.wait("› Solmu 1").await;
+    tui.send(b"\x1b[<0;55;3M\x1b[<0;55;3m");
+    tui.wait("› Solmu 2").await;
     tui.command("/rename Clicked workspace");
     tui.wait("SOLMU    Clicked workspace").await;
     tui.prefix('s');

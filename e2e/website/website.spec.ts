@@ -7,7 +7,7 @@ test('website describes Solmu features and links to every client and installatio
   for (const feature of ['See it take shape', 'Follow your threads', 'Bring your model', 'Make it yours']) await expect(page.getByRole('heading', { name: feature })).toBeVisible()
   for (const client of ['Terminal', 'Desktop', 'Web']) await expect(page.getByRole('link').filter({ has: page.getByRole('heading', { name: client }) })).toHaveAttribute('href', /github\.com\/panuhorsmalahti\/solmu\/tree\/main\/clients\//)
   await expect(page.getByRole('link', { name: 'Solmu Muxer ↗', exact: true })).toHaveAttribute('href', 'https://github.com/panuhorsmalahti/solmu/tree/main/muxer')
-  await expect(page.getByText(/workspace switching, split views, and live activity states/)).toBeVisible()
+  await expect(page.getByText(/Group real terminal tabs into project spaces/)).toBeVisible()
   for (const tool of ['Boxer', 'Docker', 'Muxer']) await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
   expect(await page.getByRole('heading', { level: 3 }).allTextContents()).toEqual(expect.arrayContaining(['Boxer', 'Docker', 'Muxer']))
   expect(await page.locator('.tool-grid > article h3').allTextContents()).toEqual(['Boxer', 'Docker', 'Muxer'])

@@ -72,6 +72,7 @@ impl Pane {
         let mut command = CommandBuilder::new(executable);
         command.cwd(&directory);
         command.env("TERM", "xterm-256color");
+        command.env("SOLMU_MUXER", "1");
         let child = pair.slave.spawn_command(command)?;
         drop(pair.slave);
         let writer = Arc::new(Mutex::new(pair.master.take_writer()?));

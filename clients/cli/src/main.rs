@@ -222,11 +222,12 @@ fn draw(
     spinner: usize,
     connected: bool,
 ) {
+    let embedded = std::env::var_os("SOLMU_MUXER").is_some();
     let [header, conversation, status, composer, footer] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(3),
         Constraint::Length(2),
-        Constraint::Length(3),
+        Constraint::Length(if embedded { 1 } else { 3 }),
         Constraint::Length(1),
     ])
     .areas(frame.area());
@@ -259,7 +260,11 @@ fn draw(
             ))
             .dark_gray(),
         ])
-        .block(Block::new().borders(Borders::BOTTOM)),
+        .block(Block::new().borders(if embedded {
+            Borders::NONE
+        } else {
+            Borders::BOTTOM
+        })),
         header,
     );
     let mut lines = Vec::new();
@@ -326,8 +331,15 @@ fn draw(
         status,
     );
     frame.render_widget(
-        Paragraph::new(format!("> {input}"))
-            .block(Block::bordered().border_style(Style::new().fg(Color::Cyan))),
+        Paragraph::new(format!("> {input}")).block(
+            Block::new()
+                .borders(if embedded {
+                    Borders::NONE
+                } else {
+                    Borders::ALL
+                })
+                .border_style(Style::new().fg(Color::Cyan)),
+        ),
         composer,
     );
     frame.render_widget(

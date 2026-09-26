@@ -9,7 +9,7 @@ fn muxer_help_version_and_invalid_startup() {
     }
     let output = too_many.output().unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("eight panes"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("eight spaces"));
     for option in ["--help", "--version"] {
         let output = std::process::Command::new(binary("muxer"))
             .arg(option)

@@ -36,6 +36,8 @@ impl Terminal {
         command.cwd(backend.directory.path());
         command.env("SOLMU_BACKEND_URL", &backend.url);
         command.env("TERM", "xterm-256color");
+        command.env("COLORTERM", "truecolor");
+        command.env_remove("NO_COLOR");
         let child = pair.slave.spawn_command(command).unwrap();
         drop(pair.slave);
         let writer = Arc::new(Mutex::new(pair.master.take_writer().unwrap()));

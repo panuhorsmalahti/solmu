@@ -2,7 +2,7 @@
 
 Open **Profile** above Conversations in desktop or web. Clicking the Solmu
 name in the web sidebar also opens `/profile`. In the terminal, use `/profile`.
-Muxer sessions use the same CLI Profile editor.
+Muxer tabs use the same CLI Profile editor.
 
 The page shows your current system prompt. Edit it and save to change how
 Solmu responds. Your profile is saved on the backend and shared across all

@@ -27,6 +27,8 @@ impl Terminal {
         command.env("SOLMU_BACKEND_URL", &backend.url);
         command.env("SOLMU_CLI_PATH", binary("solmu-cli"));
         command.env("TERM", "xterm-256color");
+        command.env("COLORTERM", "truecolor");
+        command.env_remove("NO_COLOR");
         for directory in directories {
             command.arg("--cwd");
             command.arg(directory);
@@ -91,6 +93,59 @@ impl Terminal {
     fn contents(&self) -> String {
         self.screen.lock().unwrap().screen().contents()
     }
+    fn click_at(&self, column: usize, row: usize) {
+        self.send(
+            format!(
+                "\x1b[<0;{};{}M\x1b[<0;{};{}m",
+                column + 1,
+                row + 1,
+                column + 1,
+                row + 1
+            )
+            .as_bytes(),
+        );
+    }
+    async fn click(&self, label: &str) {
+        self.wait(label).await;
+        let position = {
+            let screen = self.screen.lock().unwrap();
+            let screen = screen.screen();
+            let (rows, cols) = screen.size();
+            (0..rows)
+                .find_map(|row| {
+                    let text: String = (0..cols)
+                        .map(|col| {
+                            let text = screen.cell(row, col).unwrap().contents();
+                            if text.is_empty() { " " } else { text }
+                        })
+                        .collect();
+                    text.find(label).map(|offset| {
+                        (
+                            text[..offset].chars().count() + label.chars().count() / 2,
+                            usize::from(row),
+                        )
+                    })
+                })
+                .unwrap()
+        };
+        self.click_at(position.0, position.1);
+    }
+    fn close_tab(&self, id: u64) {
+        let column = {
+            let screen = self.screen.lock().unwrap();
+            let screen = screen.screen();
+            let text: String = (0..screen.size().1)
+                .map(|col| {
+                    let text = screen.cell(2, col).unwrap().contents();
+                    if text.is_empty() { " " } else { text }
+                })
+                .collect();
+            let start = text.find(&format!("Solmu {id}")).unwrap();
+            let close = start + text[start..].find('×').unwrap();
+            text[..close].chars().count()
+        };
+        self.click_at(column, 2);
+    }
     async fn wait(&self, text: &str) {
         tokio::time::timeout(Duration::from_secs(25), async {
             while !self.contents().contains(text) {
@@ -111,6 +166,9 @@ impl Terminal {
     }
     async fn exit(&mut self) {
         self.prefix('q');
+        self.wait_exit().await;
+    }
+    async fn wait_exit(&mut self) {
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 if let Some(status) = self.child.try_wait().unwrap() {
@@ -147,8 +205,13 @@ impl Terminal {
                     .lock()
                     .unwrap()
                     .screen()
-                    .cell(0, cols - 1)
-                    .is_some_and(|cell| !cell.contents().trim().is_empty());
+                    .cell(1, cols - 1)
+                    .is_some_and(|cell| {
+                        matches!(
+                            cell.contents(),
+                            "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8"
+                        )
+                    });
                 if rendered {
                     break;
                 }
@@ -156,7 +219,7 @@ impl Terminal {
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("Missing resized right border:\n{}", self.contents()));
+        .unwrap_or_else(|_| panic!("Missing resized toolbar:\n{}", self.contents()));
     }
 }
 impl Drop for Terminal {
@@ -171,3 +234,4 @@ mod panes;
 mod workspaces;
 
 mod startup;
+mod tabs;

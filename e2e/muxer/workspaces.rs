@@ -7,7 +7,7 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
     std::fs::create_dir(&other).unwrap();
     let mut tui = Terminal::start(&backend, &[backend.directory.path(), &other]);
     tui.wait("Solmu 1 · idle").await;
-    tui.prefix(']');
+    tui.send(b"\x02\x1b[B");
     tui.wait("Solmu 2 · idle").await;
     tui.wait("Ready ·").await;
     tui.prefix('w');
@@ -48,7 +48,7 @@ async fn workspace_selection_validation_error_state_and_stopping_replies() {
             .len(),
         1
     );
-    tui.prefix('[');
+    tui.send(b"\x02\x1b[A");
     tui.wait("Solmu 2 · idle").await;
     tui.wait("Ready ·").await;
     tui.command("/rename Quit cleanup");

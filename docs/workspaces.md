@@ -2,7 +2,7 @@
 
 Every new conversation has a saved workspace: the directory on the backend host
 where Solmu works. Threads created in the CLI use its current working directory;
-Muxer sessions use their selected working directory.
+Muxer tabs use their space's working directory.
 
 Desktop and web threads use `~/.solmu/workspace` on Linux/macOS or
 `%USERPROFILE%\.solmu\workspace` on Windows. Solmu creates that default folder

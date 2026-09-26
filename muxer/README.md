@@ -1,7 +1,7 @@
 # Solmu muxer
 
-A Rust terminal workspace for running several Solmu CLI sessions at once.
-Each pane owns a real terminal and creates its own conversation on startup.
+A Rust TUI with project spaces and multiple Solmu tabs in each space.
+Each tab owns a real terminal and creates its own conversation on startup.
 
 ```sh
 cargo build -p solmu-cli -p solmu-muxer
@@ -10,8 +10,11 @@ cargo run -p solmu-backend
 cargo run -p solmu-muxer
 ```
 
-Press **Ctrl+b**, then **n** for a new pane, **Tab** to switch, **s** for a
-split view, or **q** to quit. Click a pane or sidebar entry to focus it.
+Click **+ Space** to choose a project and **+ Tab** to add a session. Select
+spaces in the sidebar and tabs along the top; **×** closes a tab. Each space
+remembers its selected tab. The toolbar offers split view, restart, and quit.
+Press **Ctrl+b**, then **n** for a new tab, **Tab** to switch tabs, Up/Down to
+switch spaces, **s** for split view, or **q** to quit.
 All Solmu conversation commands work inside panes, including `/stop` and `/exit`.
 
 Run `muxer --help` or read the [muxer guide](../docs/muxer.md) for workspace
