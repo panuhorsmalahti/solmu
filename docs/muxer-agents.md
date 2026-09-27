@@ -72,6 +72,8 @@ records, and disappear when that CLI process exits.
 `agent stop` cancels the active reply and all unsent prompts. It acknowledges
 the stop request; use `agent wait --turn ID` to observe the outcome. Stopped or
 failed turns make waits fail, while `agent turn` still returns their records.
+Cancellation before the first streamed chunk is reported as `stopped`, just
+like cancellation during streaming.
 Esc and `/stop` inside the conversation also clear the queue. Switching the
 CLI to another conversation fails pending work tied to the old thread;
 prompts are never redirected to the new conversation. Closing or restarting

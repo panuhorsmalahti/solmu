@@ -118,6 +118,11 @@ pub struct Api {
     workspace: Option<String>,
 }
 
+struct RequestFailure {
+    code: Option<String>,
+    message: String,
+}
+
 impl Api {
     pub fn base(&self) -> String {
         self.base.clone()
@@ -201,6 +206,17 @@ impl Api {
         body: Option<Value>,
         stream: bool,
     ) -> Result<Response, String> {
+        self.request_with_error(method, path, body, stream)
+            .await
+            .map_err(|error| error.message)
+    }
+    async fn request_with_error(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+        stream: bool,
+    ) -> Result<Response, RequestFailure> {
         let mut request = self
             .client
             .request(method, format!("{}/api/v1{path}", self.base));
@@ -210,21 +226,25 @@ impl Api {
         if let Some(body) = body {
             request = request.json(&body);
         }
-        let response = request.send().await.map_err(|_| {
-            format!(
+        let response = request.send().await.map_err(|_| RequestFailure {
+            code: None,
+            message: format!(
                 "Cannot reach Solmu at {}. Check that the backend is running.",
                 self.base
-            )
+            ),
         })?;
         if response.status().is_success() {
             return Ok(response);
         }
         let status = response.status();
         let body = response.json::<Value>().await.unwrap_or_default();
-        Err(body["error"]["message"]
-            .as_str()
-            .map(str::to_owned)
-            .unwrap_or_else(|| format!("Request failed ({status})")))
+        Err(RequestFailure {
+            code: body["error"]["code"].as_str().map(str::to_owned),
+            message: body["error"]["message"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("Request failed ({status})")),
+        })
     }
     async fn json<T: DeserializeOwned>(
         &self,
@@ -271,8 +291,10 @@ impl Api {
                     };
                     let message_id = message.id.clone();
                     yield Update::Saved(message);
-                    let response = match api.request(Method::POST, &format!("/threads/{}/responses", thread.id), Some(json!({"message_id": message_id})), true).await {
-                        Ok(response) => response, Err(error) => { yield Update::Failed(error); return; }
+                    let response = match api.request_with_error(Method::POST, &format!("/threads/{}/responses", thread.id), Some(json!({"message_id": message_id})), true).await {
+                        Ok(response) => response,
+                        Err(error) if error.code.as_deref() == Some("response_stopped") => { yield Update::Stopped; return; },
+                        Err(error) => { yield Update::Failed(error.message); return; }
                     };
                     let mut events = response.bytes_stream().eventsource();
                     let mut completed = false;

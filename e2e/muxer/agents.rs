@@ -284,8 +284,18 @@ async fn prompts_preserve_open_profile_edits_and_ambiguous_names_never_redirect_
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stopping_cancels_active_and_queued_turns_without_saving_unsubmitted_prompts() {
+    for before_stream in [false, true] {
+        cancel_active_and_queued(before_stream).await;
+    }
+}
+
+async fn cancel_active_and_queued(before_stream: bool) {
     let backend = Backend::start().await;
-    backend.hold_next_reply();
+    if before_stream {
+        backend.hold_next_reply_start();
+    } else {
+        backend.hold_next_reply();
+    }
     let session = Session {
         backend: &backend,
         name: "stop",
@@ -313,6 +323,25 @@ async fn stopping_cancels_active_and_queued_turns_without_saving_unsubmitted_pro
         &["agent", "prompt", "1", "Never submit this queued prompt"],
     );
     queued(&session, 1).await;
+    // A working pane can still be saving the user message. Confirm that the
+    // backend has started the provider request before cancelling it. Holding
+    // the first chunk exercises cancellation before the HTTP stream opens.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let started = backend
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(_, body)| body["stream"] == true);
+            if started {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
     assert_eq!(command(&session, &["agent", "stop", "1"])["stopping"], true);
     for accepted in [&first, &second] {
         let id = accepted["turn"]["id"].as_str().unwrap();
@@ -321,7 +350,10 @@ async fn stopping_cancels_active_and_queued_turns_without_saving_unsubmitted_pro
             &["agent", "wait", "1", "--turn", id, "--timeout", "10000"],
         );
         assert_eq!(error["accepted"], true);
-        assert_eq!(error["code"], "stopped");
+        assert_eq!(
+            error["code"], "stopped",
+            "before_stream={before_stream}: {error}"
+        );
         assert_eq!(error["turn"], id);
         assert_eq!(
             command(&session, &["agent", "turn", "1", id])["turn"]["state"],

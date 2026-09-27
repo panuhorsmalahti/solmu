@@ -77,6 +77,7 @@ pub type Requests = Arc<Mutex<Vec<(String, Value)>>>;
 #[derive(Default)]
 struct ReplyControl {
     remaining: std::sync::atomic::AtomicUsize,
+    before_start: std::sync::atomic::AtomicUsize,
     release: tokio::sync::Notify,
 }
 type ProviderState = (Requests, Arc<ReplyControl>);
@@ -145,6 +146,12 @@ impl Backend {
     }
     pub fn release_reply(&self) {
         self.reply_control.release.notify_one();
+    }
+
+    pub fn hold_next_reply_start(&self) {
+        self.reply_control
+            .before_start
+            .store(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     async fn launch(&mut self) {
@@ -363,7 +370,16 @@ fn provider_response(
             |remaining| remaining.checked_sub(1),
         )
         .is_ok();
+    let held_start = control
+        .before_start
+        .fetch_update(
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+            |remaining| remaining.checked_sub(1),
+        )
+        .is_ok();
     let stream = async_stream::stream! {
+        if held_start { control.release.notified().await; }
         if kind == "anthropic" {
             yield Ok::<_, Infallible>(Event::default().event("message_start").data(json!({"type":"message_start","message":{"id":"fixture","type":"message","role":"assistant","content":[],"model":"test-model","usage":{"input_tokens":1,"output_tokens":0}}}).to_string()));
             yield Ok(Event::default().event("content_block_start").data(json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}).to_string()));
