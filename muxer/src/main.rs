@@ -5,6 +5,7 @@ mod config;
 mod control;
 mod editor;
 mod keys;
+mod launch;
 mod layout;
 mod monitor;
 mod pane;
@@ -30,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     while let Some(arg) = args.next() {
         if arg == "--help" || arg == "-h" {
             println!(
-                "Solmu muxer\n\nUsage: muxer [--session NAME] [--cwd PATH]... [--foreground]\n       muxer session list\n       muxer session attach NAME\n       muxer server start|status|stop [--session NAME]\n       muxer pane read ID [--session NAME]\n\nSpaces group Solmu tabs by working directory. Tabs hold real terminal panes.\nStart solmu-backend first. Click spaces, tabs, close icons, or toolbar controls.\nRight-click spaces, tabs, or panes for actions; drag dividers to resize.\nCtrl+b then: n new tab; w new space; Tab/] next tab; [ previous tab;\nUp/Down switch space; 1-8 select tab; s/v split right; - split down;\nh/j/k/l focus; H/J/K/L swap; z zoom; r resize/restart; x close pane;\nX close tab; D close space; W/T/P rename space/tab/pane; g find; m navigate;\n? help; comma settings; B toggle sidebar; q detach. Ctrl+b b sends literal Ctrl+b.\nUp to eight spaces, eight tabs per space, and eight panes per tab.\nSOLMU_BACKEND_URL selects the backend; SOLMU_CLI_PATH selects solmu.\nDefault: attach to a local background session; panes survive detaching.\nUse server stop to terminate panes, or --foreground for a temporary session.\nSOLMU_MUXER_DIR selects the session state directory.\nEdit config.toml there for automatically applied shortcuts, colors, and settings.\nSOLMU_MUXER_CONFIG selects another file; --default-config prints defaults."
+                "Solmu muxer\n\nUsage: muxer [--session NAME] [--cwd PATH]... [--foreground]\n       muxer session list\n       muxer session attach NAME\n       muxer server start|status|stop [--session NAME]\n       muxer pane read ID [--session NAME]\n\nSpaces group Solmu tabs by working directory. Tabs hold real terminal panes.\nStart solmu-backend first. Click spaces, tabs, close icons, or toolbar controls.\nRight-click spaces, tabs, or panes for actions; drag dividers to resize.\nCtrl+b then: n new tab; w new space; Tab/] next tab; [ previous tab;\nUp/Down switch space; 1-8 select tab; s/v split right; - split down; t shell pane; ! run command;\nh/j/k/l focus; H/J/K/L swap; z zoom; r resize/restart; x close pane;\nX close tab; D close space; W/T/P rename space/tab/pane; g find; m navigate;\n? help; comma settings; B toggle sidebar; q detach. Ctrl+b b sends literal Ctrl+b.\nUp to eight spaces, eight tabs per space, and eight panes per tab.\nSOLMU_BACKEND_URL selects the backend; SOLMU_CLI_PATH selects solmu.\nDefault: attach to a local background session; panes survive detaching.\nUse server stop to terminate panes, or --foreground for a temporary session.\nSOLMU_MUXER_DIR selects the session state directory.\nEdit config.toml there for automatically applied shortcuts, colors, and settings.\nSOLMU_MUXER_CONFIG selects another file; --default-config prints defaults."
             );
             println!("\n{}", control::HELP);
             return Ok(());

@@ -159,3 +159,7 @@ row breaks, including when no UI is attached.
 ![Muxer settings](screenshots/muxer-settings.png)
 
 See [Muxer usage and session recovery](muxer.md).
+
+[Shell and command panes](muxer-commands.md) run local terminals and project commands beside
+Solmu. New-pane defaults apply automatically; saved commands wait for explicit
+restart after the server restarts.

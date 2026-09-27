@@ -1,7 +1,7 @@
 # Attach directly to a Muxer pane
 
-Open one running Solmu terminal without the spaces and tabs around it. The
-conversation, current screen, and unsent draft belong to the existing pane.
+Open one running Solmu, shell, or command terminal without the spaces and tabs
+around it. The conversation, current screen, and input belong to the existing pane.
 The backend and Muxer session must already be running.
 
 ```sh

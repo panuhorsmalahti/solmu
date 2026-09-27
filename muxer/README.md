@@ -49,6 +49,12 @@ Event streams report live changes; waits observe pane states or matching output.
 [Native prompt commands](../docs/muxer-agents.md) send messages without typing
 into the active screen, queue tasks in order, and wait for their saved replies.
 Stop cancels active and queued work while terminal and Profile drafts stay intact.
+
+Keep an interactive shell or project command beside Solmu: **Ctrl+b t** opens
+a shell pane, and **Ctrl+b !** opens the command form. Both actions are also in
+the pane's context menu. Commands retain their output after exit and wait for
+an explicit restart after the server restarts. [Shells and commands](../docs/muxer-commands.md).
+
 [Direct terminal attachment](../docs/muxer-terminals.md) opens one existing pane or
 streams its live screen to scripts. Several observers can watch while one
 controller owns input and size, with explicit takeover and draft-preserving detach.
@@ -76,6 +82,8 @@ For source builds, see [development](../docs/development.md).
 ![Solmu prompt automation](../docs/screenshots/muxer-automation.png)
 
 ![Direct terminal control](../docs/screenshots/muxer-terminal.png)
+
+![Shell and command panes](../docs/screenshots/muxer-commands.png)
 
 ## Workspace tools
 

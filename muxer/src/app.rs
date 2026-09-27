@@ -57,11 +57,13 @@ struct SavedPane {
     name: Option<String>,
     directory: PathBuf,
     thread: Option<String>,
+    #[serde(default)]
+    launch: crate::launch::Launch,
     exited: Option<String>,
 }
 impl Snapshot {
     pub fn validate(&self) -> Result<(), Box<dyn Error>> {
-        if self.version != 1 {
+        if !matches!(self.version, 1 | 2) {
             return Err("Saved session requires a different Muxer version".into());
         }
         if self.spaces.len() > 8 || self.panes.len() > 512 {
@@ -100,6 +102,7 @@ impl Snapshot {
         }
         let mut recorded = std::collections::BTreeSet::new();
         for pane in &self.panes {
+            pane.launch.validate()?;
             if !recorded.insert(pane.id)
                 || !valid_name(&pane.name)
                 || pane
@@ -191,6 +194,8 @@ const ACTIONS: &[&str] = &[
     "Help",
     "Settings",
     "Show / hide sidebar",
+    "Shell pane",
+    "Run command...",
 ];
 pub struct App {
     pub config: Manager,
@@ -199,6 +204,7 @@ pub struct App {
     pub active: usize,
     workspace: Option<Editor>,
     rename: Option<Rename>,
+    command: Option<Rename>,
     picker: Option<Picker>,
     navigation: bool,
     sidebar: Option<(u64, bool)>,
@@ -224,6 +230,7 @@ pub struct View {
     tabs: Vec<(u64, u64, bool)>,
     workspace: Option<Editor>,
     rename: Option<Rename>,
+    command: Option<Rename>,
     picker: Option<Picker>,
     navigation: bool,
     sidebar: Option<(u64, bool)>,
@@ -243,7 +250,11 @@ impl View {
 impl App {
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
-            version: 1,
+            version: if self.panes.iter().any(|pane| !pane.launch.solmu()) {
+                2
+            } else {
+                1
+            },
             next_id: self.next_id,
             active: self.panes.get(self.active).map_or(0, |pane| pane.id),
             spaces: if self.panes.is_empty() {
@@ -265,6 +276,7 @@ impl App {
                         .callbacks()
                         .thread
                         .clone(),
+                    launch: pane.launch.clone(),
                     exited: pane.exited.clone(),
                 })
                 .collect(),
@@ -281,14 +293,25 @@ impl App {
             }
         }
         for saved in snapshot.panes {
-            let mut pane = if let Some(reason) = saved.exited {
-                Pane::closed(saved.id, saved.directory, saved.thread, reason)
+            let reason = saved.exited.or_else(|| {
+                matches!(saved.launch, crate::launch::Launch::Command { .. })
+                    .then(|| "command awaits explicit restart".into())
+            });
+            let mut pane = if let Some(reason) = reason {
+                Pane::closed(
+                    saved.id,
+                    saved.directory,
+                    saved.thread,
+                    reason,
+                    saved.launch.clone(),
+                )
             } else if !saved.directory.is_dir() {
                 Pane::closed(
                     saved.id,
                     saved.directory,
                     saved.thread,
                     "workspace unavailable".into(),
+                    saved.launch.clone(),
                 )
             } else {
                 match Pane::resume(
@@ -296,6 +319,7 @@ impl App {
                     saved.directory.clone(),
                     &app.executable,
                     saved.thread.clone(),
+                    saved.launch.clone(),
                 ) {
                     Ok(pane) => pane,
                     Err(error) => Pane::closed(
@@ -303,6 +327,7 @@ impl App {
                         saved.directory,
                         saved.thread,
                         format!("launch failed: {error}"),
+                        saved.launch.clone(),
                     ),
                 }
             };
@@ -334,6 +359,7 @@ impl App {
                 .collect(),
             workspace: self.workspace.clone(),
             rename: self.rename.clone(),
+            command: self.command.clone(),
             picker: self.picker.clone(),
             navigation: self.navigation,
             sidebar: self.sidebar,
@@ -380,6 +406,7 @@ impl App {
         self.focus(active);
         self.workspace = view.workspace.clone();
         self.rename = view.rename.clone();
+        self.command = view.command.clone();
         self.picker = view.picker.clone();
         self.navigation = view.navigation;
         self.sidebar = view.sidebar;
@@ -491,6 +518,8 @@ impl App {
             SelectTab(position) => self.select_tab(usize::from(position)),
             SplitRight => return Ok(self.action("Split right")),
             SplitDown => return Ok(self.action("Split down")),
+            ShellPane => return Ok(self.action("Shell pane")),
+            RunCommand => return Ok(self.action("Run command...")),
             FocusLeft | FocusDown | FocusUp | FocusRight | SwapLeft | SwapDown | SwapUp
             | SwapRight => {
                 let direction = match action {
@@ -544,6 +573,7 @@ impl App {
             active: 0,
             workspace: None,
             rename: None,
+            command: None,
             picker: None,
             navigation: false,
             sidebar: None,
@@ -561,6 +591,13 @@ impl App {
         })
     }
     pub fn add_space(&mut self, directory: PathBuf) -> Result<(), Box<dyn Error>> {
+        self.add_space_launch(directory, None)
+    }
+    fn add_space_launch(
+        &mut self,
+        directory: PathBuf,
+        launch: Option<crate::launch::Launch>,
+    ) -> Result<(), Box<dyn Error>> {
         if self.spaces.len() >= 8 {
             return Err("Eight spaces are already open; close a space's tabs first".into());
         }
@@ -568,7 +605,12 @@ impl App {
         if !directory.is_dir() {
             return Err("Workspace must be a directory".into());
         }
-        let pane = Pane::start(self.next_id, directory.clone(), &self.executable)?;
+        let pane = Pane::start(
+            self.next_id,
+            directory.clone(),
+            &self.executable,
+            self.config.current.launch(launch)?,
+        )?;
         self.spaces.push(Space {
             id: pane.id,
             name: None,
@@ -608,10 +650,22 @@ impl App {
         self.add_tab_in(self.new_cwd()?)
     }
     fn add_tab_in(&mut self, directory: PathBuf) -> Result<(), Box<dyn Error>> {
+        self.add_tab_launch(directory, None)
+    }
+    fn add_tab_launch(
+        &mut self,
+        directory: PathBuf,
+        launch: Option<crate::launch::Launch>,
+    ) -> Result<(), Box<dyn Error>> {
         if self.spaces[self.space].tabs.len() >= 8 {
             return Err("Eight tabs are already open in this space".into());
         }
-        let pane = Pane::start(self.next_id, directory, &self.executable)?;
+        let pane = Pane::start(
+            self.next_id,
+            directory,
+            &self.executable,
+            self.config.current.launch(launch)?,
+        )?;
         self.spaces[self.space].tabs.push(Tab {
             id: pane.id,
             name: None,
@@ -635,10 +689,24 @@ impl App {
         directory: PathBuf,
         ratio: u16,
     ) -> Result<(), Box<dyn Error>> {
+        self.split_launch(axis, directory, ratio, None)
+    }
+    fn split_launch(
+        &mut self,
+        axis: Axis,
+        directory: PathBuf,
+        ratio: u16,
+        launch: Option<crate::launch::Launch>,
+    ) -> Result<(), Box<dyn Error>> {
         if self.tab().layout.ids().len() >= 8 {
             return Err("Eight panes are already open in this tab".into());
         }
-        let pane = Pane::start(self.next_id, directory, &self.executable)?;
+        let pane = Pane::start(
+            self.next_id,
+            directory,
+            &self.executable,
+            self.config.current.launch(launch)?,
+        )?;
         let selected = self.panes[self.active].id;
         self.tab_mut().layout.split(selected, pane.id, axis);
         self.tab_mut().layout.set_near_ratio(selected, axis, ratio);
@@ -739,12 +807,39 @@ impl App {
     fn restart(&mut self) {
         let old = &self.panes[self.active];
         if old.exited.is_some() {
-            match Pane::start(old.id, old.directory.clone(), &self.executable) {
+            match Pane::start(
+                old.id,
+                old.directory.clone(),
+                &self.executable,
+                old.launch.clone(),
+            ) {
                 Ok(mut pane) => {
                     pane.name = old.name.clone();
                     self.panes[self.active] = pane;
                 }
                 Err(error) => self.notice = error.to_string(),
+            }
+        }
+    }
+    fn save_command(&mut self) {
+        let Some(command) = self.command.clone() else {
+            return;
+        };
+        let before = self.view();
+        let result = (|| -> Result<(), Box<dyn Error>> {
+            let launch = crate::launch::Launch::script(&command.editor.text)?;
+            if !self.focus_target(command.target) {
+                return Err("Source pane was closed; cancel and open a new command".into());
+            }
+            self.split_launch(Axis::Down, self.new_cwd()?, 500, Some(launch))
+        })();
+        match result {
+            Ok(()) => {
+                self.command = None;
+            }
+            Err(error) => {
+                self.use_view(&before);
+                self.notice = error.to_string();
             }
         }
     }
@@ -805,6 +900,25 @@ impl App {
                 }) {
                     self.notice = error.to_string();
                 }
+            }
+            "Shell pane" => {
+                let result = self.new_cwd().and_then(|cwd| {
+                    self.split_launch(
+                        Axis::Down,
+                        cwd,
+                        500,
+                        Some(crate::launch::Launch::Shell { argv: vec![] }),
+                    )
+                });
+                if let Err(error) = result {
+                    self.notice = error.to_string();
+                }
+            }
+            "Run command..." => {
+                self.command = Some(Rename {
+                    target: Target::Pane(self.panes[self.active].id),
+                    editor: Editor::default(),
+                });
             }
             "Zoom / restore" => self.tab_mut().zoomed = !self.tab().zoomed,
             "Resize with keys" => {
@@ -1042,7 +1156,9 @@ impl App {
         Ok(())
     }
     pub fn paste(&mut self, text: &str) -> Result<(), Box<dyn Error>> {
-        if let Some(setting) = &mut self.setting {
+        if let Some(command) = &mut self.command {
+            command.editor.insert(text);
+        } else if let Some(setting) = &mut self.setting {
             setting.editor.insert(text);
         } else if let Some(editor) = &mut self.workspace {
             editor.insert(text);
@@ -1057,6 +1173,17 @@ impl App {
         Ok(())
     }
     pub fn key(&mut self, key: KeyEvent) -> Result<bool, Box<dyn Error>> {
+        if let Some(command) = &mut self.command {
+            match key.code {
+                KeyCode::Esc => {
+                    self.command = None;
+                    self.notice.clear();
+                }
+                KeyCode::Enter => self.save_command(),
+                _ => command.editor.key(key),
+            }
+            return Ok(false);
+        }
         if let Some(setting) = &mut self.setting {
             match key.code {
                 KeyCode::Esc => {
@@ -1214,6 +1341,7 @@ impl App {
     }
     pub fn context_menu(&mut self, area: Rect, x: u16, y: u16) {
         if self.workspace.is_some()
+            || self.command.is_some()
             || self.rename.is_some()
             || self.picker.is_some()
             || self.setting.is_some()
@@ -1262,6 +1390,18 @@ impl App {
     pub fn click(&mut self, area: Rect, x: u16, y: u16) -> Result<bool, Box<dyn Error>> {
         let point = (x, y).into();
         self.area = area;
+        if self.command.is_some() {
+            let rect = modal(area);
+            if y == rect.y + 4 {
+                if (rect.x + 2..rect.x + 12).contains(&x) {
+                    self.save_command();
+                } else if (rect.x + 15..rect.x + 25).contains(&x) {
+                    self.command = None;
+                    self.notice.clear();
+                }
+            }
+            return Ok(false);
+        }
         if self.setting.is_some() {
             let rect = modal(area);
             if y == rect.y + 4 {
@@ -1583,7 +1723,16 @@ impl App {
                 Paragraph::new(format!(
                     "{} {} {dot}",
                     if selected { "›" } else { " " },
-                    tab.name.clone().unwrap_or_else(|| format!("Solmu {id}"))
+                    tab.name.clone().unwrap_or_else(|| format!(
+                        "{} {id}",
+                        self.panes
+                            .iter()
+                            .find(|pane| pane.id == tab.id)
+                            .or_else(|| self.panes.iter().find(|pane| pane.id == tab.selected))
+                            .unwrap()
+                            .launch
+                            .title()
+                    ))
                 ))
                 .fg(if selected {
                     colors.accent
@@ -1673,6 +1822,7 @@ impl App {
             );
             if index == self.active
                 && self.workspace.is_none()
+                && self.command.is_none()
                 && self.rename.is_none()
                 && self.picker.is_none()
                 && !self.navigation
@@ -1853,6 +2003,16 @@ impl App {
                 );
             }
         }
+        if let Some(command) = &self.command {
+            self.draw_editor(
+                frame,
+                area,
+                "Run command",
+                "Command (uses sh on Unix, cmd on Windows):",
+                &command.editor,
+                "Run",
+            );
+        }
         if let Some(setting) = &self.setting {
             self.draw_editor(
                 frame,
@@ -1978,7 +2138,7 @@ fn space_title(space: &Space) -> String {
 }
 fn pane_title(pane: &Pane) -> String {
     pane.name.as_ref().map_or_else(
-        || format!("Solmu {}", pane.id),
+        || format!("{} {}", pane.launch.title(), pane.id),
         |name| format!("{name} #{}", pane.id),
     )
 }

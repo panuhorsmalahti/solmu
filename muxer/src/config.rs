@@ -39,6 +39,14 @@ headless_rows = 40
 # New panes/tabs: follow the selected pane, current server directory, home, or path.
 new_cwd = "follow"
 # path = "/path/to/project"
+
+[terminal]
+# New panes default to Solmu. Choose shell to start an interactive shell instead.
+new_pane = "solmu"
+# Executable name/path; empty chooses SHELL or /bin/sh on Unix, PowerShell on Windows.
+shell = ""
+# auto uses login shells on macOS; login or non_login override it on Unix.
+shell_mode = "auto"
 "##;
 pub fn default_text() -> String {
     let keys: String = bindings::definitions()
@@ -79,6 +87,9 @@ pub struct Config {
     pub rows: u16,
     pub cwd_policy: String,
     pub cwd_path: String,
+    pub new_pane: String,
+    pub shell: String,
+    pub shell_mode: String,
 }
 fn section<'a>(doc: &'a DocumentMut, name: &str) -> Result<Option<&'a dyn TableLike>, String> {
     doc.get(name)
@@ -163,7 +174,7 @@ impl Config {
             .map_err(|error| error.to_string())?;
         known(
             Some(doc.as_table()),
-            &["keys", "theme", "ui", "server", "workspace"],
+            &["keys", "theme", "ui", "server", "workspace", "terminal"],
             "",
         )?;
         let keys = section(&doc, "keys")?;
@@ -229,6 +240,20 @@ impl Config {
         if cwd_policy == "path" && cwd_path.trim().is_empty() {
             return Err("workspace.path is required when workspace.new_cwd is path".into());
         }
+        let terminal = section(&doc, "terminal")?;
+        known(terminal, &["new_pane", "shell", "shell_mode"], "terminal.")?;
+        let new_pane = string(get(terminal, "new_pane"), "solmu", "terminal.new_pane")?;
+        if !["solmu", "shell"].contains(&new_pane.as_str()) {
+            return Err("terminal.new_pane must be solmu or shell".into());
+        }
+        let shell = string(get(terminal, "shell"), "", "terminal.shell")?;
+        if shell.contains('\0') || shell.len() > 32768 {
+            return Err("terminal.shell must be an executable name or path".into());
+        }
+        let shell_mode = string(get(terminal, "shell_mode"), "auto", "terminal.shell_mode")?;
+        if !["auto", "login", "non_login"].contains(&shell_mode.as_str()) {
+            return Err("terminal.shell_mode must be auto, login, or non_login".into());
+        }
         Ok(Self {
             keys,
             theme: theme_name,
@@ -251,7 +276,52 @@ impl Config {
             )?,
             cwd_policy,
             cwd_path,
+            new_pane,
+            shell,
+            shell_mode,
         })
+    }
+    pub fn launch(
+        &self,
+        requested: Option<crate::launch::Launch>,
+    ) -> Result<crate::launch::Launch, String> {
+        use crate::launch::Launch;
+        let launch = requested.unwrap_or_else(|| {
+            if self.new_pane == "shell" {
+                Launch::Shell { argv: vec![] }
+            } else {
+                Launch::Solmu
+            }
+        });
+        let launch = match launch {
+            Launch::Shell { argv } if argv.is_empty() => {
+                let program = if self.shell.trim().is_empty() {
+                    if cfg!(windows) {
+                        "powershell.exe".into()
+                    } else {
+                        std::env::var("SHELL")
+                            .ok()
+                            .filter(|v| !v.trim().is_empty())
+                            .unwrap_or_else(|| "/bin/sh".into())
+                    }
+                } else {
+                    self.shell.clone()
+                };
+                let mut argv = vec![program];
+                if cfg!(windows) && self.shell.trim().is_empty() {
+                    argv.push("-NoLogo".into());
+                } else if cfg!(unix)
+                    && (self.shell_mode == "login"
+                        || (self.shell_mode == "auto" && cfg!(target_os = "macos")))
+                {
+                    argv.push("-l".into());
+                }
+                Launch::Shell { argv }
+            }
+            other => other,
+        };
+        launch.validate()?;
+        Ok(launch)
     }
     pub fn palette(&self) -> Palette {
         let mut palette = match self.theme.as_str() {
@@ -333,6 +403,9 @@ impl Config {
             ("server.headless_rows".into(), self.rows.to_string()),
             ("workspace.new_cwd".into(), self.cwd_policy.clone()),
             ("workspace.path".into(), self.cwd_path.clone()),
+            ("terminal.new_pane".into(), self.new_pane.clone()),
+            ("terminal.shell".into(), self.shell.clone()),
+            ("terminal.shell_mode".into(), self.shell_mode.clone()),
             ("keys.prefix".into(), self.keys.prefix_text.clone()),
         ];
         result.extend(
@@ -360,6 +433,9 @@ impl Config {
             "server.headless_rows" => "8–100 rows",
             "workspace.new_cwd" => "follow, current, home, or path",
             "workspace.path" => "directory; relative to this config file",
+            "terminal.new_pane" => "solmu or shell; applies to new panes only",
+            "terminal.shell" => "executable name or path; empty uses platform default",
+            "terminal.shell_mode" => "auto, login, or non_login",
             "keys.prefix" => "e.g. ctrl+b, ctrl+a, f12",
             name if name.starts_with("keys.") => "comma-separated shortcuts; empty unbinds",
             _ => "#RRGGBB, named color, reset; empty uses theme default",

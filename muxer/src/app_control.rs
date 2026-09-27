@@ -94,7 +94,7 @@ impl App {
                     .as_ref()
                     .filter(|meta| meta.instance == pane.instance && pane.exited.is_none());
                 Ok(
-                    json!({"id": id, "space": space.id, "tab": tab.id, "name": pane.name, "cwd": pane.directory, "state": state, "thread": parser.callbacks().thread, "exited": pane.exited, "instance": pane.instance, "pid": pane.pid(), "controller": pane.terminal_lease, "rows": rows, "cols": cols, "native":native}),
+                    json!({"id": id, "space": space.id, "tab": tab.id, "name": pane.name, "cwd": pane.directory, "state": state, "thread": parser.callbacks().thread, "exited": pane.exited, "instance": pane.instance, "pid": pane.pid(), "controller": pane.terminal_lease, "launch": pane.launch, "rows": rows, "cols": cols, "native":native}),
                 )
             }
         }
@@ -126,7 +126,7 @@ impl App {
                 Err("Terminal streams belong to the session coordinator".into())
             }
             Request::AgentList => Ok(
-                json!({"items":self.panes.iter().filter(|pane| pane.exited.is_none()).map(|pane| self.automation_record(Kind::Pane, pane.id).unwrap()).collect::<Vec<_>>()}),
+                json!({"items":self.panes.iter().filter(|pane| pane.exited.is_none() && pane.launch.solmu()).map(|pane| self.automation_record(Kind::Pane, pane.id).unwrap()).collect::<Vec<_>>()}),
             ),
             Request::AgentGet { target } => {
                 self.automation_record(Kind::Pane, crate::agent::resolve(self, target)?.id)
@@ -211,11 +211,14 @@ impl App {
                 )
             }
             Request::CreateSpace {
-                cwd, name: label, ..
+                cwd,
+                name: label,
+                launch,
+                ..
             } => {
                 let label = name(label)?;
                 let cwd = directory(cwd.clone().map_or_else(|| self.new_cwd(), Ok)?)?;
-                self.add_space(cwd)?;
+                self.add_space_launch(cwd, launch.clone())?;
                 self.spaces[self.space].name = label;
                 self.automation_created()
             }
@@ -223,12 +226,13 @@ impl App {
                 space,
                 cwd,
                 name: label,
+                launch,
                 ..
             } => {
                 let label = name(label)?;
                 self.automation_focus(Kind::Space, *space)?;
                 let cwd = directory(cwd.clone().map_or_else(|| self.new_cwd(), Ok)?)?;
-                self.add_tab_in(cwd)?;
+                self.add_tab_launch(cwd, launch.clone())?;
                 self.tab_mut().name = label;
                 self.automation_created()
             }
@@ -238,13 +242,14 @@ impl App {
                 ratio: value,
                 cwd,
                 name: label,
+                launch,
                 ..
             } => {
                 let label = name(label)?;
                 ratio(*value)?;
                 self.automation_focus(Kind::Pane, *pane)?;
                 let cwd = directory(cwd.clone().map_or_else(|| self.new_cwd(), Ok)?)?;
-                self.split_in(*axis, cwd, *value)?;
+                self.split_launch(*axis, cwd, *value, launch.clone())?;
                 self.panes[self.active].name = label;
                 self.automation_created()
             }
@@ -335,8 +340,12 @@ impl App {
                 if old.exited.is_none() {
                     return Err("Only stopped panes can be restarted".into());
                 }
-                let mut fresh =
-                    Pane::start(old.id, directory(old.directory.clone())?, &self.executable)?;
+                let mut fresh = Pane::start(
+                    old.id,
+                    directory(old.directory.clone())?,
+                    &self.executable,
+                    old.launch.clone(),
+                )?;
                 fresh.name = old.name.clone();
                 self.panes[self.active] = fresh;
                 self.automation_record(Kind::Pane, *pane)

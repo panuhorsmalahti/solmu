@@ -53,3 +53,7 @@ replies, and stop pending work while preserving CLI and Profile drafts.
 [Direct terminal attachment](muxer-terminals.md) opens one existing pane or streams its
 live screen to scripts. Several observers can watch while one controller owns
 input and size, with explicit takeover and draft-preserving detach.
+
+[Shell and command panes](muxer-commands.md) run local terminals and project commands beside
+Solmu. New-pane defaults apply automatically; saved commands wait for explicit
+restart after the server restarts.

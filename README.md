@@ -100,28 +100,34 @@ linkable `/threads/{id}` conversation pages.
 
 ## Muxer
 
-A Rust TUI for project spaces with multiple Solmu tabs and nested terminal panes.
-Switch spaces, arrange conversations, and track working/idle/error states.
-With the backend running, launch the installed `muxer` command.
-Click **+ Tab** or press **Ctrl+b n** to add a tab. **Ctrl+b s** splits a pane right;
-**Ctrl+b -** splits down. Drag dividers to resize, or **Ctrl+b z** to zoom.
-**Ctrl+b q** detaches while panes keep running. Run `muxer` to reattach;
-`muxer server stop` ends the session. Use `--session NAME` for separate sessions.
-Spaces and pane layouts return after a server restart, with existing Solmu
-conversations reopened. Name spaces, tabs, and panes with their right-click
-menus; **Find** searches across the session. **Navigate** and searchable **Help**
-make keyboard controls easy to discover.
-Customize shortcuts and colors in **Settings**; configuration changes apply
-automatically. [Muxer settings](docs/muxer-configuration.md).
-[Local automation commands](docs/muxer-automation.md) inspect sessions, manage
-layouts, send terminal input, and read pane screens without opening the TUI.
-Subscribe to live session updates or wait for a pane state or matching output.
-[Send prompts directly to Solmu](docs/muxer-agents.md), queue tasks in order,
-wait for a specific reply, and cancel pending work while preserving terminal drafts.
-[Direct terminal attachment](docs/muxer-terminals.md) opens one existing pane or
-streams its live screen to scripts. Several observers can watch while one
-controller owns input and size, with explicit takeover and draft-preserving detach.
-[Run and use muxer](muxer/README.md).
+A Rust TUI for project spaces, tabs, and nested terminal panes. Keep Solmu
+conversations, interactive shells, and project commands together. With the backend
+running, launch `muxer`.
+
+**Arrange your workspace.** Click **+ Tab** or press **Ctrl+b n** to add a tab.
+Use **Ctrl+b s** to split right, **Ctrl+b -** to split down, and **Ctrl+b z** to
+zoom. Drag dividers to resize. Name spaces, tabs, and panes with their context
+menus; **Find**, **Navigate**, and searchable **Help** make navigation easy.
+
+**Keep sessions running.** **Ctrl+b q** detaches without stopping panes.
+Run `muxer` to reattach, or `muxer server stop` to end the session.
+Use `--session NAME` for separate sessions. Saved layouts and Solmu conversations
+return after a server restart.
+
+**Run local commands.** **Ctrl+b t** opens a shell pane; **Ctrl+b !** opens the
+command form. Their output remains readable after exit. Choose **Restart** to
+run a saved command again. [Shells and commands](docs/muxer-commands.md).
+
+**Make it yours.** Change shortcuts, colors, sidebar options, and new-pane defaults
+in **Settings**. Changes apply automatically. [Muxer settings](docs/muxer-configuration.md).
+
+**Automate work.** [Local commands](docs/muxer-automation.md) manage layouts,
+send terminal input, read screens, and subscribe to live changes.
+[Native Solmu prompts](docs/muxer-agents.md) queue tasks and wait for saved replies
+while preserving terminal drafts. [Direct attachment](docs/muxer-terminals.md)
+opens one existing pane, with one controller and multiple observers.
+
+[Run and use Muxer](muxer/README.md).
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)
 

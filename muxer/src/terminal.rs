@@ -135,7 +135,7 @@ impl Manager {
                 .iter()
                 .find(|pane| pane.id == *id)
                 .ok_or("Pane does not exist")?,
-            _ => crate::agent::resolve(app, target)?,
+            _ => crate::agent::terminal_target(app, target)?,
         };
         if self.peers.len() >= 16 && !(!*observe && *takeover && pane.terminal_lease.is_some()) {
             return Err("Direct terminal connection limit reached".into());

@@ -12,6 +12,8 @@ pub enum Action {
     SelectTab(u8),
     SplitRight,
     SplitDown,
+    ShellPane,
+    RunCommand,
     FocusLeft,
     FocusDown,
     FocusUp,
@@ -69,6 +71,8 @@ pub fn definitions() -> Vec<Definition> {
             &["prefix+s", "prefix+v"],
         ),
         (SplitDown, "split_down", "Split down", &["prefix+minus"]),
+        (ShellPane, "shell_pane", "Shell pane", &["prefix+t"]),
+        (RunCommand, "run_command", "Run command", &["prefix+!"]),
         (
             FocusLeft,
             "focus_left",

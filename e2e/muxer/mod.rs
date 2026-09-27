@@ -320,4 +320,5 @@ mod startup;
 mod tabs;
 mod tools;
 
+mod commands;
 mod terminals;

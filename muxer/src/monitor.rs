@@ -91,10 +91,16 @@ impl Manager {
                 if until.is_empty()
                     || until.len() > 4
                     || until.iter().any(|state| {
-                        !matches!(state.as_str(), "idle" | "working" | "error" | "exited")
+                        !matches!(
+                            state.as_str(),
+                            "idle" | "working" | "error" | "exited" | "shell" | "running"
+                        )
                     })
                 {
-                    return Err("Wait states must be idle, working, error, or exited".into());
+                    return Err(
+                        "Wait states must be idle, working, error, exited, shell, or running"
+                            .into(),
+                    );
                 }
                 (
                     Condition::State {

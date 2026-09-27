@@ -27,20 +27,38 @@ impl std::fmt::Display for Failure {
 }
 impl std::error::Error for Failure {}
 pub fn resolve<'a>(app: &'a App, target: &AgentTarget) -> Result<&'a Pane, String> {
+    resolve_target(app, target, true)
+}
+pub fn terminal_target<'a>(app: &'a App, target: &AgentTarget) -> Result<&'a Pane, String> {
+    resolve_target(app, target, false)
+}
+fn resolve_target<'a>(app: &'a App, target: &AgentTarget, solmu: bool) -> Result<&'a Pane, String> {
     match target {
         AgentTarget::Id(id) => app
             .panes
             .iter()
-            .find(|pane| pane.id == *id && pane.exited.is_none())
-            .ok_or_else(|| "Live Solmu pane does not exist".into()),
+            .find(|pane| pane.id == *id && pane.exited.is_none() && (!solmu || pane.launch.solmu()))
+            .ok_or_else(|| {
+                if solmu {
+                    "Live Solmu pane does not exist"
+                } else {
+                    "Live terminal pane does not exist"
+                }
+                .into()
+            }),
         AgentTarget::Name(name) => {
-            let mut matches = app
-                .panes
-                .iter()
-                .filter(|pane| pane.exited.is_none() && pane.name.as_deref() == Some(name.trim()));
-            let pane = matches.next().ok_or("No live Solmu pane has that name")?;
+            let mut matches = app.panes.iter().filter(|pane| {
+                pane.exited.is_none()
+                    && (!solmu || pane.launch.solmu())
+                    && pane.name.as_deref() == Some(name.trim())
+            });
+            let pane = matches.next().ok_or(if solmu {
+                "No live Solmu pane has that name"
+            } else {
+                "No live terminal pane has that name"
+            })?;
             if matches.next().is_some() {
-                return Err("Agent name is ambiguous; use a pane ID or rename the panes".into());
+                return Err("Pane name is ambiguous; use a pane ID or rename the panes".into());
             }
             Ok(pane)
         }

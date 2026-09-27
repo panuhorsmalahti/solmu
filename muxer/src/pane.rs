@@ -16,6 +16,7 @@ use std::{
 
 #[derive(Default)]
 pub struct Status {
+    solmu: bool,
     pub label: String,
     pub thread: Option<String>,
     pub native: Option<solmu_client::automation::Metadata>,
@@ -24,7 +25,8 @@ pub struct Status {
 }
 impl vt100::Callbacks for Status {
     fn unhandled_osc(&mut self, _: &mut vt100::Screen, params: &[&[u8]]) {
-        if params.len() == 3
+        if self.solmu
+            && params.len() == 3
             && params[0] == b"777"
             && params[1] == b"solmu"
             && let Ok(metadata) =
@@ -49,7 +51,9 @@ impl vt100::Callbacks for Status {
         }
     }
     fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
-        if let Some(state) = title.strip_prefix(b"Solmu | ") {
+        if self.solmu
+            && let Some(state) = title.strip_prefix(b"Solmu | ")
+        {
             let state = String::from_utf8_lossy(state);
             let (label, thread) = state.split_once(" | ").unwrap_or((&state, "-"));
             self.label = label.to_owned();
@@ -83,6 +87,7 @@ impl vt100::Callbacks for Status {
 }
 
 pub struct Pane {
+    pub launch: crate::launch::Launch,
     pub id: u64,
     pub instance: String,
     pub name: Option<String>,
@@ -101,33 +106,58 @@ impl Pane {
         id: u64,
         directory: PathBuf,
         executable: &Path,
+        launch: crate::launch::Launch,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        Self::resume(id, directory, executable, None)
+        Self::resume(id, directory, executable, None, launch)
     }
     pub fn resume(
         id: u64,
         directory: PathBuf,
         executable: &Path,
         thread: Option<String>,
+        launch: crate::launch::Launch,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        launch.validate()?;
         let pair = native_pty_system().openpty(PtySize {
             rows: 24,
             cols: 80,
             pixel_width: 0,
             pixel_height: 0,
         })?;
-        let mut command = CommandBuilder::new(executable);
+        let mut command = match &launch {
+            crate::launch::Launch::Solmu => CommandBuilder::new(executable),
+            crate::launch::Launch::Shell { argv } | crate::launch::Launch::Command { argv } => {
+                let program = argv.first().ok_or("Shell executable is required")?;
+                let mut command = CommandBuilder::new(program);
+                command.args(&argv[1..]);
+                command
+            }
+        };
         let instance = uuid::Uuid::new_v4().to_string();
-        let agent_token = uuid::Uuid::new_v4().to_string();
-        if let Some(thread) = &thread {
+        let agent_token = launch.solmu().then(|| uuid::Uuid::new_v4().to_string());
+        if launch.solmu()
+            && let Some(thread) = &thread
+        {
             command.arg("--thread");
             command.arg(thread);
         }
-        command.cwd(&directory);
+        command.cwd(process_directory(&directory));
         command.env("TERM", "xterm-256color");
-        command.env("SOLMU_MUXER", "1");
-        command.env("SOLMU_MUXER_INSTANCE", &instance);
-        command.env("SOLMU_MUXER_AGENT_TOKEN", &agent_token);
+        command.env("SOLMU_MUXER_PANE_ID", id.to_string());
+        command.env("SOLMU_MUXER_BIN", std::env::current_exe()?);
+        if let Some(token) = &agent_token {
+            command.env("SOLMU_MUXER", "1");
+            command.env("SOLMU_MUXER_INSTANCE", &instance);
+            command.env("SOLMU_MUXER_AGENT_TOKEN", token);
+        } else {
+            for key in [
+                "SOLMU_MUXER",
+                "SOLMU_MUXER_INSTANCE",
+                "SOLMU_MUXER_AGENT_TOKEN",
+            ] {
+                command.env_remove(key);
+            }
+        }
         let child = pair.slave.spawn_command(command)?;
         drop(pair.slave);
         let mut terminal_writer = pair.master.take_writer()?;
@@ -149,7 +179,13 @@ impl Pane {
             80,
             2000,
             Status {
-                label: "starting".into(),
+                solmu: launch.solmu(),
+                label: match launch {
+                    crate::launch::Launch::Solmu => "starting",
+                    crate::launch::Launch::Shell { .. } => "shell",
+                    _ => "running",
+                }
+                .into(),
                 thread,
                 ..Default::default()
             },
@@ -183,13 +219,14 @@ impl Pane {
                 .closed = true;
         });
         Ok(Self {
+            launch,
             id,
             instance,
             name: None,
             directory,
             parser,
             exited: None,
-            agent_token: Some(agent_token),
+            agent_token,
             terminal_lease: None,
             master: Some(pair.master),
             child: Some(child),
@@ -197,7 +234,13 @@ impl Pane {
             redraw_at: None,
         })
     }
-    pub fn closed(id: u64, directory: PathBuf, thread: Option<String>, reason: String) -> Self {
+    pub fn closed(
+        id: u64,
+        directory: PathBuf,
+        thread: Option<String>,
+        reason: String,
+        launch: crate::launch::Launch,
+    ) -> Self {
         let mut parser = vt100::Parser::new_with_callbacks(
             24,
             80,
@@ -208,8 +251,13 @@ impl Pane {
                 ..Default::default()
             },
         );
-        parser.process(b"This pane is stopped. Use Restart to start a new conversation.");
+        parser.process(if launch.solmu() {
+            b"This pane is stopped. Use Restart to start a new conversation."
+        } else {
+            b"This pane is stopped. Use Restart to run this program again."
+        });
         Self {
+            launch,
             id,
             instance: uuid::Uuid::new_v4().to_string(),
             name: None,
@@ -318,10 +366,12 @@ impl Pane {
             // Solmu's Ctrl+L redraw settles the screen once resize events arrive.
             if self.child.is_none() {
                 // Restored stopped panes have no process to redraw their notice.
-                parser.process(
-                    b"\x1b[2J\x1b[HThis pane is stopped. Use Restart to start a new conversation.",
-                );
-            } else if self.exited.is_none() {
+                parser.process(if self.launch.solmu() {
+                    b"\x1b[2J\x1b[HThis pane is stopped. Use Restart to start a new conversation."
+                } else {
+                    b"\x1b[2J\x1b[HThis pane is stopped. Use Restart to run this program again."
+                });
+            } else if self.exited.is_none() && self.launch.solmu() {
                 self.redraw_at =
                     Some(std::time::Instant::now() + std::time::Duration::from_millis(75));
             }
@@ -347,6 +397,22 @@ impl Pane {
             format!("{state} · {queued} queued")
         }
     }
+}
+fn process_directory(directory: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        // CMD treats Windows extended-length paths as UNC paths and silently
+        // falls back to the Windows directory. Keep canonical paths in state,
+        // but pass ordinary drive/UNC paths to child process creation.
+        let text = directory.to_string_lossy();
+        if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{unc}"));
+        }
+        if let Some(path) = text.strip_prefix(r"\\?\") {
+            return PathBuf::from(path);
+        }
+    }
+    directory.into()
 }
 impl Drop for Pane {
     fn drop(&mut self) {

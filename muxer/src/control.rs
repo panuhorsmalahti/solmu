@@ -101,6 +101,8 @@ pub enum Request {
     },
     CreateSpace {
         #[serde(default)]
+        launch: Option<crate::launch::Launch>,
+        #[serde(default)]
         cwd: Option<PathBuf>,
         #[serde(default)]
         name: Option<String>,
@@ -108,6 +110,8 @@ pub enum Request {
         focus: bool,
     },
     CreateTab {
+        #[serde(default)]
+        launch: Option<crate::launch::Launch>,
         space: u64,
         #[serde(default)]
         cwd: Option<PathBuf>,
@@ -117,6 +121,8 @@ pub enum Request {
         focus: bool,
     },
     SplitPane {
+        #[serde(default)]
+        launch: Option<crate::launch::Launch>,
         pane: u64,
         axis: Axis,
         #[serde(default = "half")]
@@ -275,11 +281,12 @@ pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
   muxer tab create --space ID [--cwd PATH] [--name NAME] [--focus]
   muxer pane list [--tab ID] | get ID | focus ID | rename ID NAME | close ID
   muxer pane split ID [--direction right|down] [--ratio 0.5] [--cwd PATH] [--name NAME] [--focus]
+Creation accepts --solmu, --shell, --command TEXT, or --argv JSON_ARRAY.
   muxer pane swap ID OTHER | zoom ID on|off|toggle [--client ID]
   muxer pane resize ID --direction right|down --ratio 0.6
   muxer pane restart ID | read ID [--lines N] [--ansi] [--json]
   muxer pane send-text ID TEXT | send-keys ID KEY [KEY ...]
-  muxer pane wait ID --until idle|working|error|exited [--until STATE]... [--timeout MS]
+  muxer pane wait ID --until idle|working|error|exited|shell|running [--until STATE]... [--timeout MS]
   muxer pane wait-output ID --match TEXT|--regex PATTERN [--timeout MS]
   muxer events [--pane ID] [--timeout MS] [--count N]
   muxer agent list | get TARGET | read TARGET [--json] | focus TARGET [--client ID]
@@ -550,6 +557,7 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
         return Ok(Request::List { target, parent });
     }
     if action == "create" {
+        let launch = launch_options(args)?;
         let cwd = args.cwd()?;
         let name = args.take("--name")?;
         let focus = args.flag("--focus");
@@ -557,7 +565,12 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
             return Err("Choose --focus or --no-focus".into());
         }
         return match target {
-            Kind::Space => Ok(Request::CreateSpace { cwd, name, focus }),
+            Kind::Space => Ok(Request::CreateSpace {
+                cwd,
+                name,
+                focus,
+                launch,
+            }),
             Kind::Tab => Ok(Request::CreateTab {
                 space: args
                     .optional_id("--space")?
@@ -565,6 +578,7 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
                 cwd,
                 name,
                 focus,
+                launch,
             }),
             Kind::Pane => Err("Use pane split ID to create a pane".into()),
         };
@@ -589,6 +603,7 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
         "close" => Ok(Request::Close { target, id }),
         _ if !matches!(target, Kind::Pane) => Err("Unknown space or tab command".into()),
         "split" => {
+            let launch = launch_options(args)?;
             let axis = args.axis()?;
             let ratio = args.ratio(false)?;
             let cwd = args.cwd()?;
@@ -604,6 +619,7 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
                 cwd,
                 name,
                 focus,
+                launch,
             })
         }
         "swap" => Ok(Request::Swap {
@@ -658,11 +674,16 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
                 until.push(value);
             }
             if until.is_empty()
-                || until
-                    .iter()
-                    .any(|s| !matches!(s.as_str(), "idle" | "working" | "error" | "exited"))
+                || until.iter().any(|s| {
+                    !matches!(
+                        s.as_str(),
+                        "idle" | "working" | "error" | "exited" | "shell" | "running"
+                    )
+                })
             {
-                return Err("Choose --until idle, working, error, or exited".into());
+                return Err(
+                    "Choose --until idle, working, error, exited, shell, or running".into(),
+                );
             }
             Ok(Request::Wait {
                 pane: id,
@@ -692,6 +713,37 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
 fn failure(error: impl std::fmt::Display, code: i32) -> ! {
     eprintln!("{}", json!({"ok": false, "error": error.to_string()}));
     std::process::exit(code);
+}
+fn launch_options(args: &mut Args) -> Result<Option<crate::launch::Launch>, String> {
+    use crate::launch::Launch;
+    let solmu = args.flag("--solmu");
+    let shell = args.flag("--shell");
+    let command = args.take("--command")?;
+    let argv = args.take("--argv")?;
+    if usize::from(solmu)
+        + usize::from(shell)
+        + usize::from(command.is_some())
+        + usize::from(argv.is_some())
+        > 1
+    {
+        return Err("Choose one of --solmu, --shell, --command, or --argv".into());
+    }
+    let launch = if solmu {
+        Some(Launch::Solmu)
+    } else if shell {
+        Some(Launch::Shell { argv: vec![] })
+    } else if let Some(command) = command {
+        Some(Launch::script(&command)?)
+    } else if let Some(argv) = argv {
+        let argv = serde_json::from_str::<Vec<String>>(&argv)
+            .map_err(|_| "--argv must be a JSON array of strings")?;
+        let launch = Launch::Command { argv };
+        launch.validate()?;
+        Some(launch)
+    } else {
+        None
+    };
+    Ok(launch)
 }
 fn terminal_options(args: &mut Args, observe: bool) -> Result<Request, String> {
     let target = args.agent_target()?;
