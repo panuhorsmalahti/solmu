@@ -20,6 +20,9 @@ Right-click spaces, tabs, or panes to rename them; names survive restarts.
 lets you move without a prefix until Enter or Esc; **Help** lists shortcuts
 and filters as you type. These controls also have **Ctrl+b g**, **m**, and **?**
 shortcuts. Naming and search fields support Unicode cursor editing and paste.
+**Settings** customizes shortcuts, themes, sidebar width, and working-directory
+policies. Changes apply automatically, including edits to `config.toml`.
+Read [Muxer settings](../docs/muxer-configuration.md) for examples.
 Press **Ctrl+b**, then **n** for a new tab, **Tab** to switch tabs, Up/Down to
 switch spaces, **s** to split right, **-** to split down, or **q** to detach.
 Use **Ctrl+b h/j/k/l** to focus panes, **H/J/K/L** to swap them, **z** to zoom,

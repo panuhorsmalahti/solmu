@@ -103,6 +103,8 @@ Press **Ctrl+b**, release it, then press the second key:
 | `g` | Find spaces, tabs, and panes |
 | `m` | Enter or leave navigation mode |
 | `?` | Search keyboard help |
+| `,` | Open Settings |
+| `B` | Show or hide the sidebar for this client |
 | `r` | Resize a running pane; restart an exited CLI with a new conversation |
 | `q` | Detach from the session; its CLIs keep running |
 | `b` | Send a literal Ctrl+b to the selected CLI |
@@ -117,6 +119,11 @@ default model; `/model` selects a model for the current thread. Tabs use their
 space's directory as the thread workspace.
 
 ## Configuration and lifetime
+
+**Settings** edits colors, shortcuts, sidebar presentation, working-directory
+policies, and headless dimensions. File changes apply automatically and preserve
+drafts. **Help** shows your current bindings. See [Muxer settings](muxer-configuration.md)
+for the configuration file, all action names, and examples.
 
 `SOLMU_BACKEND_URL` defaults to `http://127.0.0.1:3000`. Muxer loads `.env`
 from its working directory; existing environment variables take precedence.

@@ -184,11 +184,13 @@ impl Pane {
             .is_some_and(|deadline| deadline <= std::time::Instant::now())
         {
             self.redraw_at = None;
-            self.parser
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .process(b"\x1b[2J\x1b[H");
-            self.send(&[12])?;
+            if self.exited.is_none() {
+                self.parser
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .process(b"\x1b[2J\x1b[H");
+                self.send(&[12])?;
+            }
         }
         if self.exited.is_none()
             && let Some(status) = self
@@ -212,7 +214,9 @@ impl Pane {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         if parser.screen().size() != size {
-            if let Some(master) = &self.master {
+            if self.exited.is_none()
+                && let Some(master) = &self.master
+            {
                 master.resize(PtySize {
                     rows: size.0,
                     cols: size.1,
@@ -223,7 +227,12 @@ impl Pane {
             parser.screen_mut().set_size(size.0, size.1);
             // ConPTY can emit old-dimension diffs while a resize is in flight.
             // Solmu's Ctrl+L redraw settles the screen once resize events arrive.
-            if self.child.is_some() {
+            if self.child.is_none() {
+                // Restored stopped panes have no process to redraw their notice.
+                parser.process(
+                    b"\x1b[2J\x1b[HThis pane is stopped. Use Restart to start a new conversation.",
+                );
+            } else if self.exited.is_none() {
                 self.redraw_at =
                     Some(std::time::Instant::now() + std::time::Duration::from_millis(75));
             }
@@ -252,7 +261,7 @@ impl Drop for Pane {
     }
 }
 
-pub struct TerminalScreen<'a>(pub &'a vt100::Screen);
+pub struct TerminalScreen<'a>(pub &'a vt100::Screen, pub Color, pub Color);
 impl Widget for TerminalScreen<'_> {
     fn render(self, area: Rect, buffer: &mut Buffer) {
         let (rows, cols) = self.0.size();
@@ -265,8 +274,8 @@ impl Widget for TerminalScreen<'_> {
                     continue;
                 }
                 let mut style = Style::new()
-                    .fg(color(cell.fgcolor()))
-                    .bg(color(cell.bgcolor()));
+                    .fg(color(cell.fgcolor(), self.1))
+                    .bg(color(cell.bgcolor(), self.2));
                 for (enabled, modifier) in [
                     (cell.bold(), Modifier::BOLD),
                     (cell.italic(), Modifier::ITALIC),
@@ -290,9 +299,9 @@ impl Widget for TerminalScreen<'_> {
         }
     }
 }
-fn color(value: vt100::Color) -> Color {
+fn color(value: vt100::Color, default: Color) -> Color {
     match value {
-        vt100::Color::Default => Color::Reset,
+        vt100::Color::Default => default,
         vt100::Color::Idx(index) => Color::Indexed(index),
         vt100::Color::Rgb(r, g, b) => Color::Rgb(r, g, b),
     }

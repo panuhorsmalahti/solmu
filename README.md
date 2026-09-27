@@ -113,6 +113,8 @@ Spaces and pane layouts return after a server restart, with existing Solmu
 conversations reopened. Name spaces, tabs, and panes with their right-click
 menus; **Find** searches across the session. **Navigate** and searchable **Help**
 make keyboard controls easy to discover.
+Customize shortcuts and colors in **Settings**; configuration changes apply
+automatically. [Muxer settings](docs/muxer-configuration.md).
 [Run and use muxer](muxer/README.md).
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)

@@ -1,14 +1,16 @@
 use crate::{
+    bindings::Action,
+    config::Manager,
     editor::Editor,
     keys::encode,
     layout::{Axis, Divider, Node},
     pane::{Pane, TerminalScreen},
 };
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Style, Stylize},
+    style::{Style, Stylize},
     text::Line,
     widgets::{Block, Clear, Paragraph, Wrap},
 };
@@ -16,13 +18,6 @@ use serde::{Deserialize, Serialize};
 use std::{error::Error, path::PathBuf};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-
-const BG: Color = Color::Rgb(21, 26, 35);
-const CHROME: Color = Color::Rgb(30, 37, 48);
-const SELECTED: Color = Color::Rgb(45, 60, 65);
-const TEXT: Color = Color::Rgb(224, 222, 244);
-const MUTED: Color = Color::Rgb(136, 149, 166);
-const ACCENT: Color = Color::Rgb(156, 207, 176);
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Tab {
@@ -168,6 +163,13 @@ struct Picker {
     editor: Editor,
     selected: usize,
     help: bool,
+    settings: bool,
+}
+#[derive(Clone)]
+struct SettingEdit {
+    name: String,
+    original: String,
+    editor: Editor,
 }
 struct Entry {
     target: Target,
@@ -182,8 +184,13 @@ const ACTIONS: &[&str] = &[
     "Close pane",
     "Restart exited pane",
     "Rename pane",
+    "Find",
+    "Help",
+    "Settings",
+    "Show / hide sidebar",
 ];
 pub struct App {
+    pub config: Manager,
     pub persistent: bool,
     pub panes: Vec<Pane>,
     pub active: usize,
@@ -191,6 +198,8 @@ pub struct App {
     rename: Option<Rename>,
     picker: Option<Picker>,
     navigation: bool,
+    sidebar: Option<(u64, bool)>,
+    setting: Option<SettingEdit>,
     spaces: Vec<Space>,
     space: usize,
     next_id: u64,
@@ -214,6 +223,8 @@ pub struct View {
     rename: Option<Rename>,
     picker: Option<Picker>,
     navigation: bool,
+    sidebar: Option<(u64, bool)>,
+    setting: Option<SettingEdit>,
     prefix: bool,
     notice: String,
     resizing: bool,
@@ -253,7 +264,7 @@ impl App {
     }
     pub fn restore(executable: PathBuf, snapshot: Snapshot) -> Result<Self, Box<dyn Error>> {
         snapshot.validate()?;
-        let mut app = Self::new(executable);
+        let mut app = Self::new(executable)?;
         app.next_id = snapshot.next_id;
         app.spaces = snapshot.spaces;
         for space in &mut app.spaces {
@@ -317,6 +328,8 @@ impl App {
             rename: self.rename.clone(),
             picker: self.picker.clone(),
             navigation: self.navigation,
+            sidebar: self.sidebar,
+            setting: self.setting.clone(),
             prefix: self.prefix,
             notice: self.notice.clone(),
             resizing: self.resizing,
@@ -361,6 +374,8 @@ impl App {
         self.rename = view.rename.clone();
         self.picker = view.picker.clone();
         self.navigation = view.navigation;
+        self.sidebar = view.sidebar;
+        self.setting = view.setting.clone();
         self.prefix = view.prefix;
         self.notice = view.notice.clone();
         self.resizing = view.resizing;
@@ -371,8 +386,151 @@ impl App {
     pub fn selected_tab(&self) -> u64 {
         self.tab().id
     }
-    pub fn new(executable: PathBuf) -> Self {
-        Self {
+    fn new_cwd(&self) -> Result<PathBuf, Box<dyn Error>> {
+        Ok(self.config.current.cwd(
+            &self.panes[self.active].directory,
+            self.config.path.parent().unwrap(),
+        )?)
+    }
+    pub fn resize_headless(&mut self) -> Result<(), Box<dyn Error>> {
+        let area = self.config.current.headless_area();
+        for space in &self.spaces {
+            for tab in &space.tabs {
+                for (id, rect) in tab.layout.regions(self.body(area)) {
+                    let pane = self.panes.iter_mut().find(|pane| pane.id == id).unwrap();
+                    pane.resize(pane_inner(rect))?;
+                }
+            }
+        }
+        Ok(())
+    }
+    fn sidebar_visible(&self) -> bool {
+        self.sidebar
+            .filter(|(generation, _)| *generation == self.config.generation)
+            .map_or(self.config.current.sidebar_visible, |(_, visible)| visible)
+    }
+    fn sidebar_width(&self, area: Rect) -> u16 {
+        if self.sidebar_visible() {
+            self.config.current.sidebar_width.min(area.width / 3)
+        } else {
+            0
+        }
+    }
+    fn setting_rows(&self, filter: &str) -> Vec<(String, String)> {
+        self.config
+            .current
+            .settings()
+            .into_iter()
+            .filter(|(name, value)| {
+                matches_filter(&format!("{name} {value}"), &filter.to_lowercase())
+            })
+            .collect()
+    }
+    fn picker_rows(&self, picker: &Picker) -> Vec<(String, String)> {
+        if picker.settings {
+            self.setting_rows(&picker.editor.text)
+        } else if picker.help {
+            let mut rows = self.config.current.keys.help();
+            rows.extend(field_help());
+            rows.retain(|(key, description)| {
+                matches_filter(
+                    &format!("{key} {description}"),
+                    &picker.editor.text.to_lowercase(),
+                )
+            });
+            rows
+        } else {
+            self.entries(&picker.editor.text)
+                .into_iter()
+                .map(|entry| (entry.label, entry.detail))
+                .collect()
+        }
+    }
+    fn save_setting(&mut self) {
+        let Some(setting) = self.setting.clone() else {
+            return;
+        };
+        match self
+            .config
+            .set(&setting.name, &setting.editor.text, &setting.original)
+        {
+            Ok(()) => {
+                self.setting = None;
+                self.notice.clear();
+            }
+            Err(error) => self.notice = error,
+        }
+    }
+    fn perform(&mut self, action: Action) -> Result<bool, Box<dyn Error>> {
+        use Action::*;
+        match action {
+            NewTab => return Ok(self.action("New tab")),
+            NewSpace => self.workspace = Some(Editor::default()),
+            PreviousSpace => {
+                self.select_space((self.space + self.spaces.len() - 1) % self.spaces.len())
+            }
+            NextSpace => self.select_space((self.space + 1) % self.spaces.len()),
+            NextTab | PreviousTab => {
+                let tabs = &self.spaces[self.space].tabs;
+                let position = tabs.iter().position(|tab| tab.id == self.tab().id).unwrap();
+                let position = if action == NextTab {
+                    (position + 1) % tabs.len()
+                } else {
+                    (position + tabs.len() - 1) % tabs.len()
+                };
+                self.select_tab(position);
+            }
+            SelectTab(position) => self.select_tab(usize::from(position)),
+            SplitRight => return Ok(self.action("Split right")),
+            SplitDown => return Ok(self.action("Split down")),
+            FocusLeft | FocusDown | FocusUp | FocusRight | SwapLeft | SwapDown | SwapUp
+            | SwapRight => {
+                let direction = match action {
+                    FocusLeft | SwapLeft => KeyCode::Left,
+                    FocusDown | SwapDown => KeyCode::Down,
+                    FocusUp | SwapUp => KeyCode::Up,
+                    _ => KeyCode::Right,
+                };
+                self.move_focus(
+                    direction,
+                    matches!(action, SwapLeft | SwapDown | SwapUp | SwapRight),
+                );
+            }
+            Zoom => return Ok(self.action("Zoom / restore")),
+            ClosePane => return Ok(self.close_pane()),
+            CloseTab => return Ok(self.close_tab(self.tab().id)),
+            CloseSpace => return Ok(self.action("Close space")),
+            RenameSpace => self.begin_rename(Target::Space(self.spaces[self.space].id)),
+            RenameTab => self.begin_rename(Target::Tab(self.tab().id)),
+            RenamePane => self.begin_rename(Target::Pane(self.panes[self.active].id)),
+            Find => self.open_picker(false),
+            Navigate => self.navigation = !self.navigation,
+            Help => self.open_picker(true),
+            Settings => {
+                self.open_picker(false);
+                self.picker.as_mut().unwrap().settings = true;
+            }
+            ResizeOrRestart => {
+                if self.panes[self.active].exited.is_some() {
+                    self.restart();
+                } else {
+                    return Ok(self.action("Resize with keys"));
+                }
+            }
+            Restart => self.restart(),
+            Detach => return Ok(true),
+            SendPrefix => {
+                self.panes[self.active].send(&encode(self.config.current.keys.prefix.event()))?
+            }
+            ToggleSidebar => self.sidebar = Some((self.config.generation, !self.sidebar_visible())),
+        }
+        Ok(false)
+    }
+    pub fn new(executable: PathBuf) -> Result<Self, Box<dyn Error>> {
+        let config = Manager::new()?;
+        let area = config.current.headless_area();
+        Ok(Self {
+            config,
             panes: vec![],
             spaces: vec![],
             active: 0,
@@ -380,6 +538,8 @@ impl App {
             rename: None,
             picker: None,
             navigation: false,
+            sidebar: None,
+            setting: None,
             space: 0,
             next_id: 1,
             executable,
@@ -388,9 +548,9 @@ impl App {
             resizing: false,
             dragging: None,
             menu: None,
-            area: Rect::new(0, 0, 120, 40),
+            area,
             persistent: false,
-        }
+        })
     }
     pub fn add_space(&mut self, directory: PathBuf) -> Result<(), Box<dyn Error>> {
         if self.spaces.len() >= 8 {
@@ -440,11 +600,7 @@ impl App {
         if self.spaces[self.space].tabs.len() >= 8 {
             return Err("Eight tabs are already open in this space".into());
         }
-        let pane = Pane::start(
-            self.next_id,
-            self.spaces[self.space].directory.clone(),
-            &self.executable,
-        )?;
+        let pane = Pane::start(self.next_id, self.new_cwd()?, &self.executable)?;
         self.spaces[self.space].tabs.push(Tab {
             id: pane.id,
             name: None,
@@ -463,11 +619,7 @@ impl App {
         if self.tab().layout.ids().len() >= 8 {
             return Err("Eight panes are already open in this tab".into());
         }
-        let pane = Pane::start(
-            self.next_id,
-            self.spaces[self.space].directory.clone(),
-            &self.executable,
-        )?;
+        let pane = Pane::start(self.next_id, self.new_cwd()?, &self.executable)?;
         let selected = self.panes[self.active].id;
         self.tab_mut().layout.split(selected, pane.id, axis);
         self.tab_mut().selected = pane.id;
@@ -577,7 +729,7 @@ impl App {
         }
     }
     fn neighbor(&self, direction: KeyCode) -> Option<u64> {
-        let regions = self.tab().layout.regions(body(self.area));
+        let regions = self.tab().layout.regions(self.body(self.area));
         let selected = regions
             .iter()
             .find(|(id, _)| *id == self.panes[self.active].id)?
@@ -661,6 +813,12 @@ impl App {
                 if let Err(error) = self.add_tab() {
                     self.notice = error.to_string();
                 }
+            }
+            "Find" => self.open_picker(false),
+            "Help" => self.open_picker(true),
+            "Settings" => self.open_settings(),
+            "Show / hide sidebar" => {
+                self.sidebar = Some((self.config.generation, !self.sidebar_visible()))
             }
             _ => {}
         }
@@ -769,8 +927,13 @@ impl App {
             editor: Editor::default(),
             selected: 0,
             help,
+            settings: false,
         });
         self.notice.clear();
+    }
+    fn open_settings(&mut self) {
+        self.open_picker(false);
+        self.picker.as_mut().unwrap().settings = true;
     }
     fn entries(&self, filter: &str) -> Vec<Entry> {
         let filter = filter.to_lowercase();
@@ -810,6 +973,19 @@ impl App {
     }
     fn select_entry(&mut self, index: usize) {
         if let Some(picker) = &self.picker {
+            if picker.settings {
+                if let Some((name, original)) =
+                    self.setting_rows(&picker.editor.text).get(index).cloned()
+                {
+                    self.setting = Some(SettingEdit {
+                        name,
+                        editor: Editor::new(original.clone()),
+                        original,
+                    });
+                    self.notice.clear();
+                }
+                return;
+            }
             if picker.help {
                 self.picker = None;
                 return;
@@ -837,7 +1013,9 @@ impl App {
             .is_some_and(|label| self.action(label))
     }
     pub fn paste(&mut self, text: &str) -> Result<(), Box<dyn Error>> {
-        if let Some(editor) = &mut self.workspace {
+        if let Some(setting) = &mut self.setting {
+            setting.editor.insert(text);
+        } else if let Some(editor) = &mut self.workspace {
             editor.insert(text);
         } else if let Some(rename) = &mut self.rename {
             rename.editor.insert(text);
@@ -850,6 +1028,17 @@ impl App {
         Ok(())
     }
     pub fn key(&mut self, key: KeyEvent) -> Result<bool, Box<dyn Error>> {
+        if let Some(setting) = &mut self.setting {
+            match key.code {
+                KeyCode::Esc => {
+                    self.setting = None;
+                    self.notice.clear();
+                }
+                KeyCode::Enter => self.save_setting(),
+                _ => setting.editor.key(key),
+            }
+            return Ok(false);
+        }
         if let Some(path) = &mut self.workspace {
             match key.code {
                 KeyCode::Esc => {
@@ -873,11 +1062,7 @@ impl App {
             return Ok(false);
         }
         if let Some(picker) = &self.picker {
-            let count = if picker.help {
-                help_rows(&picker.editor.text).len()
-            } else {
-                self.entries(&picker.editor.text).len()
-            };
+            let count = self.picker_rows(picker).len();
             let picker = self.picker.as_mut().unwrap();
             picker.selected = picker.selected.min(count.saturating_sub(1));
             match key.code {
@@ -930,85 +1115,40 @@ impl App {
             self.tab_mut().layout.resize_near(id, axis, delta);
             return Ok(false);
         }
-        if self.navigation && !self.prefix {
-            if matches!(
-                key.code,
-                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q' | 'm')
-            ) {
-                self.navigation = false;
-                return Ok(false);
-            }
-            if key.code != KeyCode::Char('b') || !key.modifiers.contains(KeyModifiers::CONTROL) {
-                self.prefix = true;
-                return self.key(key);
-            }
+        if self.navigation
+            && !self.prefix
+            && key.modifiers.is_empty()
+            && matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q'))
+        {
+            self.navigation = false;
+            return Ok(false);
         }
-        if self.prefix {
-            self.prefix = false;
-            self.notice.clear();
-            let position = self.spaces[self.space]
-                .tabs
-                .iter()
-                .position(|tab| tab.id == self.spaces[self.space].selected)
-                .unwrap();
-            let count = self.spaces[self.space].tabs.len();
-            if let Some(direction) = Self::direction(key.code) {
-                let swap = key.modifiers.contains(KeyModifiers::SHIFT)
-                    || matches!(key.code, KeyCode::Char('H' | 'J' | 'K' | 'L'));
-                self.move_focus(direction, swap);
-                return Ok(false);
-            }
-            match key.code {
-                KeyCode::Char('q') => return Ok(true),
-                KeyCode::Char('n' | 'c') => {
-                    if let Err(error) = self.add_tab() {
-                        self.notice = error.to_string();
-                    }
-                }
-                KeyCode::Char('w') => self.workspace = Some(Editor::default()),
-                KeyCode::Char('W') => self.begin_rename(Target::Space(self.spaces[self.space].id)),
-                KeyCode::Char('T') => self.begin_rename(Target::Tab(self.tab().id)),
-                KeyCode::Char('P') => self.begin_rename(Target::Pane(self.panes[self.active].id)),
-                KeyCode::Char('D') => return Ok(self.action("Close space")),
-                KeyCode::Char('g') => self.open_picker(false),
-                KeyCode::Char('?') => self.open_picker(true),
-                KeyCode::Char('m') => self.navigation = !self.navigation,
-                KeyCode::Tab | KeyCode::Char(']') => self.select_tab((position + 1) % count),
-                KeyCode::BackTab | KeyCode::Char('[' | 'p') => {
-                    self.select_tab((position + count - 1) % count)
-                }
-                KeyCode::Up => {
-                    self.select_space((self.space + self.spaces.len() - 1) % self.spaces.len())
-                }
-                KeyCode::Down => self.select_space((self.space + 1) % self.spaces.len()),
-                KeyCode::Char('s' | 'v') => return Ok(self.action("Split right")),
-                KeyCode::Char('-') => return Ok(self.action("Split down")),
-                KeyCode::Char('z') => return Ok(self.action("Zoom / restore")),
-                KeyCode::Char('x') => return Ok(self.close_pane()),
-                KeyCode::Char('X') => return Ok(self.close_tab(self.tab().id)),
-                KeyCode::Char('r') => {
-                    if self.panes[self.active].exited.is_some() {
-                        self.restart();
-                    } else {
-                        return Ok(self.action("Resize with keys"));
-                    }
-                }
-                KeyCode::Char('b') => self.panes[self.active].send(&[2])?,
-                KeyCode::Char(ch @ '1'..='8') => self.select_tab(ch as usize - '1' as usize),
-                _ => self.notice = "Unknown muxer command; Ctrl+b shows shortcuts".into(),
-            }
-        } else if key.code == KeyCode::Char('b') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        if !self.prefix && self.config.current.keys.prefix.matches(key) {
             self.prefix = true;
-        } else {
+            return Ok(false);
+        }
+        let prefixed = self.prefix;
+        self.prefix = false;
+        if let Some(action) = self.config.current.keys.resolve(key, prefixed).or_else(|| {
+            self.navigation
+                .then(|| self.config.current.keys.resolve(key, true))
+                .flatten()
+        }) {
+            self.notice.clear();
+            return self.perform(action);
+        }
+        if prefixed && key.code != KeyCode::Esc {
+            self.notice = "Unknown Muxer shortcut; open Help to see active bindings".into();
+        } else if !self.navigation && !prefixed {
             self.panes[self.active].send(&encode(key))?;
         }
         Ok(false)
     }
     pub fn visible(&self, area: Rect) -> Vec<(usize, Rect)> {
         let regions = if self.tab().zoomed {
-            vec![(self.panes[self.active].id, body(area))]
+            vec![(self.panes[self.active].id, self.body(area))]
         } else {
-            self.tab().layout.regions(body(area))
+            self.tab().layout.regions(self.body(area))
         };
         regions
             .into_iter()
@@ -1021,7 +1161,7 @@ impl App {
             .collect()
     }
     fn tabs(&self, area: Rect) -> Vec<(u64, Rect)> {
-        let content = content(area);
+        let content = self.content(area);
         let available = content.width.saturating_sub(8);
         let tabs = &self.spaces[self.space].tabs;
         let count = tabs.len().min(usize::from((available / 14).max(1)));
@@ -1044,11 +1184,15 @@ impl App {
             .collect()
     }
     pub fn context_menu(&mut self, area: Rect, x: u16, y: u16) {
-        if self.workspace.is_some() || self.rename.is_some() || self.picker.is_some() {
+        if self.workspace.is_some()
+            || self.rename.is_some()
+            || self.picker.is_some()
+            || self.setting.is_some()
+        {
             return;
         }
         self.area = area;
-        let target = if x < sidebar_width(area) && y >= 3 {
+        let target = if x < self.sidebar_width(area) && y >= 3 {
             let index = self.space_start(area) + usize::from((y - 3) / 3);
             let Some(space) = self.spaces.get(index) else {
                 return;
@@ -1089,6 +1233,18 @@ impl App {
     pub fn click(&mut self, area: Rect, x: u16, y: u16) -> Result<bool, Box<dyn Error>> {
         let point = (x, y).into();
         self.area = area;
+        if self.setting.is_some() {
+            let rect = modal(area);
+            if y == rect.y + 4 {
+                if (rect.x + 2..rect.x + 12).contains(&x) {
+                    self.save_setting();
+                } else if (rect.x + 15..rect.x + 25).contains(&x) {
+                    self.setting = None;
+                    self.notice.clear();
+                }
+            }
+            return Ok(false);
+        }
         if let Some(menu) = &self.menu {
             if menu.area.contains(point) && y > menu.area.y && y < menu.area.bottom() - 1 {
                 return Ok(self.menu_action(usize::from(y - menu.area.y - 1)));
@@ -1104,11 +1260,7 @@ impl App {
             {
                 let picker = self.picker.as_ref().unwrap();
                 let visible = usize::from(rect.height.saturating_sub(5));
-                let count = if picker.help {
-                    help_rows(&picker.editor.text).len()
-                } else {
-                    self.entries(&picker.editor.text).len()
-                };
+                let count = self.picker_rows(picker).len();
                 let start = picker
                     .selected
                     .min(count.saturating_sub(1))
@@ -1141,8 +1293,10 @@ impl App {
             }
             return Ok(false);
         }
-        if x < sidebar_width(area) {
-            if y == 1 {
+        if x < self.sidebar_width(area) {
+            if y == 0 {
+                self.open_settings();
+            } else if y == 1 {
                 self.workspace = Some(Editor::default());
             } else if y >= 3 {
                 let index = self.space_start(area) + usize::from((y - 3) / 3);
@@ -1152,13 +1306,15 @@ impl App {
             }
             return Ok(false);
         }
-        for (label, rect) in toolbar(area, self.persistent) {
+        for (label, rect) in self.toolbar(area) {
             if rect.contains(point) {
                 match label {
                     "+ Space" => self.workspace = Some(Editor::default()),
                     "Find" => self.open_picker(false),
                     "Navigate" => self.navigation = !self.navigation,
                     "Help" => self.open_picker(true),
+                    "Settings" => return self.perform(Action::Settings),
+                    "Sidebar" => return self.perform(Action::ToggleSidebar),
                     "+ Tab" => {
                         if let Err(error) = self.add_tab() {
                             self.notice = error.to_string();
@@ -1199,14 +1355,14 @@ impl App {
             && let Some(divider) = self
                 .tab()
                 .layout
-                .dividers(body(area))
+                .dividers(self.body(area))
                 .into_iter()
                 .find(|divider| divider.area.contains(point))
         {
             self.dragging = Some(divider);
             return Ok(false);
         }
-        let content = content(area);
+        let content = self.content(area);
         if (2..4).contains(&y) && x >= content.right().saturating_sub(8) {
             if let Err(error) = self.add_tab() {
                 self.notice = error.to_string();
@@ -1256,16 +1412,20 @@ impl App {
         self.space.saturating_sub(visible.saturating_sub(1))
     }
     pub fn draw(&self, frame: &mut Frame) {
+        let colors = self.config.current.palette();
         let area = frame.area();
-        frame.render_widget(Block::new().style(Style::new().bg(BG).fg(TEXT)), area);
-        let sidebar = Rect::new(0, 0, sidebar_width(area), area.height);
-        frame.render_widget(Block::new().bg(CHROME), sidebar);
         frame.render_widget(
-            Paragraph::new(" solmu / muxer").fg(ACCENT).bold(),
+            Block::new().style(Style::new().bg(colors.background).fg(colors.text)),
+            area,
+        );
+        let sidebar = Rect::new(0, 0, self.sidebar_width(area), area.height);
+        frame.render_widget(Block::new().bg(colors.panel), sidebar);
+        frame.render_widget(
+            Paragraph::new(" solmu / muxer").fg(colors.accent).bold(),
             Rect::new(0, 0, sidebar.width, 1),
         );
         frame.render_widget(
-            Paragraph::new(" + New space").fg(MUTED),
+            Paragraph::new(" + New space").fg(colors.muted),
             Rect::new(0, 1, sidebar.width, 1),
         );
         let start = self.space_start(area);
@@ -1311,40 +1471,48 @@ impl App {
                             if selected { "›" } else { " " },
                             index + 1
                         ),
-                        Style::new().fg(if selected { ACCENT } else { TEXT }).bold(),
+                        Style::new()
+                            .fg(if selected { colors.accent } else { colors.text })
+                            .bold(),
                     ),
                     Line::from(format!(
                         "     {} tab{} · {status}",
                         space.tabs.len(),
                         if space.tabs.len() == 1 { "" } else { "s" }
                     ))
-                    .fg(MUTED),
+                    .fg(colors.muted),
                 ])
-                .bg(if selected { SELECTED } else { CHROME }),
+                .bg(if selected {
+                    colors.selected
+                } else {
+                    colors.panel
+                }),
                 Rect::new(0, y, sidebar.width, 3.min(area.height.saturating_sub(y))),
             );
         }
-        let content = content(area);
+        let content = self.content(area);
         frame.render_widget(
             Paragraph::new(format!(" {}", self.spaces[self.space].directory.display()))
-                .fg(MUTED)
-                .bg(CHROME),
+                .fg(colors.muted)
+                .bg(colors.panel),
             Rect::new(content.x, 0, content.width, 1),
         );
         frame.render_widget(
-            Block::new().bg(CHROME),
+            Block::new().bg(colors.panel),
             Rect::new(content.x, 1, content.width, 1),
         );
-        for (label, rect) in toolbar(area, self.persistent) {
+        for (label, rect) in self.toolbar(area) {
             frame.render_widget(
-                Paragraph::new(format!(" {label} ")).fg(ACCENT).bg(CHROME),
+                Paragraph::new(format!(" {label} "))
+                    .fg(colors.accent)
+                    .bg(colors.panel),
                 rect,
             );
         }
         frame.render_widget(
             Paragraph::new(format!("Tabs: {}", self.spaces[self.space].tabs.len()))
-                .fg(MUTED)
-                .bg(CHROME)
+                .fg(colors.muted)
+                .bg(colors.panel)
                 .alignment(ratatui::layout::Alignment::Right),
             Rect::new(
                 content.right().saturating_sub(8),
@@ -1388,19 +1556,27 @@ impl App {
                     if selected { "›" } else { " " },
                     tab.name.clone().unwrap_or_else(|| format!("Solmu {id}"))
                 ))
-                .fg(if selected { ACCENT } else { MUTED })
-                .bg(if selected { SELECTED } else { CHROME }),
+                .fg(if selected {
+                    colors.accent
+                } else {
+                    colors.muted
+                })
+                .bg(if selected {
+                    colors.selected
+                } else {
+                    colors.panel
+                }),
                 rect,
             );
             if rect.width >= 3 {
                 frame.render_widget(
-                    Paragraph::new("×").fg(MUTED),
+                    Paragraph::new("×").fg(colors.muted),
                     Rect::new(rect.right() - 3, rect.y, 3, 1),
                 );
             }
         }
         frame.render_widget(
-            Paragraph::new(" + Tab").fg(ACCENT),
+            Paragraph::new(" + Tab").fg(colors.accent),
             Rect::new(
                 content.right().saturating_sub(8),
                 2,
@@ -1409,7 +1585,7 @@ impl App {
             ),
         );
         if !self.tab().zoomed {
-            for divider in self.tab().layout.dividers(body(area)) {
+            for divider in self.tab().layout.dividers(self.body(area)) {
                 let text = if divider.axis == Axis::Right {
                     "│\n".repeat(usize::from(divider.area.height))
                 } else {
@@ -1422,9 +1598,9 @@ impl App {
                             .as_ref()
                             .is_some_and(|drag| drag.path == divider.path)
                         {
-                            ACCENT
+                            colors.accent
                         } else {
-                            CHROME
+                            colors.panel
                         },
                     ),
                     divider.area,
@@ -1444,12 +1620,16 @@ impl App {
                     pane.state(),
                     if self.tab().zoomed { " · zoomed" } else { "" }
                 ))
-                .fg(if index == self.active { ACCENT } else { MUTED }),
+                .fg(if index == self.active {
+                    colors.accent
+                } else {
+                    colors.muted
+                }),
                 Rect::new(rect.x, rect.y, rect.width, 1),
             );
             if rect.width >= 3 {
                 frame.render_widget(
-                    Paragraph::new("×").fg(MUTED),
+                    Paragraph::new("×").fg(colors.muted),
                     Rect::new(rect.right() - 2, rect.y, 2, 1),
                 );
             }
@@ -1458,7 +1638,10 @@ impl App {
                 .parser
                 .lock()
                 .unwrap_or_else(|error| error.into_inner());
-            frame.render_widget(TerminalScreen(parser.screen()), inner);
+            frame.render_widget(
+                TerminalScreen(parser.screen(), colors.text, colors.background),
+                inner,
+            );
             if index == self.active
                 && self.workspace.is_none()
                 && self.rename.is_none()
@@ -1475,43 +1658,47 @@ impl App {
             }
         }
         let text = if self.prefix {
-            if self.persistent {
-                "n new tab · w space · v split right · - split down · h/j/k/l focus · H/J/K/L swap · z zoom · r resize/restart · x close pane · q detach"
-            } else {
-                "n new tab · w space · v split right · - split down · h/j/k/l focus · H/J/K/L swap · z zoom · r resize/restart · x close pane · q quit"
-            }
+            format!(
+                "Prefix active · choose a shortcut · Help lists active bindings · Esc cancels ({})",
+                self.config.current.keys.prefix_text
+            )
         } else if self.navigation {
-            "Navigate: h/j/k/l panes · Up/Down spaces · Tab tabs · g find · ? help · Enter/Esc resumes typing"
+            "Navigate: use prefix shortcuts without the prefix · Help lists active bindings · Enter/Esc resumes typing".into()
         } else if self.resizing {
-            "Resize: arrows or h/j/k/l move the nearest divider · Enter/Esc finishes · drag borders with the mouse"
+            "Resize: arrows or h/j/k/l move the nearest divider · Enter/Esc finishes · drag borders with the mouse".into()
         } else if !self.notice.is_empty() {
-            &self.notice
+            self.notice.clone()
+        } else if let Some(error) = &self.config.error {
+            format!("Configuration error: {error} · using last working settings")
         } else {
-            "Ctrl+b ? help · Ctrl+b g find · right-click for actions · drag borders to resize"
+            format!(
+                "{} shortcuts · Help for active bindings · right-click for actions · drag borders to resize",
+                self.config.current.keys.prefix_text
+            )
         };
         frame.render_widget(
-            Paragraph::new(text).fg(MUTED).wrap(Wrap { trim: false }),
+            Paragraph::new(text)
+                .fg(colors.muted)
+                .wrap(Wrap { trim: false }),
             Rect::new(content.x, area.bottom().saturating_sub(2), content.width, 2),
         );
         if let Some(path) = &self.workspace {
-            draw_editor(
+            self.draw_editor(
                 frame,
                 area,
                 "New workspace",
                 "Workspace path:",
                 path,
-                &self.notice,
                 "Create",
             );
         }
         if let Some(rename) = &self.rename {
-            draw_editor(
+            self.draw_editor(
                 frame,
                 area,
                 &format!("Rename {}", rename.target.title().to_lowercase()),
                 "Name (empty resets default):",
                 &rename.editor,
-                &self.notice,
                 "Save",
             );
         }
@@ -1520,40 +1707,55 @@ impl App {
             frame.render_widget(Clear, rect);
             frame.render_widget(
                 Block::bordered()
-                    .title(if picker.help {
+                    .title(if picker.settings {
+                        " Settings "
+                    } else if picker.help {
                         " Keyboard help "
                     } else {
                         " Find spaces, tabs and panes "
                     })
-                    .bg(CHROME)
-                    .fg(TEXT),
+                    .bg(colors.panel)
+                    .fg(colors.text),
                 rect,
             );
             frame.render_widget(
-                Paragraph::new("×").fg(MUTED).bg(CHROME),
+                Paragraph::new("×").fg(colors.muted).bg(colors.panel),
                 Rect::new(rect.right().saturating_sub(4), rect.y, 3, 1),
             );
             let (query, cursor) = picker.editor.visible(rect.width.saturating_sub(5));
             frame.render_widget(
-                Paragraph::new(format!(" > {query}")).fg(ACCENT),
+                Paragraph::new(format!(" > {query}")).fg(colors.accent),
                 Rect::new(rect.x + 1, rect.y + 1, rect.width.saturating_sub(2), 1),
             );
-            let entries: Vec<_> = if picker.help {
-                help_rows(&picker.editor.text)
-            } else {
-                self.entries(&picker.editor.text)
-                    .into_iter()
-                    .map(|entry| (entry.label, entry.detail))
-                    .collect()
-            };
+            if picker.settings {
+                let status = if self.config.error.is_some() {
+                    "Configuration error"
+                } else {
+                    "Automatic updates"
+                };
+                frame.render_widget(
+                    Paragraph::new(format!("{status} · {}", self.config.path.display()))
+                        .fg(colors.muted),
+                    Rect::new(rect.x + 2, rect.y + 2, rect.width.saturating_sub(4), 1),
+                );
+            }
+            let entries = self.picker_rows(picker);
             let visible = usize::from(rect.height.saturating_sub(5));
             let selected = picker.selected.min(entries.len().saturating_sub(1));
             let start = selected.saturating_sub(visible.saturating_sub(1));
             for (index, (label, detail)) in entries.iter().enumerate().skip(start).take(visible) {
                 frame.render_widget(
                     Paragraph::new(format!("{label}    {detail}"))
-                        .fg(if index == selected { ACCENT } else { TEXT })
-                        .bg(if index == selected { SELECTED } else { CHROME }),
+                        .fg(if index == selected {
+                            colors.accent
+                        } else {
+                            colors.text
+                        })
+                        .bg(if index == selected {
+                            colors.selected
+                        } else {
+                            colors.panel
+                        }),
                     Rect::new(
                         rect.x + 2,
                         rect.y + 3 + (index - start) as u16,
@@ -1564,17 +1766,19 @@ impl App {
             }
             if entries.is_empty() {
                 frame.render_widget(
-                    Paragraph::new("No matches").fg(MUTED),
+                    Paragraph::new("No matches").fg(colors.muted),
                     Rect::new(rect.x + 2, rect.y + 3, rect.width.saturating_sub(4), 1),
                 );
             }
             frame.render_widget(
-                Paragraph::new(if picker.help {
+                Paragraph::new(if picker.settings {
+                    "Type to filter · Enter/click edits · Esc closes"
+                } else if picker.help {
                     "Type to filter · ↑/↓ scroll · Enter/Esc closes"
                 } else {
                     "Type to filter · ↑/↓ select · Enter opens · Esc closes"
                 })
-                .fg(MUTED),
+                .fg(colors.muted),
                 Rect::new(
                     rect.x + 2,
                     rect.bottom().saturating_sub(2),
@@ -1591,8 +1795,8 @@ impl App {
             frame.render_widget(
                 Block::bordered()
                     .title(format!(" {} ", menu.target.title()))
-                    .bg(CHROME)
-                    .fg(MUTED),
+                    .bg(colors.panel)
+                    .fg(colors.muted),
                 menu.area,
             );
             for (index, label) in menu.target.actions().iter().enumerate() {
@@ -1601,11 +1805,15 @@ impl App {
                 }
                 frame.render_widget(
                     Paragraph::new(*label)
-                        .fg(if index == menu.selected { ACCENT } else { TEXT })
-                        .bg(if index == menu.selected {
-                            SELECTED
+                        .fg(if index == menu.selected {
+                            colors.accent
                         } else {
-                            CHROME
+                            colors.text
+                        })
+                        .bg(if index == menu.selected {
+                            colors.selected
+                        } else {
+                            colors.panel
                         }),
                     Rect::new(
                         menu.area.x + 1,
@@ -1616,10 +1824,113 @@ impl App {
                 );
             }
         }
+        if let Some(setting) = &self.setting {
+            self.draw_editor(
+                frame,
+                area,
+                "Edit setting",
+                &format!(
+                    "{} · {}",
+                    setting.name,
+                    crate::config::Config::hint(&setting.name)
+                ),
+                &setting.editor,
+                "Save",
+            );
+        }
     }
-}
-fn sidebar_width(area: Rect) -> u16 {
-    26.min(area.width / 3)
+    fn content(&self, area: Rect) -> Rect {
+        Rect::new(
+            self.sidebar_width(area),
+            0,
+            area.width.saturating_sub(self.sidebar_width(area)),
+            area.height,
+        )
+    }
+    fn body(&self, area: Rect) -> Rect {
+        let content = self.content(area);
+        Rect::new(
+            content.x,
+            4,
+            content.width,
+            content.height.saturating_sub(6),
+        )
+    }
+
+    fn toolbar(&self, area: Rect) -> Vec<(&'static str, Rect)> {
+        let content = self.content(area);
+        let mut x = content.x;
+        [
+            "+ Space",
+            "+ Tab",
+            "Split",
+            "Zoom",
+            "Restart",
+            if self.persistent { "Detach" } else { "Quit" },
+            "Find",
+            "Navigate",
+            "Help",
+            "Settings",
+            "Sidebar",
+        ]
+        .into_iter()
+        .filter_map(|label| {
+            let width = label.len() as u16 + 4;
+            if x + width > content.right().saturating_sub(10) {
+                return None;
+            }
+            let rect = Rect::new(x, 1, width, 1);
+            x += width;
+            Some((label, rect))
+        })
+        .collect()
+    }
+
+    fn draw_editor(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        title: &str,
+        label: &str,
+        editor: &Editor,
+        confirm: &str,
+    ) {
+        let colors = self.config.current.palette();
+        let rect = modal(area);
+        frame.render_widget(Clear, rect);
+        frame.render_widget(
+            Block::bordered()
+                .title(format!(" {title} "))
+                .bg(colors.panel)
+                .fg(colors.text),
+            rect,
+        );
+        let width = rect.width.saturating_sub(4);
+        let (text, cursor) = editor.visible(width);
+        frame.render_widget(
+            Paragraph::new(label).fg(colors.muted),
+            Rect::new(rect.x + 2, rect.y + 1, width, 1),
+        );
+        frame.render_widget(
+            Paragraph::new(text).fg(colors.text).bg(colors.selected),
+            Rect::new(rect.x + 2, rect.y + 2, width, 1),
+        );
+        frame.render_widget(
+            Paragraph::new(self.notice.as_str()).fg(colors.muted),
+            Rect::new(rect.x + 2, rect.y + 3, width, 1),
+        );
+        frame.render_widget(
+            Paragraph::new(format!(" {confirm} ")).fg(colors.accent),
+            Rect::new(rect.x + 2, rect.y + 4, 10, 1),
+        );
+        frame.render_widget(
+            Paragraph::new(" Cancel ").fg(colors.muted),
+            Rect::new(rect.x + 15, rect.y + 4, 10, 1),
+        );
+        if rect.height >= 4 && rect.width >= 5 {
+            frame.set_cursor_position((rect.x + 2 + cursor, rect.y + 2));
+        }
+    }
 }
 fn valid_name(name: &Option<String>) -> bool {
     name.as_ref().is_none_or(|name| {
@@ -1669,47 +1980,22 @@ fn matches_filter(text: &str, filter: &str) -> bool {
     let text = text.to_lowercase();
     filter.split_whitespace().all(|part| text.contains(part))
 }
-fn help_rows(filter: &str) -> Vec<(String, String)> {
+fn field_help() -> Vec<(String, String)> {
     [
-        ("Ctrl+b n / c", "New tab"),
-        ("Ctrl+b w", "New space"),
-        ("Ctrl+b Up / Down", "Previous / next space"),
-        ("Ctrl+b Tab / ]", "Next tab"),
-        ("Ctrl+b Shift+Tab / [ / p", "Previous tab"),
-        ("Ctrl+b 1–8", "Select tab by position"),
-        ("Ctrl+b v / s", "Split right"),
-        ("Ctrl+b -", "Split down"),
-        ("Ctrl+b h/j/k/l", "Focus pane left/down/up/right"),
-        ("Ctrl+b H/J/K/L", "Swap pane left/down/up/right"),
-        ("Ctrl+b z", "Zoom / restore pane"),
-        ("Ctrl+b r", "Resize running pane / restart exited pane"),
-        ("Ctrl+b x", "Close pane"),
-        ("Ctrl+b X", "Close tab"),
-        ("Ctrl+b D", "Close space"),
-        ("Ctrl+b W", "Rename space"),
-        ("Ctrl+b T", "Rename tab"),
-        ("Ctrl+b P", "Rename pane"),
-        ("Ctrl+b g", "Find spaces, tabs and panes"),
-        ("Ctrl+b m", "Navigation mode"),
-        ("Ctrl+b ?", "Search keyboard help"),
-        ("Ctrl+b q", "Detach / quit foreground session"),
-        ("Ctrl+b b", "Send literal Ctrl+b"),
-        (
-            "Left/Right · Home/End",
-            "Edit fields at cursor, by Unicode grapheme",
-        ),
+        ("Left/Right · Ctrl+b/f", "Edit fields by Unicode grapheme"),
+        ("Home/End · Ctrl+a/e", "Start / end of field"),
         ("Alt+b/f · Ctrl+Left/Right", "Move by word in fields"),
+        ("Backspace/Delete · Ctrl+h/d", "Delete adjacent grapheme"),
         (
             "Ctrl+u/k/w · Alt+d",
-            "Cut text before/after cursor, previous/next word",
+            "Cut before/after cursor, previous/next word",
         ),
         ("Ctrl+y", "Insert last cut text in this field"),
         ("Right-click", "Space / tab / pane actions"),
         ("Drag divider", "Resize panes"),
     ]
     .into_iter()
-    .filter(|(key, label)| matches_filter(&format!("{key} {label}"), &filter.to_lowercase()))
-    .map(|(key, label)| (key.into(), label.into()))
+    .map(|(key, description)| (key.into(), description.into()))
     .collect()
 }
 fn picker_area(area: Rect) -> Rect {
@@ -1720,67 +2006,6 @@ fn picker_area(area: Rect) -> Rect {
         area.y + (area.height - height) / 2,
         width,
         height,
-    )
-}
-fn draw_editor(
-    frame: &mut Frame,
-    area: Rect,
-    title: &str,
-    label: &str,
-    editor: &Editor,
-    notice: &str,
-    confirm: &str,
-) {
-    let rect = modal(area);
-    frame.render_widget(Clear, rect);
-    frame.render_widget(
-        Block::bordered()
-            .title(format!(" {title} "))
-            .bg(CHROME)
-            .fg(TEXT),
-        rect,
-    );
-    let width = rect.width.saturating_sub(4);
-    let (text, cursor) = editor.visible(width);
-    frame.render_widget(
-        Paragraph::new(label).fg(MUTED),
-        Rect::new(rect.x + 2, rect.y + 1, width, 1),
-    );
-    frame.render_widget(
-        Paragraph::new(text).fg(TEXT).bg(SELECTED),
-        Rect::new(rect.x + 2, rect.y + 2, width, 1),
-    );
-    frame.render_widget(
-        Paragraph::new(notice).fg(MUTED),
-        Rect::new(rect.x + 2, rect.y + 3, width, 1),
-    );
-    frame.render_widget(
-        Paragraph::new(format!(" {confirm} ")).fg(ACCENT),
-        Rect::new(rect.x + 2, rect.y + 4, 10, 1),
-    );
-    frame.render_widget(
-        Paragraph::new(" Cancel ").fg(MUTED),
-        Rect::new(rect.x + 15, rect.y + 4, 10, 1),
-    );
-    if rect.height >= 4 && rect.width >= 5 {
-        frame.set_cursor_position((rect.x + 2 + cursor, rect.y + 2));
-    }
-}
-fn content(area: Rect) -> Rect {
-    Rect::new(
-        sidebar_width(area),
-        0,
-        area.width.saturating_sub(sidebar_width(area)),
-        area.height,
-    )
-}
-fn body(area: Rect) -> Rect {
-    let content = content(area);
-    Rect::new(
-        content.x,
-        4,
-        content.width,
-        content.height.saturating_sub(6),
     )
 }
 pub fn pane_inner(rect: Rect) -> Rect {
@@ -1798,30 +2023,4 @@ fn modal(area: Rect) -> Rect {
         area.width * 3 / 4,
         6.min(area.height),
     )
-}
-fn toolbar(area: Rect, persistent: bool) -> Vec<(&'static str, Rect)> {
-    let content = content(area);
-    let mut x = content.x;
-    [
-        "+ Space",
-        "+ Tab",
-        "Split",
-        "Zoom",
-        "Restart",
-        if persistent { "Detach" } else { "Quit" },
-        "Find",
-        "Navigate",
-        "Help",
-    ]
-    .into_iter()
-    .filter_map(|label| {
-        let width = label.len() as u16 + 4;
-        if x + width > content.right().saturating_sub(10) {
-            return None;
-        }
-        let rect = Rect::new(x, 1, width, 1);
-        x += width;
-        Some((label, rect))
-    })
-    .collect()
 }

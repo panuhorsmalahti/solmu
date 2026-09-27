@@ -192,6 +192,22 @@ fn spawn(directory: &Path, name: &str, directories: &[PathBuf]) -> Result<()> {
     command.spawn()?;
     Ok(())
 }
+pub fn has_session(name: &str) -> Result<bool> {
+    let directory = root()?;
+    if connect(&directory, name, "status", (80, 24)).is_ok() {
+        return Ok(true);
+    }
+    let path = directory.join(format!("{name}.json"));
+    if fs::metadata(&path).is_ok_and(|metadata| metadata.len() <= 1024 * 1024)
+        && let Ok(bytes) = fs::read(path)
+        && let Ok(snapshot) = serde_json::from_slice::<crate::app::Snapshot>(&bytes)
+        && snapshot.validate().is_ok()
+        && !snapshot.is_empty()
+    {
+        return Ok(true);
+    }
+    Ok(false)
+}
 pub fn ensure(name: &str, directories: &[PathBuf]) -> Result<PathBuf> {
     validate_name(name)?;
     let directory = root()?;
@@ -441,7 +457,7 @@ fn serve_inner(name: &str, executable: PathBuf, directories: Vec<PathBuf>) -> Re
     let mut app = if let Some(snapshot) = snapshot.filter(|snapshot| !snapshot.is_empty()) {
         App::restore(executable, snapshot)?
     } else {
-        let mut app = App::new(executable);
+        let mut app = App::new(executable)?;
         for cwd in directories {
             app.add_space(cwd)?;
         }
@@ -449,6 +465,7 @@ fn serve_inner(name: &str, executable: PathBuf, directories: Vec<PathBuf>) -> Re
         app
     };
     app.persistent = true;
+    app.resize_headless()?;
     persistence.save(&app);
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     let endpoint = Endpoint {
@@ -490,6 +507,10 @@ fn run_server(
     let handshakes = Arc::new(AtomicUsize::new(0));
     let mut saved_at = Instant::now();
     loop {
+        if app.config.refresh(false) && clients.is_empty() {
+            app.use_view(&last_view);
+            app.resize_headless()?;
+        }
         // Authentication reads happen outside the event loop so a half-written
         // local connection cannot freeze terminal rendering or other clients.
         while let Ok((mut stream, _)) = listener.accept() {
@@ -557,7 +578,16 @@ fn run_server(
                     if let Some(id) = read {
                         let response = match app.panes.iter().find(|pane| pane.id == id) {
                             Some(pane) => {
-                                Response::Text(pane.parser.lock().unwrap().screen().contents())
+                                let parser = pane.parser.lock().unwrap();
+                                let screen = parser.screen();
+                                Response::Text(
+                                    screen
+                                        .rows(0, screen.size().1)
+                                        .collect::<Vec<_>>()
+                                        .join("\n")
+                                        .trim_end()
+                                        .into(),
+                                )
                             }
                             None => Response::Error("Pane does not exist".into()),
                         };

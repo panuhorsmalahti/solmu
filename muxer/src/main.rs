@@ -1,4 +1,6 @@
 mod app;
+mod bindings;
+mod config;
 mod editor;
 mod keys;
 mod layout;
@@ -21,11 +23,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     while let Some(arg) = args.next() {
         if arg == "--help" || arg == "-h" {
             println!(
-                "Solmu muxer\n\nUsage: muxer [--session NAME] [--cwd PATH]... [--foreground]\n       muxer session list\n       muxer session attach NAME\n       muxer server start|status|stop [--session NAME]\n       muxer pane read ID [--session NAME]\n\nSpaces group Solmu tabs by working directory. Tabs hold real terminal panes.\nStart solmu-backend first. Click spaces, tabs, close icons, or toolbar controls.\nRight-click a pane for actions; drag dividers to resize.\nCtrl+b then: n new tab; w new space; Tab/] next tab; [ previous tab;\nUp/Down switch space; 1-8 select tab; s/v split right; - split down;\nh/j/k/l focus; H/J/K/L swap; z zoom; r resize/restart; x close pane;\nX close tab; q detach. Ctrl+b b sends literal Ctrl+b.\nUp to eight spaces, eight tabs per space, and eight panes per tab.\nSOLMU_BACKEND_URL selects the backend; SOLMU_CLI_PATH selects solmu-cli.\nDefault: attach to a local background session; panes survive detaching.\nUse server stop to terminate panes, or --foreground for a temporary session.\nSOLMU_MUXER_DIR selects the session state directory."
+                "Solmu muxer\n\nUsage: muxer [--session NAME] [--cwd PATH]... [--foreground]\n       muxer session list\n       muxer session attach NAME\n       muxer server start|status|stop [--session NAME]\n       muxer pane read ID [--session NAME]\n\nSpaces group Solmu tabs by working directory. Tabs hold real terminal panes.\nStart solmu-backend first. Click spaces, tabs, close icons, or toolbar controls.\nRight-click spaces, tabs, or panes for actions; drag dividers to resize.\nCtrl+b then: n new tab; w new space; Tab/] next tab; [ previous tab;\nUp/Down switch space; 1-8 select tab; s/v split right; - split down;\nh/j/k/l focus; H/J/K/L swap; z zoom; r resize/restart; x close pane;\nX close tab; D close space; W/T/P rename space/tab/pane; g find; m navigate;\n? help; comma settings; B toggle sidebar; q detach. Ctrl+b b sends literal Ctrl+b.\nUp to eight spaces, eight tabs per space, and eight panes per tab.\nSOLMU_BACKEND_URL selects the backend; SOLMU_CLI_PATH selects solmu-cli.\nDefault: attach to a local background session; panes survive detaching.\nUse server stop to terminate panes, or --foreground for a temporary session.\nSOLMU_MUXER_DIR selects the session state directory.\nEdit config.toml there for automatically applied shortcuts, colors, and settings.\nSOLMU_MUXER_CONFIG selects another file; --default-config prints defaults."
             );
             return Ok(());
         } else if arg == "--version" {
             println!("Solmu muxer {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        } else if arg == "--default-config" {
+            print!("{}", config::default_text());
             return Ok(());
         } else if arg == "--cwd" {
             directories.push(PathBuf::from(
@@ -93,11 +98,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         "stop" | "status" => return session::control(&name, &mode),
         _ => {}
     }
-    if directories.is_empty() {
-        directories.push(std::env::current_dir()?);
-    }
     if directories.len() > 8 {
         return Err("Solmu muxer supports up to eight spaces".into());
+    }
+    if mode != "foreground" && session::has_session(&name)? {
+        // Live and restored layouts own their directories. A changed new-pane
+        // policy must not prevent reattaching to existing work.
+        directories = vec![std::env::current_dir()?];
+    } else if directories.is_empty() {
+        let config = config::Manager::new()?;
+        directories.push(
+            config
+                .current
+                .cwd(&std::env::current_dir()?, config.path.parent().unwrap())?,
+        );
     }
     for directory in &mut directories {
         *directory = directory.canonicalize()?;
@@ -128,7 +142,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if mode == "serve" {
         return session::serve(&name, executable, directories);
     }
-    let mut app = App::new(executable);
+    let mut app = App::new(executable)?;
     for directory in directories {
         app.add_space(directory)?;
     }
@@ -141,6 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             event::EnableBracketedPaste
         )?;
         loop {
+            app.config.refresh(false);
             for pane in &mut app.panes {
                 pane.poll()?;
             }

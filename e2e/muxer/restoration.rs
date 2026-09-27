@@ -137,6 +137,14 @@ async fn restarting_restores_spaces_nested_layouts_focus_models_and_conversation
     restored.prefix('z');
     restored.wait("Model: gpt-6-luna").await;
     restored.wait("Solmu 3 · exited 0").await;
+    restored.resize(40, 100);
+    restored.wait_resized(100).await;
+    restored.wait("new conversation.").await;
+    restored.resize(40, 180);
+    restored.wait_resized(180).await;
+    restored
+        .wait("Use Restart to start a new conversation.")
+        .await;
     for (key, title, name) in [
         ('W', "Rename space", "Solmu workspace"),
         ('T', "Rename tab", "Agents"),

@@ -15,16 +15,24 @@ struct Terminal {
 }
 impl Terminal {
     fn start(backend: &Backend, directories: &[&std::path::Path]) -> Self {
-        Self::start_mode(backend, directories, true, "default")
+        Self::start_mode(backend, directories, true, "default", None, None)
     }
     fn start_session(backend: &Backend, name: &str) -> Self {
-        Self::start_mode(backend, &[], false, name)
+        Self::start_mode(backend, &[], false, name, None, None)
+    }
+    fn start_config(backend: &Backend, path: &std::path::Path) -> Self {
+        Self::start_mode(backend, &[], true, "default", Some(path), None)
+    }
+    fn start_home(backend: &Backend, home: &std::path::Path) -> Self {
+        Self::start_mode(backend, &[], true, "default", None, Some(home))
     }
     fn start_mode(
         backend: &Backend,
         directories: &[&std::path::Path],
         foreground: bool,
         name: &str,
+        config: Option<&std::path::Path>,
+        home: Option<&std::path::Path>,
     ) -> Self {
         let pair = native_pty_system()
             .openpty(PtySize {
@@ -50,6 +58,14 @@ impl Terminal {
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         command.env_remove("NO_COLOR");
+        if let Some(path) = home {
+            command.env(if cfg!(windows) { "USERPROFILE" } else { "HOME" }, path);
+        }
+        if let Some(path) = config {
+            command.env("SOLMU_MUXER_CONFIG", path);
+        } else {
+            command.env_remove("SOLMU_MUXER_CONFIG");
+        }
         for directory in directories {
             command.arg("--cwd");
             command.arg(directory);
@@ -268,6 +284,7 @@ mod panes;
 
 mod workspaces;
 
+mod configuration;
 mod layouts;
 mod names;
 mod navigation;

@@ -13,6 +13,7 @@ impl Session<'_> {
             .current_dir(self.backend.directory.path())
             .env("SOLMU_BACKEND_URL", &self.backend.url)
             .env("SOLMU_CLI_PATH", binary("solmu-cli"))
+            .env_remove("SOLMU_MUXER_CONFIG")
             .env(
                 "SOLMU_MUXER_DIR",
                 self.backend.directory.path().join("muxer-state"),

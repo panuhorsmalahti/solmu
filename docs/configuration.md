@@ -4,6 +4,10 @@ The terminal workspace uses `SOLMU_BACKEND_URL` and optionally `SOLMU_CLI_PATH`
 to locate its CLI executable. `SOLMU_MUXER_DIR` overrides the private session
 directory (default: `~/.solmu/muxer`, or `%USERPROFILE%\.solmu\muxer` on Windows).
 It holds saved layouts, local connection state, logs, and recovery backups.
+Muxer settings live in `config.toml` there; `SOLMU_MUXER_CONFIG` selects another
+file. Edit them in its **Settings** UI or directly in the file; changes apply
+automatically. See [Muxer settings](muxer-configuration.md) for shortcuts, themes,
+sidebar settings, and working-directory policies.
 See [Muxer configuration and recovery](muxer.md).
 
 For the Linux sandbox launcher, `SOLMU_CGROUP_ROOT` optionally chooses an
@@ -12,7 +16,8 @@ when this variable is unset. See [sandbox setup and limits](boxer.md).
 
 Solmu loads `.env` from the working directory (or a parent directory) at startup.
 Environment variables already set in your shell take precedence. Restart the
-backend after changing configuration.
+backend after changing its environment configuration. Muxer's TOML settings
+reload automatically.
 
 Copy `.env.example` to `.env` and fill `OPENAI_API_KEY` to use OpenAI. `.env` is
 ignored by Git. Keep provider credentials on the backend; clients never need them.
