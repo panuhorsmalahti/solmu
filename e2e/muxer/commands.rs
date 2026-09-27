@@ -306,6 +306,8 @@ async fn tui_shell_and_command_controls_run_in_the_workspace_and_preserve_solmu_
     tui.send(
         b"\x1b[200~echo Command finished && echo command-finished> command-output.txt\x1b[201~",
     );
+    // Wait for the paste to reach the dialog before clicking its Run button.
+    tui.wait("command-output.txt").await;
     tui.click_at(26, 17);
     assert!(
         file(&backend.directory.path().join("command-output.txt"))

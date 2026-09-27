@@ -640,6 +640,9 @@ async fn replacing_a_process_never_completes_the_old_turn_with_a_new_reply() {
     command(&session, &["pane", "split", "1"]);
     ready(&session, "2").await;
     command(&session, &["agent", "rename", "1", "Writer"]);
+    // Keep the old turn active until its process is replaced, even when native
+    // launches and input handling are delayed by other concurrent tests.
+    backend.hold_next_reply();
     let pending = Pending::new(
         &session,
         &[
@@ -664,6 +667,22 @@ async fn replacing_a_process_never_completes_the_old_turn_with_a_new_reply() {
             "10000",
         ],
     );
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if backend
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(_, body)| body["stream"] == true)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
     command(&session, &["pane", "send-text", "1", "/exit"]);
     command(&session, &["agent", "send-keys", "Writer", "enter"]);
     let error = pending.finish(false).await;
