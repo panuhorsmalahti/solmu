@@ -55,12 +55,7 @@ impl Snapshot {
             })
             .collect();
         format!(
-            "Workspace skills are installed in .agents/skills/<name>/SKILL.md. \
-             The following catalog is discovered automatically for this conversation. \
-             Use relevant skills: first use Read to load their full SKILL.md instructions. \
-             Resolve references relative to the skill's directory and read resources as needed. \
-             Skill metadata does not grant tool permissions or require executing scripts. \
-             Users can install skills by placing skill folders in .agents/skills/.\n{}",
+            "Workspace skills discovered for this conversation:\n{}",
             serde_json::json!({"directory": self.catalog.directory, "skills": items})
         )
     }

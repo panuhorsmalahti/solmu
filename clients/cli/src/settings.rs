@@ -22,6 +22,7 @@ pub enum Page {
         model_focus: bool,
         cursor: usize,
         busy: bool,
+        pending_refresh: bool,
         notice: String,
     },
     Models {
@@ -73,6 +74,7 @@ impl Page {
             model_focus: false,
             cursor: 0,
             busy: true,
+            pending_refresh: false,
             notice: "Loading profile…".into(),
         }
     }
@@ -91,11 +93,13 @@ impl Page {
             model,
             original_model,
             busy,
+            pending_refresh,
             notice,
             ..
         } = self
         {
             if *busy {
+                *pending_refresh = true;
                 return false;
             }
             if draft != original || model != original_model {
@@ -104,6 +108,18 @@ impl Page {
             }
             *busy = true;
             return true;
+        }
+        false
+    }
+    pub fn refresh_pending(&mut self) -> bool {
+        if let Self::Profile {
+            busy: false,
+            pending_refresh,
+            ..
+        } = self
+            && std::mem::take(pending_refresh)
+        {
+            return self.refresh();
         }
         false
     }
@@ -452,5 +468,40 @@ impl Page {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn profile(text: &str) -> Profile {
+        Profile {
+            system_prompt: text.into(),
+            model: None,
+            backend_default_model: None,
+            edited_at: "2026-09-27T00:00:00Z".into(),
+        }
+    }
+    #[test]
+    fn live_events_during_profile_loading_are_coalesced_and_drafts_are_preserved() {
+        let mut page = Page::profile();
+        assert!(!page.refresh());
+        page.update(Event::Loaded(Ok(profile("First value"))));
+        assert!(page.refresh_pending());
+        assert!(!page.refresh());
+        page.update(Event::Loaded(Ok(profile("Second value"))));
+        assert!(page.refresh_pending());
+        page.update(Event::Loaded(Ok(profile("Newest value"))));
+        assert!(!page.refresh_pending());
+        let Page::Profile { draft, .. } = &mut page else {
+            unreachable!()
+        };
+        *draft = "Unsent preferences".into();
+        assert!(!page.refresh());
+        let Page::Profile { draft, notice, .. } = &page else {
+            unreachable!()
+        };
+        assert_eq!(draft, "Unsent preferences");
+        assert!(notice.contains("Your draft is unchanged"));
     }
 }

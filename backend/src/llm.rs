@@ -174,9 +174,13 @@ impl Llm {
         } else {
             self.main_model().await?
         };
-        let messages = std::iter::once(ChatMessage::system(system_prompt))
-            .chain(history.iter().cloned())
-            .collect();
+        let messages = [
+            ChatMessage::system(crate::prompt::INTERNAL_SYSTEM_PROMPT),
+            ChatMessage::system(system_prompt),
+        ]
+        .into_iter()
+        .chain(history.iter().cloned())
+        .collect();
         let request = ChatRequest::new(messages).with_tools(tools);
         let options = ChatOptions::default()
             .with_capture_content(true)

@@ -1,12 +1,19 @@
 # Solmu agent
 
-Solmu's default system prompt is:
+Solmu uses two system prompts for every reply:
 
-> You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace. Users can install skills in .agents/skills/. Read relevant SKILL.md instructions before applying a skill.
+- **Internal:** built-in instructions introduce Solmu, describe workspace tools,
+  and explain installing skills in `.agents/skills/<name>/SKILL.md`, reading
+  relevant instructions, and resolving resources. Profile cannot replace this
+  prompt; it is maintained with the backend.
+- **Editable:** your saved Profile prompt supplies preferences such as language,
+  tone, and project guidance. Its initial value is
+  “You are Solmu, an autonomous agent.”
 
-The full saved conversation and tool results follow the prompt. Solmu can
+The internal prompt comes first, then your editable prompt. The full saved
+conversation and tool results follow them. Solmu can
 manage conversations, stream replies, and use [tools](tools.md) to work in a
-[workspace](workspaces.md). Edit the prompt in [Profile](profile.md); upgrades
+[workspace](workspaces.md). Edit your preferences in [Profile](profile.md); upgrades
 preserve your saved prompt.
 
 Installed [workspace skills](skills.md) enter the runtime context automatically.

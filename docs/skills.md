@@ -42,7 +42,9 @@ skill does not execute its scripts or grant additional tool permissions.
 This follows the format's progressive loading: the catalog enters context
 automatically; instructions and resources are loaded as the task needs them.
 Catalog context is runtime information, separate from saved chat messages and
-your editable Profile prompt. Upgrades preserve your existing prompt.
+your editable Profile prompt. Built-in skill installation and usage instructions
+live in the internal system prompt, which remains present when you edit Profile.
+Upgrades preserve your existing editable prompt.
 
 The CLI uses its thread's working folder, usually the folder where you ran
 `solmu`. Desktop and web use the thread's configured [workspace](workspaces.md).

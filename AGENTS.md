@@ -24,5 +24,7 @@ The website must remain feature complete as a concise introduction to Solmu.
 Describe every relevant higher-level user feature and keep its client and setup
 links current. Do not advertise capabilities that are not implemented.
 
-The agent system prompt must mention relevant new capabilities when needed.
+The agent's internal system prompt must mention relevant new capabilities when needed.
 Review and update it with feature changes; keep it concise.
+Keep built-in operating instructions in the internal prompt, separate from the
+user-editable Profile prompt. Preserve users' saved prompts during upgrades.

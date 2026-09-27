@@ -73,9 +73,16 @@ async fn replies_stream_before_completion_and_are_saved_with_history() {
     assert!(captured[1].1.to_string().contains("Hello from Solmu"));
     assert!(captured[1].1.to_string().contains("Follow up"));
     assert_eq!(captured[0].1["messages"][0]["role"], "system");
+    assert!(
+        captured[0].1["messages"][0]["content"]
+            .as_str()
+            .unwrap()
+            .contains(".agents/skills/<name>/SKILL.md")
+    );
+    assert_eq!(captured[0].1["messages"][1]["role"], "system");
     assert_eq!(
-        captured[0].1["messages"][0]["content"],
-        "You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace. Users can install skills in .agents/skills/. Read relevant SKILL.md instructions before applying a skill."
+        captured[0].1["messages"][1]["content"],
+        "You are Solmu, an autonomous agent."
     );
 }
 

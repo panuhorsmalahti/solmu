@@ -190,7 +190,12 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                         }
                     }
                 },
-                Some(event) = settings_receiver.recv() => { if let Some(page) = &mut page { page.update(event); } },
+                Some(event) = settings_receiver.recv() => {
+                    if let Some(page) = &mut page {
+                        page.update(event);
+                        if page.refresh_pending() { settings::load(session.api.clone(), settings_sender.clone()); }
+                    }
+                },
                 Some(update) = receiver.recv() => {
                     if matches!(update, Update::Opened(_, _)) { startup_thread = None; }
                     runtime.update(&update);

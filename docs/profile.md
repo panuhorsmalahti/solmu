@@ -4,10 +4,12 @@ Open **Profile** above Conversations in desktop or web. Clicking the Solmu
 name in the web sidebar also opens `/profile`. In the terminal, use `/profile`.
 Muxer tabs use the same CLI Profile editor.
 
-The page shows your current system prompt. Edit it and save to change how
+The page shows your current editable system prompt. Edit it and save to change how
 Solmu responds. Your profile is saved on the backend and shared across all
 clients and threads. The initial prompt introduces Solmu as an autonomous
-agent and names its workspace tools. Existing saved prompts are preserved.
+agent. A separate internal prompt always supplies workspace tool instructions
+and explains installing and using skills in `.agents/skills/`; editing Profile
+does not remove it. Existing saved prompts and their version history are preserved.
 Changes apply to subsequent replies; a reply already running keeps its original
 settings. Saved messages remain unchanged.
 
@@ -33,6 +35,7 @@ supports multiple lines, cursor keys, Home, End, Backspace, and Delete.
 Changes made elsewhere appear automatically. Unsaved edits are preserved;
 you will see a notice if Profile changes while you are editing. There are no
 reload controls. The web client retries failed profile loads automatically.
+The CLI also applies updates that arrive while Profile is loading or saving.
 
 See [model settings](configuration.md) and [client screenshots](clients.md).
 
