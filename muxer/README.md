@@ -25,6 +25,7 @@ policies. Changes apply automatically, including edits to `config.toml`.
 Read [Muxer settings](../docs/muxer-configuration.md) for examples.
 Scripts can inspect sessions, create and arrange panes, send terminal input,
 and read live screens through the [local automation commands](../docs/muxer-automation.md).
+Event streams report live changes; waits observe pane states or matching output.
 Press **Ctrl+b**, then **n** for a new tab, **Tab** to switch tabs, Up/Down to
 switch spaces, **s** to split right, **-** to split down, or **q** to detach.
 Use **Ctrl+b h/j/k/l** to focus panes, **H/J/K/L** to swap them, **z** to zoom,

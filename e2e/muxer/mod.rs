@@ -291,6 +291,7 @@ mod workspaces;
 mod configuration;
 mod control;
 mod layouts;
+mod monitors;
 mod names;
 mod navigation;
 mod restoration;

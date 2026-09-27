@@ -32,17 +32,33 @@ fn rejected(session: &Session<'_>, args: &[&str], code: i32, message: &str) {
     );
 }
 async fn idle(session: &Session<'_>, pane: u64) -> Value {
+    let mut observed = Value::Null;
     tokio::time::timeout(Duration::from_secs(25), async {
         loop {
             let record = command(session, &["pane", "get", &pane.to_string()]);
             if record["state"] == "idle" && record["thread"].is_string() {
                 break record;
             }
+            observed = record;
             tokio::time::sleep(Duration::from_millis(30)).await;
         }
     })
     .await
-    .unwrap()
+    .unwrap_or_else(|_| {
+        let screen = session.command(&["pane", "read", &pane.to_string()]);
+        let log = std::fs::read_to_string(
+            session
+                .backend
+                .directory
+                .path()
+                .join(format!("muxer-state/{}.log", session.name)),
+        )
+        .unwrap_or_default();
+        panic!(
+            "Pane {pane} never became idle: {observed}\nScreen: {}\nServer log: {log}",
+            String::from_utf8_lossy(&screen.stdout)
+        );
+    })
 }
 async fn screen(session: &Session<'_>, pane: &str, expected: &str) -> Value {
     tokio::time::timeout(Duration::from_secs(25), async {
@@ -407,14 +423,14 @@ async fn invalid_arguments_and_failed_requests_never_mutate_or_start_a_session()
     assert!(session.command(&["api", "--help"]).status.success());
 }
 
-fn wire_write(stream: &mut std::net::TcpStream, value: &Value) {
+pub(super) fn wire_write(stream: &mut std::net::TcpStream, value: &Value) {
     let bytes = serde_json::to_vec(value).unwrap();
     stream
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .unwrap();
     stream.write_all(&bytes).unwrap();
 }
-fn wire_read(stream: &mut std::net::TcpStream) -> Value {
+pub(super) fn wire_read(stream: &mut std::net::TcpStream) -> Value {
     let mut size = [0; 4];
     stream.read_exact(&mut size).unwrap();
     let mut bytes = vec![0; u32::from_be_bytes(size) as usize];

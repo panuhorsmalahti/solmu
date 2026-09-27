@@ -47,13 +47,15 @@ enum Request {
     Input(Event),
 }
 #[derive(Serialize, Deserialize)]
-enum Response {
+pub(crate) enum Response {
     Text(String),
     Ready { pid: u32 },
     Frame(Vec<u8>),
     Detached,
     Error(String),
     Control(serde_json::Value),
+    Event(serde_json::Value),
+    End(serde_json::Value),
 }
 
 pub fn validate_name(name: &str) -> Result<()> {
@@ -102,7 +104,7 @@ pub(crate) fn private_file(path: &Path, append: bool) -> io::Result<File> {
     }
     options.open(path)
 }
-fn packet<T: Serialize>(stream: &mut TcpStream, value: &T) -> io::Result<()> {
+pub(crate) fn packet<T: Serialize>(stream: &mut TcpStream, value: &T) -> io::Result<()> {
     let bytes = serde_json::to_vec(value)?;
     if bytes.len() > MAX_PACKET {
         return Err(io::Error::other("Muxer packet is too large"));
@@ -164,12 +166,32 @@ fn connect_request(
     }
 }
 pub fn rpc(name: &str, request: control::Request) -> Result<serde_json::Value> {
+    let monitored = request.monitored();
     let mut stream = connect_request(&root()?, name, "control", (80, 24), Some(request))?;
-    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    stream.set_read_timeout(if monitored {
+        None
+    } else {
+        Some(Duration::from_secs(10))
+    })?;
     match receive(&mut stream)? {
         Response::Control(value) => Ok(value),
         Response::Error(error) => Err(error.into()),
         _ => Err("Unexpected Muxer control response".into()),
+    }
+}
+pub fn subscribe(name: &str, request: control::Request) -> Result<()> {
+    let mut stream = connect_request(&root()?, name, "control", (80, 24), Some(request))?;
+    loop {
+        match receive(&mut stream)? {
+            Response::Event(value) => {
+                let mut output = io::stdout().lock();
+                writeln!(output, "{}", control::success(value))?;
+                output.flush()?;
+            }
+            Response::End(_) => return Ok(()),
+            Response::Error(error) => return Err(error.into()),
+            _ => return Err("Unexpected Muxer event response".into()),
+        }
     }
 }
 #[cfg(windows)]
@@ -543,6 +565,7 @@ fn run_server(
     let mut last_view = app.view();
     let handshakes = Arc::new(AtomicUsize::new(0));
     let replies = Arc::new(AtomicUsize::new(0));
+    let mut monitors = crate::monitor::Manager::default();
     let mut saved_at = Instant::now();
     loop {
         if app.config.refresh(false) && clients.is_empty() {
@@ -609,6 +632,16 @@ fn run_server(
                         continue;
                     }
                     if let Some(request) = control {
+                        if request.monitored() {
+                            app.use_view(&last_view);
+                            match monitors.prepare(&request, app) {
+                                Ok(prepared) => monitors.accept(stream, prepared, endpoint.pid),
+                                Err(error) => {
+                                    let _ = packet(&mut stream, &Response::Error(error));
+                                }
+                            }
+                            continue;
+                        }
                         if replies.load(Ordering::Relaxed) >= 32 {
                             let _ = packet(
                                 &mut stream,
@@ -635,6 +668,7 @@ fn run_server(
                                 value["server_pid"] = serde_json::json!(endpoint.pid);
                                 value["protocol"] = serde_json::json!(PROTOCOL);
                                 value["muxer_version"] = serde_json::json!(env!("CARGO_PKG_VERSION"));
+                                value["active_monitors"] = serde_json::json!(monitors.len());
                             }
                             value
                         });
@@ -757,6 +791,17 @@ fn run_server(
         for pane in &mut app.panes {
             pane.poll()?;
         }
+        app.use_view(&last_view);
+        let monitor_snapshot = monitors.has_subscribers().then(|| {
+            let mut value = app.automation_snapshot();
+            value["clients"] = serde_json::json!(clients.iter().map(|(id, client)| serde_json::json!({"id":id,"active_pane":client.view.active_pane(),"width":client.area.width,"height":client.area.height})).collect::<Vec<_>>());
+            value["server_pid"] = serde_json::json!(endpoint.pid);
+            value["protocol"] = serde_json::json!(PROTOCOL);
+            value["muxer_version"] = serde_json::json!(env!("CARGO_PKG_VERSION"));
+            value["active_monitors"] = serde_json::json!(monitors.len());
+            value
+        });
+        monitors.poll(app, monitor_snapshot.as_ref());
         if saved_at.elapsed() >= Duration::from_millis(500) {
             app.use_view(&last_view);
             persistence.save(app);

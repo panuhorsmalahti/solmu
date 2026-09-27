@@ -178,7 +178,8 @@ Use `muxer api snapshot` to inspect a session and `muxer space`, `tab`, or `pane
 commands to create, name, focus, arrange, close, and restart terminals. Scripts
 can send text/keys and read real pane screens while detached. See
 [Muxer automation](muxer-automation.md) for commands, JSON results, stable IDs,
-and selecting a particular attached terminal.
+and selecting a particular attached terminal. Event subscriptions send live
+snapshots, and state/output waits coordinate scripts without polling the CLI.
 
 ## Restart recovery
 

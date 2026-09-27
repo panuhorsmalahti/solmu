@@ -47,7 +47,7 @@ impl App {
         self.focus_target(target(kind, id));
         Ok(())
     }
-    fn automation_record(&self, kind: Kind, id: u64) -> Result<Value, Box<dyn Error>> {
+    pub fn automation_record(&self, kind: Kind, id: u64) -> Result<Value, Box<dyn Error>> {
         match kind {
             Kind::Space => {
                 let space = self
@@ -117,6 +117,9 @@ impl App {
     }
     fn automation_inner(&mut self, request: &Request) -> Result<Value, Box<dyn Error>> {
         match request {
+            Request::Wait { .. } | Request::WaitOutput { .. } | Request::Subscribe { .. } => {
+                Err("Monitor requests belong to the session coordinator".into())
+            }
             Request::Snapshot => Ok(self.automation_snapshot()),
             Request::Get { target, id } => self.automation_record(*target, *id),
             Request::List { target, parent } => {

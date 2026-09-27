@@ -5,6 +5,7 @@ mod control;
 mod editor;
 mod keys;
 mod layout;
+mod monitor;
 mod pane;
 mod persistence;
 mod session;

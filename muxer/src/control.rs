@@ -113,11 +113,39 @@ pub enum Request {
         pane: u64,
         keys: Vec<String>,
     },
+    Wait {
+        pane: u64,
+        until: Vec<String>,
+        #[serde(default)]
+        timeout_ms: Option<u64>,
+    },
+    WaitOutput {
+        pane: u64,
+        pattern: String,
+        #[serde(default)]
+        regex: bool,
+        #[serde(default)]
+        timeout_ms: Option<u64>,
+    },
+    Subscribe {
+        #[serde(default)]
+        pane: Option<u64>,
+        #[serde(default)]
+        timeout_ms: Option<u64>,
+        #[serde(default)]
+        count: Option<u32>,
+    },
 }
 fn half() -> u16 {
     500
 }
 impl Request {
+    pub fn monitored(&self) -> bool {
+        matches!(
+            self,
+            Self::Wait { .. } | Self::WaitOutput { .. } | Self::Subscribe { .. }
+        )
+    }
     pub fn client(&self) -> Option<u64> {
         match self {
             Self::Focus { client, .. } | Self::Zoom { client, .. } => *client,
@@ -170,6 +198,9 @@ pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
   muxer pane resize ID --direction right|down --ratio 0.6
   muxer pane restart ID | read ID [--lines N] [--ansi] [--json]
   muxer pane send-text ID TEXT | send-keys ID KEY [KEY ...]
+  muxer pane wait ID --until idle|working|error|exited [--until STATE]... [--timeout MS]
+  muxer pane wait-output ID --match TEXT|--regex PATTERN [--timeout MS]
+  muxer events [--pane ID] [--timeout MS] [--count N]
 Focus commands accept --client ID; otherwise they change the server's next-attach view.
 New spaces, tabs, and splits preserve focus unless --focus is supplied.
 Names can be cleared with rename ID --clear. JSON success goes to stdout;
@@ -181,6 +212,19 @@ struct Args {
     options: bool,
 }
 impl Args {
+    fn timeout(&mut self) -> Result<Option<u64>, String> {
+        self.take("--timeout")?
+            .map(|v| {
+                number(&v).and_then(|n| {
+                    if n <= 86400000 {
+                        Ok(n)
+                    } else {
+                        Err("Timeout must be 1 through 86400000 milliseconds".into())
+                    }
+                })
+            })
+            .transpose()
+    }
     fn option_index(&self, option: &str) -> Option<usize> {
         self.options
             .then(|| {
@@ -269,6 +313,20 @@ fn number(value: &str) -> Result<u64, String> {
         .ok_or_else(|| "IDs must be positive integers".into())
 }
 fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
+    if group == "events" {
+        return Ok(Request::Subscribe {
+            pane: args.optional_id("--pane")?,
+            timeout_ms: args.timeout()?,
+            count: args
+                .take("--count")?
+                .map(|v| {
+                    number(&v).and_then(|n| {
+                        u32::try_from(n).map_err(|_| "Event count is too large".into())
+                    })
+                })
+                .transpose()?,
+        });
+    }
     if group == "status" {
         return Ok(Request::Snapshot);
     }
@@ -397,6 +455,40 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
             key_bytes(&keys)?;
             Ok(Request::SendKeys { pane: id, keys })
         }
+        "wait" => {
+            let mut until = Vec::new();
+            while let Some(value) = args.take("--until")? {
+                until.push(value);
+            }
+            if until.is_empty()
+                || until
+                    .iter()
+                    .any(|s| !matches!(s.as_str(), "idle" | "working" | "error" | "exited"))
+            {
+                return Err("Choose --until idle, working, error, or exited".into());
+            }
+            Ok(Request::Wait {
+                pane: id,
+                until,
+                timeout_ms: args.timeout()?,
+            })
+        }
+        "wait-output" => {
+            let text = args.take("--match")?;
+            let regex = args.take("--regex")?;
+            let is_regex = regex.is_some();
+            if text.is_some() == is_regex {
+                return Err("Choose exactly one of --match TEXT or --regex PATTERN".into());
+            }
+            let pattern = text.or(regex).unwrap();
+            crate::monitor::pattern(&pattern, is_regex)?;
+            Ok(Request::WaitOutput {
+                pane: id,
+                pattern,
+                regex: is_regex,
+                timeout_ms: args.timeout()?,
+            })
+        }
         _ => Err("Unknown pane command".into()),
     }
 }
@@ -427,7 +519,10 @@ pub fn cli(values: Vec<OsString>) -> bool {
     let Some(group) = values.first().and_then(|v| v.to_str()) else {
         return false;
     };
-    if !matches!(group, "space" | "tab" | "pane" | "api" | "status") {
+    if !matches!(
+        group,
+        "space" | "tab" | "pane" | "api" | "status" | "events"
+    ) {
         return false;
     }
     let group = group.to_owned();
@@ -456,6 +551,10 @@ pub fn cli(values: Vec<OsString>) -> bool {
         failure("Could not load .env", 1);
     }
     let text = matches!(request, Request::Read { .. }) && !json_output;
+    if matches!(request, Request::Subscribe { .. }) {
+        session::subscribe(&name, request).unwrap_or_else(|e| failure(e, 1));
+        return true;
+    }
     let result = session::rpc(&name, request).unwrap_or_else(|e| failure(e, 1));
     if text {
         print!("{}", result["text"].as_str().unwrap_or_default());

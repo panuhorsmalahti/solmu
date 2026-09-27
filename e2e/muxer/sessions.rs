@@ -6,7 +6,11 @@ pub(super) struct Session<'a> {
 }
 impl Session<'_> {
     pub(super) fn command(&self, args: &[&str]) -> std::process::Output {
-        std::process::Command::new(binary("muxer"))
+        self.process(args).output().unwrap()
+    }
+    pub(super) fn process(&self, args: &[&str]) -> std::process::Command {
+        let mut command = std::process::Command::new(binary("muxer"));
+        command
             .arg("--session")
             .arg(self.name)
             .args(args)
@@ -17,9 +21,8 @@ impl Session<'_> {
             .env(
                 "SOLMU_MUXER_DIR",
                 self.backend.directory.path().join("muxer-state"),
-            )
-            .output()
-            .unwrap()
+            );
+        command
     }
 }
 impl Drop for Session<'_> {

@@ -4486,6 +4486,7 @@ dependencies = [
  "dotenvy",
  "portable-pty",
  "ratatui",
+ "regex",
  "serde",
  "serde_json",
  "toml_edit",
