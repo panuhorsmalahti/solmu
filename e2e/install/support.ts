@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { mkdtemp, readFile, readdir, rm, mkdir, writeFile, chmod } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, mkdir, writeFile, chmod, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { gzipSync, zipSync, strToU8 } from 'fflate'
@@ -33,7 +33,7 @@ function tarball(files: Record<string, Uint8Array>) {
 }
 
 export async function releaseFixture(options: { corrupt?: boolean; webFiles?: Record<string, Uint8Array>; missingScript?: boolean; legacyCli?: boolean } = {}) {
-  const directory = await mkdtemp(path.join(tmpdir(), 'solmu-client-install-e2e-'))
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'solmu-client-install-e2e-')))
   const destination = path.join(directory, 'install with spaces')
   const native = Object.fromEntries(['solmu-backend', 'solmu', 'solmu-desktop', 'boxer', 'muxer'].map(name => [executable(name), strToU8(`Published ${name}\n`)]))
   if (options.legacyCli) { native[executable('solmu-cli')] = native[executable('solmu')]; delete native[executable('solmu')] }
@@ -104,7 +104,7 @@ function Start-ScheduledTask { param($TaskName) Add-Content $env:SOLMU_SERVICE_R
     async close() {
       server.closeAllConnections()
       await new Promise<void>(resolve => server.close(() => resolve()))
-      await rm(directory, { recursive: true, force: true })
+      await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     },
   }
 }

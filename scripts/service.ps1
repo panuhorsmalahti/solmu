@@ -46,7 +46,9 @@ public static class SolmuJob {
 $job = [SolmuJob]::CreateJobObject([IntPtr]::Zero, $null)
 if ($job -eq [IntPtr]::Zero) { throw 'Cannot create backend job' }
 $limits = New-Object SolmuJob+Extended
-$limits.Basic.Flags = 8192 # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+$basic = New-Object SolmuJob+Basic
+$basic.Flags = 8192 # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+$limits.Basic = $basic
 if (-not [SolmuJob]::SetInformationJobObject($job, 9, [ref]$limits, [Runtime.InteropServices.Marshal]::SizeOf($limits))) { throw 'Cannot configure backend job' }
 # Assign the supervisor before spawning, so every backend child inherits the job.
 if (-not [SolmuJob]::AssignProcessToJobObject($job, [Diagnostics.Process]::GetCurrentProcess().Handle)) { throw 'Cannot enter backend job' }
@@ -61,8 +63,8 @@ try {
         $start.RedirectStandardError = $true
         $child = [Diagnostics.Process]::Start($start)
         # Drain both pipes concurrently to avoid blocking the backend.
-        $output = [IO.File]::Open((Join-Path $Directory 'backend.log'), 'Append', 'Write', 'ReadWrite')
-        $errors = [IO.File]::Open((Join-Path $Directory 'backend-error.log'), 'Append', 'Write', 'ReadWrite')
+        $output = New-Object IO.FileStream((Join-Path $Directory 'backend.log'), [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite, 1, [IO.FileOptions]::WriteThrough)
+        $errors = New-Object IO.FileStream((Join-Path $Directory 'backend-error.log'), [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite, 1, [IO.FileOptions]::WriteThrough)
         try {
             $outCopy = $child.StandardOutput.BaseStream.CopyToAsync($output)
             $errCopy = $child.StandardError.BaseStream.CopyToAsync($errors)

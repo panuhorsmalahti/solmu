@@ -80,6 +80,7 @@ Uses the current user's **Solmu Backend** Task Scheduler task. This is a
 background login daemon, rather than a Windows Service Control Manager service.
 It runs without a visible console or administrator privileges. Its supervisor
 restarts the backend; stopping the task also terminates its child processes.
+Logs are written while the backend is running.
 
 ```powershell
 Get-ScheduledTask -TaskName 'Solmu Backend'

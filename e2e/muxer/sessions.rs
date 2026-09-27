@@ -32,6 +32,37 @@ impl Drop for Session<'_> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stopping_releases_the_session_lock_before_an_immediate_restart() {
+    let backend = Backend::start().await;
+    let session = Session {
+        backend: &backend,
+        name: "restart-lock",
+    };
+    for _ in 0..5 {
+        let started = session.command(&["server", "start"]);
+        assert!(started.status.success(), "{started:?}");
+        let stopped = session.command(&["server", "stop"]);
+        assert!(stopped.status.success(), "{stopped:?}");
+        let lock = std::fs::File::open(
+            backend
+                .directory
+                .path()
+                .join("muxer-state/restart-lock.lock"),
+        )
+        .unwrap();
+        assert!(
+            lock.try_lock().is_ok(),
+            "Stopped server still owns its lock"
+        );
+        drop(lock);
+    }
+    assert_eq!(
+        backend.threads().await["items"].as_array().unwrap().len(),
+        1
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn detach_keeps_stream_running_and_reattaches_the_same_conversation() {
     let backend = Backend::start().await;
     let _session = Session {

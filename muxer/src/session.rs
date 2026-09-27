@@ -291,10 +291,19 @@ pub fn control(name: &str, operation: &str) -> Result<()> {
     }
     if operation == "stop" {
         let deadline = Instant::now() + Duration::from_secs(5);
-        while directory.join(format!("{name}.endpoint")).exists() && Instant::now() < deadline {
+        let stopped = || -> Result<bool> {
+            if directory.join(format!("{name}.endpoint")).exists() {
+                return Ok(false);
+            }
+            // The endpoint is removed just before the server releases its lock.
+            // Wait for both so an immediate restart can acquire that lock.
+            let lock = private_file(&directory.join(format!("{name}.lock")), false)?;
+            Ok(lock.try_lock().is_ok())
+        };
+        while !stopped()? && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(20));
         }
-        if directory.join(format!("{name}.endpoint")).exists() {
+        if !stopped()? {
             return Err("Muxer server did not finish stopping".into());
         }
         println!("Stopped Muxer session {name}");
