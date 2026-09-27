@@ -210,8 +210,8 @@ routes. It requires the same Bubblewrap and delegated cgroup setup as Linux
 isolation below. There is no direct route to the Internet or the host network.
 HTTP requests and HTTPS CONNECT tunnels go through Boxer's local proxy;
 overriding proxy variables or disabling a program's proxy does not restore
-direct access. Unix socket creation, raw network families, tracing, and copying
-another process's descriptors are denied. Broker channels and host-connected
+direct access. Connections to pathname and abstract Unix sockets, raw network
+families, tracing, and copying another process's descriptors are denied. Broker channels and host-connected
 sockets are not inherited by the launched agent.
 
 For a backend that calls OpenAI, stop the regular backend, then run:
@@ -269,7 +269,8 @@ Routes can be saved in an explicit policy:
 Use `--check` in your delegated cgroup to verify this policy before launching.
 It also checks that published ports are available. Up to 64 active connections
 are handled per sandbox; idle connections close after five minutes. Socket
-creation restrictions can affect programs that require Unix sockets internally.
+creation restrictions can affect programs that require named Unix sockets.
+Anonymous Unix stream pairs remain available for local runtime IPC.
 macOS and Windows currently reject routed policies before launching a program.
 Permissive networking remains the default on every platform.
 

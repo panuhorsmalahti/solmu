@@ -219,6 +219,7 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
                 .iter()
                 .map(|route| crate::network::Target::parse(route, true))
                 .collect::<io::Result<_>>()?,
+            publish: policy.publish.clone(),
         };
         sandbox
             .arg("--ro-bind")

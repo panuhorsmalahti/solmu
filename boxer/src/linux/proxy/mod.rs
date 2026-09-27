@@ -16,6 +16,7 @@ pub struct Worker {
     pub inbound: i32,
     pub arguments: Vec<OsString>,
     pub local: Vec<Target>,
+    pub publish: Vec<u16>,
 }
 
 pub const WORKER: &str = "--boxer-network-worker";

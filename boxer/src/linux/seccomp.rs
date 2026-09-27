@@ -105,8 +105,24 @@ fn instructions(network: Network) -> io::Result<Vec<libc::sock_filter>> {
             // Shared pathname Unix sockets cross Linux network namespaces.
             // Only IP sockets are created here; the trusted worker receives
             // its preopened broker channels and never passes them to the agent.
-            emit(EQ, 0, 1, libc::SYS_socketpair as u32);
+            // Tokio's signal handling requires anonymous Unix stream pairs.
+            // Already connected stream pairs cannot be redirected to host
+            // pathname/abstract sockets. Datagram pairs could be redirected,
+            // so allow only AF_UNIX/SOCK_STREAM with ordinary socket flags.
+            emit(EQ, 0, 8, libc::SYS_socketpair as u32);
+            emit(LOAD, 0, 0, 16);
+            emit(EQ, 1, 0, libc::AF_UNIX as u32);
             emit(RET, 0, 0, DENY);
+            emit(LOAD, 0, 0, 24);
+            emit(
+                0x54,
+                0,
+                0,
+                !(libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC) as u32,
+            );
+            emit(EQ, 1, 0, libc::SOCK_STREAM as u32);
+            emit(RET, 0, 0, DENY);
+            emit(RET, 0, 0, 0x7fff0000);
             emit(EQ, 0, 5, libc::SYS_socket as u32);
             emit(LOAD, 0, 0, 16);
             emit(EQ, 2, 0, libc::AF_INET as u32);

@@ -67,7 +67,17 @@ pub fn worker() -> io::Result<Option<i32>> {
                 }
             })?;
     }
-    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let listener = (0..64)
+        .find_map(|_| match TcpListener::bind("127.0.0.1:0") {
+            Ok(listener) if !worker.publish.contains(&listener.local_addr().ok()?.port()) => {
+                Some(Ok(listener))
+            }
+            Ok(_) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .ok_or_else(|| {
+            io::Error::other("No proxy port outside published service ports was available")
+        })??;
     let proxy = format!("http://{}", listener.local_addr()?);
     let outbound_active = active.clone();
     thread::Builder::new()

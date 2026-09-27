@@ -193,6 +193,59 @@ fn proxy_boundaries() {
         std::io::Error::last_os_error().raw_os_error(),
         Some(libc::EPERM)
     );
+    let mut pair = [-1; 2];
+    assert_eq!(
+        unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_DGRAM, 0, pair.as_mut_ptr()) },
+        -1
+    );
+    assert_eq!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::EPERM)
+    );
+    assert_eq!(
+        unsafe {
+            libc::socketpair(
+                libc::AF_UNIX,
+                libc::SOCK_STREAM | libc::SOCK_CLOEXEC,
+                0,
+                pair.as_mut_ptr(),
+            )
+        },
+        0
+    );
+    // These already-connected streams must not become host socket connections.
+    let path = std::env::var("SOLMU_TEST_UNIX").unwrap();
+    let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+    address.sun_family = libc::AF_UNIX as libc::sa_family_t;
+    for (target, byte) in address.sun_path.iter_mut().zip(path.bytes()) {
+        *target = byte as libc::c_char;
+    }
+    assert_eq!(
+        unsafe {
+            libc::connect(
+                pair[0],
+                (&address as *const libc::sockaddr_un).cast(),
+                std::mem::size_of_val(&address) as libc::socklen_t,
+            )
+        },
+        -1
+    );
+    let mut unspecified: libc::sockaddr = unsafe { std::mem::zeroed() };
+    unspecified.sa_family = libc::AF_UNSPEC as libc::sa_family_t;
+    assert_eq!(
+        unsafe {
+            libc::connect(
+                pair[0],
+                &unspecified,
+                std::mem::size_of_val(&unspecified) as libc::socklen_t,
+            )
+        },
+        -1
+    );
+    unsafe {
+        libc::close(pair[0]);
+        libc::close(pair[1]);
+    }
     // Check before creating any of the probe's own connections. Broker channels
     // and connected host sockets belong only to the worker, never this process.
     let descriptors = std::fs::read_dir("/proc/self/fd")
