@@ -27,7 +27,8 @@ boxer --profile solmu --cwd /path/to/project -- solmu
 ```
 
 The project is writable. System executables, libraries, DNS settings, and
-certificates are readable, along with the launched executable. File contents
+certificates are readable, along with the launched executable. Executable
+mapping is allowed within the readable paths so programs and libraries can load. File contents
 outside these paths are denied. Restrictions are inherited by subprocesses;
 links inside the project do not grant access to files outside it.
 

@@ -30,7 +30,10 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
         let mut profile = String::from(
             "(version 1)(deny default)(allow process*)(allow signal)(allow sysctl-read)(allow mach-lookup)(allow network*)(allow file-read-metadata)",
         );
-        for (operation, paths) in [("file-read*", read), ("file-write*", write)] {
+        for (operation, paths) in [
+            ("file-read* file-map-executable", read),
+            ("file-write*", write),
+        ] {
             for path in paths {
                 let kind = if path.is_dir() { "subpath" } else { "literal" };
                 let path = path

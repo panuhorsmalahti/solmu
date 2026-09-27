@@ -159,7 +159,12 @@ fn workspace_allowlists_and_explicit_grants_are_inherited_and_block_symlink_esca
     let workspace = projects.join("project with spaces");
     let readonly = directory.path().join("reference \"quoted\"");
     let writable = directory.path().join("results");
-    let hidden = directory.path().join("private.txt");
+    // Use an unshared parent. Isolated mode has a writable private /tmp; a
+    // write at the same basename there would create a private copy, not touch
+    // the host's file, and must not be mistaken for a permission escape.
+    let private = directory.path().join("host-private");
+    std::fs::create_dir(&private).unwrap();
+    let hidden = private.join("private.txt");
     std::fs::create_dir_all(&workspace).unwrap();
     std::fs::create_dir_all(&writable).unwrap();
     for file in [&readonly, &hidden, &workspace.join("source.txt")] {
@@ -197,7 +202,9 @@ fn workspace_allowlists_and_explicit_grants_are_inherited_and_block_symlink_esca
             .unwrap();
         assert!(
             output.status.success(),
-            "{}",
+            "{mode}: {:?}\n{}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
     }
