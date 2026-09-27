@@ -2,38 +2,28 @@
 
 ## Run the published web client
 
-After [installation](releases.md#install), configure your provider key in
-`.env` and run `solmu-backend`. Download `solmu-v<VERSION>-web.zip` from
-[GitHub Releases](https://github.com/panuhorsmalahti/solmu/releases) and extract
-it into a folder named `solmu-web`. The installer installs native binaries;
-the web archive is a separate download.
+With the backend already running, use the [web installer](../clients/web/README.md#install)
+and open **http://127.0.0.1:3000**. The backend serves the web client directly,
+including `/profile` and `/threads/{id}` links, streamed replies, and live
+WebSocket updates. No Node.js, Rust, or separate web server is needed.
+The [bundle installer](bundle.md) includes both backend and web client.
 
-Serve the extracted files with a web server that proxies `/api/*` to
-`http://127.0.0.1:3000`, including WebSocket upgrades, and serves `index.html`
-for conversation and Profile URLs. For example, with
-[Caddy installed](https://caddyserver.com/docs/install), save this `Caddyfile`
-beside the `solmu-web` folder:
+Site files live in `~/.solmu/web` (Windows: `%USERPROFILE%\.solmu\web`).
+The web installer updates its own deployments, preserves previous hashed assets
+for open tabs, and replaces the page entry point last. It refuses to overwrite
+an unrelated folder. If you choose a different folder with `SOLMU_INSTALL_DIR`,
+set the backend's `SOLMU_WEB_DIR` to that folder and restart its
+[background service](services.md). Web files installed in the configured folder
+become available immediately without restarting the backend.
 
-```caddyfile
-http://127.0.0.1:8080 {
-    handle /api/* {
-        reverse_proxy 127.0.0.1:3000
-    }
-    handle {
-        root * ./solmu-web
-        try_files {path} /index.html
-        file_server
-    }
-}
-```
+A backend without installed web files still supports every API and native client;
+its web pages return 404 until the web client is installed. Missing assets and
+unknown API routes return 404, rather than the web page. Provider keys and the
+database are never served as static files. The Docker image includes web files.
 
-In another terminal, run `caddy run --config Caddyfile` from that directory,
-then open `http://127.0.0.1:8080`. This follows Caddy's
-[single-page app configuration](https://caddyserver.com/docs/caddyfile/patterns#single-page-apps-spas).
-If your backend uses another address, change `reverse_proxy` accordingly.
-Provider keys stay on the backend. Rust and Node.js are not needed to use
-the published web files. The marketing website on GitHub Pages is separate
-from this client and does not host a backend or conversations.
+The marketing website on GitHub Pages is separate and does not host a backend
+or conversations. The local backend has no authentication; keep its default
+loopback address unless you provide your own access controls.
 
 ## Use
 

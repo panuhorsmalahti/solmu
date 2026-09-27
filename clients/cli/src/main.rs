@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         match arg.as_str() {
             "--help" | "-h" => {
                 println!(
-                    "Solmu CLI\n\nUsage: solmu-cli [--thread ID]\n\nBy default, create a conversation in the current directory.\n--thread ID opens an existing conversation without creating another.\nSOLMU_BACKEND_URL defaults to http://127.0.0.1:3000.\nUse /help for conversation commands; Ctrl+L redraws the terminal."
+                    "Solmu CLI\n\nUsage: solmu [--thread ID]\n\nBy default, create a conversation in the current directory.\n--thread ID opens an existing conversation without creating another.\nSOLMU_BACKEND_URL defaults to http://127.0.0.1:3000.\nUse /help for conversation commands; Ctrl+L redraws the terminal."
                 );
                 return Ok(());
             }
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 thread = Some(id);
             }
-            _ => return Err("Unknown option; use solmu-cli --help".into()),
+            _ => return Err("Unknown option; use solmu --help".into()),
         }
     }
     if let Err(error) = dotenvy::dotenv()

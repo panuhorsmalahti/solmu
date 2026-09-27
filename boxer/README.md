@@ -3,9 +3,27 @@
 A Rust launcher for Solmu and other programs using native kernel controls.
 Filesystem access and **all network requests are allowed by default**.
 
+## Install
+
+Linux/macOS:
+
 ```sh
-cargo build -p solmu-boxer
-boxer -- solmu-cli
+curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-boxer.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-boxer.ps1 | iex
+```
+
+Installs only `boxer`. To launch Solmu, install the
+[CLI](../clients/cli/README.md#install) and use an already running backend.
+
+## Run
+
+```sh
+boxer -- solmu
 boxer --cwd /path/to/project -- another-agent
 ```
 
@@ -16,13 +34,13 @@ calls, and CPU/memory/task limits:
 ```sh
 sudo apt install bubblewrap
 systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
-  boxer --isolated --cwd /path/to/project -- solmu-cli
+  boxer --isolated --cwd /path/to/project -- solmu
 ```
 
 Networking stays allowed. This uses the host kernel.
 
-Running `boxer` by itself starts the Solmu terminal client (`solmu-cli`).
-It is equivalent to `boxer -- solmu-cli`. To launch the backend or another
+Running `boxer` by itself starts the Solmu terminal client (`solmu`).
+It is equivalent to `boxer -- solmu`. To launch the backend or another
 program, name it after `--`, for example `boxer -- solmu-backend`.
 
 Use `--read-only` on Linux/macOS to deny filesystem

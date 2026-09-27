@@ -153,7 +153,11 @@ impl Backend {
         let mut command = Command::new(binary("solmu-backend"));
         command
             .current_dir(self.directory.path())
-            .env("SOLMU_BIND_ADDR", "127.0.0.1:0")
+            .env(
+                "SOLMU_BIND_ADDR",
+                std::env::var("SOLMU_FIXTURE_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:0".into()),
+            )
+            .env("SOLMU_WEB_DIR", self.directory.path().join("web"))
             .env("SOLMU_DATABASE_URL", "sqlite://solmu.db")
             .env("SOLMU_WORKSPACE", self.directory.path().join("workspace"))
             .env_remove("LLM_PROVIDER")

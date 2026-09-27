@@ -3,12 +3,12 @@
 If a conversation operation or live refresh is still finishing when you press
 Enter, the CLI keeps the submission and sends it once that operation completes.
 
-After [installation](releases.md#install), start `solmu-backend`, then run
-`solmu-cli` in another terminal from the folder you want to work in.
+With the backend already running, run the installed `solmu` command from the
+folder you want to work in. See [installation](../clients/cli/README.md#install).
 The CLI connects to `SOLMU_BACKEND_URL`, defaulting to `http://127.0.0.1:3000`,
 and creates a new conversation by default. To reopen a saved conversation at
-startup, use `solmu-cli --thread <id>`. This does not create another thread.
-`solmu-cli --help` shows startup options.
+startup, use `solmu --thread <id>`. This does not create another thread.
+`solmu --help` shows startup options.
 
 Type a message and press Enter to receive a streamed reply. Conversations and
 completed replies are saved by the backend. Use PageUp/PageDown to scroll.

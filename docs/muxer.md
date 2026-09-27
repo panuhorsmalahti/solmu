@@ -7,12 +7,10 @@ in a nested layout. Every pane starts its own conversation and keeps running
 while you switch tabs or spaces. The sidebar shows spaces and their tab counts;
 tabs show activity, and each terminal shows its status.
 
-After [installation](releases.md#install), configure your provider key in
-`.env` and start the backend. Launch Muxer from your project folder:
+With the backend already running, launch the installed Muxer from your project
+folder. See [installation](../muxer/README.md#install):
 
 ```sh
-solmu-backend
-# In another terminal:
 muxer
 ```
 
@@ -132,7 +130,7 @@ for the configuration file, all action names, and examples.
 
 `SOLMU_BACKEND_URL` defaults to `http://127.0.0.1:3000`. Muxer loads `.env`
 from its working directory; existing environment variables take precedence.
-Provider keys stay on the backend. Muxer finds `solmu-cli` beside its own
+Provider keys stay on the backend. Muxer finds `solmu` beside its own
 executable, then on PATH. Set `SOLMU_CLI_PATH` to an absolute Solmu CLI path
 if installed elsewhere.
 

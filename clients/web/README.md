@@ -2,24 +2,33 @@
 
 A React and TypeScript client with shadcn/ui components.
 
-## Run
+## Install
 
-After using the [install script](../../docs/releases.md#install), configure
-your provider key in `.env` and start the installed backend:
+Linux/macOS (requires `unzip`):
 
 ```sh
-solmu-backend
+curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-web.sh | sh
 ```
 
-Download `solmu-v<VERSION>-web.zip` from
-[GitHub Releases](https://github.com/panuhorsmalahti/solmu/releases) and extract
-it into `solmu-web`. Serve these files with a web server that proxies `/api`
-to the backend at `http://127.0.0.1:3000`. Follow the
-[web setup guide](../../docs/web.md#run-the-published-web-client) for a complete
-local example, then open `http://127.0.0.1:8080`.
+Windows PowerShell:
 
-The install script installs the backend and native clients; the web archive
-is downloaded separately. Provider keys stay in the backend's `.env`.
+```powershell
+irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-web.ps1 | iex
+```
+
+Downloads and verifies the published site files into `~/.solmu/web`
+(Windows: `%USERPROFILE%\.solmu\web`). This installs only the web client.
+Rerun to update it; existing browser tabs keep their previous assets.
+
+## Run
+
+With the backend already running, open **http://127.0.0.1:3000**.
+The backend serves the installed web client, API, streaming replies, and
+WebSocket updates on the same port. No separate web server is needed.
+Provider keys stay on the backend.
+
+For another installation folder, set `SOLMU_INSTALL_DIR` and configure the
+backend's `SOLMU_WEB_DIR` to match. See [web setup](../../docs/web.md).
 
 ## Use
 

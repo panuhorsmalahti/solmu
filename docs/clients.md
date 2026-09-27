@@ -16,16 +16,19 @@ Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
 
 | Client | Start after installation | Guide |
 | --- | --- | --- |
-| CLI | `solmu-cli` | [Terminal client](cli.md) |
+| CLI | `solmu` | [Terminal client](cli.md) |
 | Muxer (spaces and CLI tabs) | `muxer` | [Terminal workspace](muxer.md) |
 | Desktop | `solmu-desktop` | [Desktop client](desktop.md) |
-| Web | Serve the published web archive; see setup | [Web client](web.md) |
+| Web | Open `http://127.0.0.1:3000` | [Web client](web.md) |
 
-Use the [install script](releases.md#install), then start `solmu-backend`, or use
-[Docker](running.md). The default backend address is `http://127.0.0.1:3000`.
+These guides assume the backend is already running. Its [installer](services.md)
+starts a background service; [Docker](running.md) is another option. The default backend address is `http://127.0.0.1:3000`.
 Rust clients load `SOLMU_BACKEND_URL` from `.env` or the environment. Set it in
 the Vite process environment for web development.
 Source build instructions are in [development](development.md).
+Each client README has its own install command. See
+[individual component installers](releases.md#individual-components) to install
+one client, the backend, or Boxer separately.
 
 Every client supports creating, listing, opening, renaming, and deleting threads;
 reading saved history; sending messages; receiving streamed replies; and seeing
@@ -40,7 +43,7 @@ WebSocket notifications keep conversation changes synchronized across clients.
 The web client uses `/threads/{id}` links for individual conversations. Stop
 controls cancel a pending reply; the CLI uses `/stop` or Esc. `/exit` quits the
 CLI. Closing another client leaves saved conversations on the backend.
-`solmu-cli --thread <id>` reopens a thread at startup. Muxer sessions keep their
+`solmu --thread <id>` reopens a thread at startup. Muxer sessions keep their
 panes running after detaching and restore layouts and conversations after a
 server restart; see the [Muxer guide](muxer.md). Scripts can manage layouts
 and inspect or send terminal input through [Muxer automation](muxer-automation.md).

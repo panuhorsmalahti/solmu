@@ -54,7 +54,7 @@ async fn thread_option_resumes_saved_history_without_creating_a_conversation() {
 fn startup_options_show_usage_version_and_reject_invalid_arguments() {
     let directory = tempfile::tempdir().unwrap();
     for arg in ["--help", "--version"] {
-        let output = std::process::Command::new(binary("solmu-cli"))
+        let output = std::process::Command::new(binary("solmu"))
             .arg(arg)
             .current_dir(directory.path())
             .output()
@@ -68,7 +68,7 @@ fn startup_options_show_usage_version_and_reject_invalid_arguments() {
         vec!["--unknown"],
     ] {
         assert!(
-            !std::process::Command::new(binary("solmu-cli"))
+            !std::process::Command::new(binary("solmu"))
                 .args(args)
                 .current_dir(directory.path())
                 .output()

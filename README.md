@@ -18,35 +18,33 @@ Licensed under [MIT](LICENSE).
 - Group Solmu terminal tabs into project spaces with nested panes and mouse controls.
 - Read, edit, and search workspace files and run Bash commands with saved tool results.
 
-## Install
+## Install the bundle
 
 Linux/macOS:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-bundle.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-bundle.ps1 | iex
 ```
 
-Installs the backend, CLI, desktop, Boxer, and Muxer from the latest production
-release, with checksum verification. **Before the first release, use the source
-instructions below.** See [installation options](docs/releases.md).
+The optional bundle installs the backend, every client, Boxer, and Muxer from
+the latest release, verifies checksums, and starts the backend in the background.
+See [bundle setup](docs/bundle.md) and [service management](docs/services.md).
 
-Create `.env` in your working directory:
+Prefer individual modules? Install the [backend](docs/services.md#install),
+then only the clients you need: [CLI](clients/cli/README.md#install),
+[Desktop](clients/desktop/README.md#install), [Web](clients/web/README.md#install),
+or [Muxer](muxer/README.md#install). [Boxer](boxer/README.md#install) is separate too.
 
-```dotenv
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your-api-key
-LLM_MODEL=gpt-6-sol
-LLM_TITLE_MODEL=gpt-6-luna
-```
-
-Run `solmu-backend`, then `solmu-cli` or `solmu-desktop` in another terminal.
-The default backend address is `http://127.0.0.1:3000`.
+Add your provider key to `~/.solmu/.env` (Windows: `%USERPROFILE%\.solmu\.env`),
+then restart the backend service. Run `solmu`, `solmu-desktop`, or `muxer`,
+or open **http://127.0.0.1:3000** for the web client. The backend serves it directly.
+See [configuration](docs/configuration.md) for model choices.
 
 ## From source
 
@@ -103,8 +101,8 @@ linkable `/threads/{id}` conversation pages.
 ## Muxer
 
 A Rust TUI for project spaces with multiple Solmu tabs and nested terminal panes.
-Switch spaces, arrange conversations, and track working/idle/error states. Start the backend,
-then run `cargo build -p solmu-cli` and `cargo run -p solmu-muxer`.
+Switch spaces, arrange conversations, and track working/idle/error states.
+With the backend running, launch the installed `muxer` command.
 Click **+ Tab** or press **Ctrl+b n** to add a tab. **Ctrl+b s** splits a pane right;
 **Ctrl+b -** splits down. Drag dividers to resize, or **Ctrl+b z** to zoom.
 **Ctrl+b q** detaches while panes keep running. Run `muxer` to reattach;
@@ -135,7 +133,7 @@ filtered system calls, dropped capabilities, and CPU/memory/task limits.
 Example (uses default permissions):
 
 ```sh
-boxer --cwd /path/to/project -- solmu-cli
+boxer --cwd /path/to/project -- solmu
 ```
 
 ## Docker

@@ -35,6 +35,8 @@ systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervis
 ```
 
 See [sandbox setup](boxer.md) if user delegation is unavailable.
+Browser tests use the published web build served by the real backend, including
+its API, streaming, and WebSocket connections; they do not use Vite as a proxy.
 Desktop tests exercise Iced widgets and real
 network tasks in its headless runtime. Browser tests use Playwright.
 On Linux, install `libxkbcommon-dev`, `libwayland-dev`, and
@@ -51,7 +53,12 @@ Muxer tests capture `artifacts/muxer.html`; run
 The native prompt queue test captures `artifacts/muxer-automation.html`;
 render it with `node scripts/capture-cli.mjs muxer-automation`.
 Installer tests under `e2e/install` use local release archives and temporary
-directories; they do not change your PATH or installed applications.
+directories; they do not change your PATH or installed applications. Background
+service tests replace OS service commands with recorders, so no real service is
+registered or stopped.
+Client-specific installer tests live under their respective `e2e/<client>/`
+folders. Run all installer tests with
+`npx playwright test --config e2e/install/playwright.config.ts`.
 
 GitHub Actions runs formatting, lint, builds, and e2e tests on pushes and pull
 requests. Rust is checked on Linux, Windows, and macOS. The website workflow

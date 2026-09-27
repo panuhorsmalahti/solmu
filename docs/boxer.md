@@ -1,8 +1,8 @@
 # Boxer
 
-Build with `cargo build -p solmu-boxer`. Run `boxer -- solmu-cli`,
+After [installing Boxer](../boxer/README.md#install), run `boxer -- solmu`,
 `boxer -- solmu-backend`, or `boxer -- another-agent`. Running `boxer`
-by itself is equivalent to `boxer -- solmu-cli`: it opens the Solmu terminal
+by itself is equivalent to `boxer -- solmu`: it opens the Solmu terminal
 client. Name another program after `--` to launch it instead.
 `--cwd PATH` chooses the workspace. Terminal input/output
 and the program's exit status are preserved.
@@ -24,7 +24,7 @@ a delegated cgroup v2 hierarchy. On systemd 254+:
 
 ```sh
 systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
-  boxer --isolated --cwd /path/to/project -- solmu-cli
+  boxer --isolated --cwd /path/to/project -- solmu
 
 # Customize limits; all descendants share the same budget.
 systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \

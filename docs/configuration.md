@@ -22,11 +22,15 @@ reload automatically.
 Copy `.env.example` to `.env` and fill `OPENAI_API_KEY` to use OpenAI. `.env` is
 ignored by Git. Keep provider credentials on the backend; clients never need them.
 
-## API server
+For the installed background backend, edit `~/.solmu/.env` (Windows:
+`%USERPROFILE%\.solmu\.env`); see [services](services.md).
+
+## API and web server
 
 | Variable | Local default | Docker default | Purpose |
 | --- | --- | --- | --- |
 | `SOLMU_BIND_ADDR` | `127.0.0.1:3000` | `0.0.0.0:3000` | IP address and port for the API server. IPv6 addresses use brackets, such as `[::1]:3000`. |
+| `SOLMU_WEB_DIR` | `~/.solmu/web` (Windows: `%USERPROFILE%\.solmu\web`) | `/app/web` | Published web client files served by the backend. Service installations use `web` relative to their state folder. |
 | `SOLMU_DATABASE_URL` | `sqlite://solmu.db` | `sqlite:///data/solmu.db` | SQLite file. Its parent directory must exist. Tables are created automatically. |
 | `SOLMU_BACKEND_URL` | `http://127.0.0.1:3000` | Same | Backend address used by Rust clients. |
 | `SOLMU_WORKSPACE` | `~/.solmu/workspace` (Windows: `%USERPROFILE%\.solmu\workspace`) | `/data/workspace` | Default working folder for threads without an explicit workspace. Created automatically. |

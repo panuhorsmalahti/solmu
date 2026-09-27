@@ -16,6 +16,8 @@ wait_for_backend() {
   done
 }
 wait_for_backend
+curl --fail --silent --show-error http://127.0.0.1:3000/ | grep -q 'id="root"'
+curl --fail --silent --show-error http://127.0.0.1:3000/profile | grep -q 'id="root"'
 thread=$(curl --fail --silent --show-error -H 'Content-Type: application/json' \
   -d '{"title":"Docker conversation"}' "$base/threads")
 id=$(printf '%s' "$thread" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')

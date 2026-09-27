@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 license.workspace = true
 
+[[bin]]
+name = "solmu"
+path = "src/main.rs"
+
 [dependencies]
 solmu-client = { path = "../common" }
 dotenvy = "0.15.7"

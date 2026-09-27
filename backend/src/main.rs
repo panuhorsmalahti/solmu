@@ -9,6 +9,7 @@ mod llm;
 mod prompt;
 mod storage;
 mod tools;
+mod web;
 mod workspace;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -26,7 +27,10 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let llm = llm::Llm::from_env()?;
     let pool = db::connect(&config.database_url).await?;
     let listener = TcpListener::bind(config.bind_addr).await?;
-    let app = api::router(api::state::AppState::new(pool.clone(), llm));
+    let app = web::router(
+        api::router(api::state::AppState::new(pool.clone(), llm)),
+        &config.web_dir,
+    );
 
     println!("Solmu listening on http://{}", listener.local_addr()?);
 

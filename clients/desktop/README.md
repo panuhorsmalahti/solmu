@@ -2,22 +2,32 @@
 
 A native Rust desktop client built with Iced.
 
-## Run
+## Install
 
-After using the [install script](../../docs/releases.md#install), create `.env`
-in your working directory with your provider credentials. Start the installed backend:
+Linux/macOS:
 
 ```sh
-solmu-backend
+curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-desktop.sh | sh
 ```
 
-In another terminal:
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-desktop.ps1 | iex
+```
+
+Installs `solmu-desktop` from the latest release. Use an existing backend, or
+[install the backend separately](../../docs/releases.md#individual-components).
+
+## Run
+
+Assuming the backend is already running and the installed command is on PATH:
 
 ```sh
 solmu-desktop
 ```
 
-Fill provider credentials in the backend's `.env`. The desktop client connects
+The desktop client connects
 to `http://127.0.0.1:3000`, or the address in `SOLMU_BACKEND_URL`.
 
 ## Use

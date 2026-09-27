@@ -4,15 +4,32 @@ A Rust TUI with project spaces and multiple Solmu tabs in each space.
 Each tab holds a layout of real terminal panes. Each pane starts its own Solmu
 conversation and keeps running while you switch tabs or spaces.
 
+## Install
+
+Linux/macOS:
+
 ```sh
-solmu-backend
-# In another terminal:
+curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-muxer.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-muxer.ps1 | iex
+```
+
+Installs `muxer` and its required `solmu` runtime from the latest release.
+Use an existing backend, or [install it separately](../docs/releases.md#individual-components).
+
+## Run
+
+Assuming the backend is already running and the installed commands are on PATH:
+
+```sh
 muxer
 ```
 
-These commands are available on PATH after using the
-[install script](../docs/releases.md#install). Configure the backend's `.env`
-with your provider key before starting it.
+The default backend is `http://127.0.0.1:3000`; set `SOLMU_BACKEND_URL` to connect elsewhere.
 
 Click **+ Space** to choose a project and **+ Tab** to add a session. Select
 spaces in the sidebar and tabs along the top; **×** closes a tab. Each space

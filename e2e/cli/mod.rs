@@ -31,7 +31,7 @@ impl Terminal {
                 pixel_height: 0,
             })
             .unwrap();
-        let mut command = CommandBuilder::new(binary(if isolated { "boxer" } else { "solmu-cli" }));
+        let mut command = CommandBuilder::new(binary(if isolated { "boxer" } else { "solmu" }));
         if let Some(thread) = thread {
             command.arg("--thread");
             command.arg(thread);
@@ -41,7 +41,7 @@ impl Terminal {
             command.arg("--cwd");
             command.arg(backend.directory.path());
             command.arg("--");
-            command.arg(binary("solmu-cli"));
+            command.arg(binary("solmu"));
         }
         command.cwd(backend.directory.path());
         command.env("SOLMU_BACKEND_URL", &backend.url);

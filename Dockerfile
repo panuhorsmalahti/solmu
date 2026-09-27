@@ -1,3 +1,9 @@
+FROM node:24-bookworm-slim AS web-build
+WORKDIR /web
+COPY package.json package-lock.json ./
+COPY clients/web ./clients/web
+RUN npm ci && npm run build:web
+
 FROM rust:1.98.1-slim-bookworm AS build
 
 RUN apt-get update \
@@ -24,9 +30,11 @@ RUN apt-get update \
 WORKDIR /app
 RUN mkdir /data && chown 10001:10001 /data
 COPY --from=build /build/target/release/solmu-backend /usr/local/bin/solmu-backend
+COPY --from=web-build /web/clients/web/dist /app/web
 ENV SOLMU_BIND_ADDR=0.0.0.0:3000
 ENV SOLMU_DATABASE_URL=sqlite:///data/solmu.db
 ENV SOLMU_WORKSPACE=/data/workspace
+ENV SOLMU_WEB_DIR=/app/web
 EXPOSE 3000
 VOLUME ["/data"]
 USER 10001:10001

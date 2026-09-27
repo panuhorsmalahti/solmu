@@ -1,8 +1,9 @@
-use std::{env, error::Error, net::SocketAddr};
+use std::{env, error::Error, net::SocketAddr, path::PathBuf};
 
 pub struct Config {
     pub bind_addr: SocketAddr,
     pub database_url: String,
+    pub web_dir: PathBuf,
 }
 
 impl Config {
@@ -13,6 +14,15 @@ impl Config {
                 .parse()?,
             database_url: optional_env("SOLMU_DATABASE_URL")?
                 .unwrap_or_else(|| "sqlite://solmu.db".into()),
+            web_dir: optional_env("SOLMU_WEB_DIR")?
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| PathBuf::from("."))
+                        .join(".solmu")
+                        .join("web")
+                }),
         })
     }
 }

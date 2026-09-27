@@ -8,35 +8,44 @@ macOS and Windows binaries are currently unsigned.
 
 ## Install
 
-The [Solmu website](https://panuhorsmalahti.github.io/solmu/#install) also shows
-the installation commands and previews the clients, Boxer, and Muxer.
+Choose [individual modules](#individual-components) or the separately documented
+[bundle installer](bundle.md), which installs backend and all clients together.
+The [website](https://panuhorsmalahti.github.io/solmu/#install) has copyable commands.
+Installers need a published release and verify every archive against `SHA256SUMS`.
 
-Linux/macOS:
+Native programs go to `~/.local/bin` on Linux/macOS, or
+`%LOCALAPPDATA%\Solmu\bin` on Windows. Installers add this directory to your
+login shell/user PATH; open a new terminal afterward. Set `SOLMU_VERSION=0.1.0`
+to pin a version, or `SOLMU_INSTALL_DIR` for another destination. PowerShell also
+accepts `-Version`, `-InstallDir`, and `-NoPath`. Unix accepts `SOLMU_NO_PATH=1`.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.sh | sh
-```
+## Individual components
 
-Windows PowerShell:
+| Module | Installed files | Install and use |
+| --- | --- | --- |
+| Backend | `solmu-backend` plus a background service | [Backend](services.md) |
+| Terminal | `solmu` | [CLI](../clients/cli/README.md#install) |
+| Desktop | `solmu-desktop` | [Desktop](../clients/desktop/README.md#install) |
+| Muxer | `muxer` and its required `solmu` | [Muxer](../muxer/README.md#install) |
+| Web | Site files in `~/.solmu/web` | [Web](../clients/web/README.md#install) |
+| Boxer | `boxer` | [Boxer](../boxer/README.md#install) |
 
-Use Windows PowerShell 5.1 or PowerShell 7:
+Each has `scripts/install-<module>.sh` and `.ps1`; terminal uses `install-cli`.
+Client installers assume the backend is already running and do not install it.
+Backend installation registers and starts its [background service](services.md).
+The web installer requires `unzip` on Unix, installs only site files, and serves
+them through the running backend at `http://127.0.0.1:3000`.
 
-```powershell
-irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install.ps1 | iex
-```
+The CLI command is `solmu`. When installing an older archive, installers also
+retain its legacy runtime alias for compatibility with that version of Muxer/Boxer.
+The built-in web server becomes available in the next release after v0.1.0.
 
-The installers download the latest production release and verify checksums.
-They need an existing release; before the first release, build from source.
-Unix installs into `~/.local/bin` (add it to PATH); Windows installs into
-`%LOCALAPPDATA%\Solmu\bin` and adds that directory to your user PATH.
-Set `SOLMU_VERSION=0.1.0` to choose a specific version, or
-`SOLMU_INSTALL_DIR` to choose another directory. PowerShell also supports
-`-Version`, `-InstallDir`, and `-NoPath` when running a downloaded script.
-
-Create `.env` in your working directory with `LLM_PROVIDER=openai`,
-`OPENAI_API_KEY`, and optionally `LLM_MODEL=gpt-6-sol`. Start `solmu-backend`,
-then start `solmu-cli` or `solmu-desktop` in another terminal.
-See [client usage](clients.md) and [configuration](configuration.md).
+Rerun an installer to upgrade its module. Other installed programs and backend
+configuration are preserved. Managed web deployments keep previous hashed assets
+for open browser tabs; unrelated web folders are refused. Native release archives
+contain all binaries, but module installers copy only the selected programs.
+The legacy `install.sh` and `install.ps1` use the same bundle behavior as
+`install-bundle`; the explicit bundle scripts are the documented end-user option.
 
 ## Publish a production release
 

@@ -1,5 +1,12 @@
 # Run Solmu
 
+## Installed backend
+
+The [backend installer](services.md) starts Solmu as a background service.
+Install [individual clients](releases.md#individual-components), or use the
+[separate bundle option](bundle.md) to install everything. The backend also
+serves the installed web client at `http://127.0.0.1:3000`.
+
 ## From source
 
 Install Rust, then run from the repository root:
@@ -17,7 +24,8 @@ Stop the backend with Ctrl+C. Conversations survive restarts in `solmu.db`.
 ## Docker backend
 
 For agent sandboxing, Solmu recommends [Boxer](boxer.md) over Docker.
-Use Docker to package and run the backend.
+Use Docker to package and run the backend and included web client.
+Open `http://127.0.0.1:3000` after starting the container.
 
 Install and start Docker (Linux containers on Windows). Rust is not needed on
 the host for the container build.

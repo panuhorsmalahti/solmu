@@ -2,27 +2,37 @@
 
 A Rust terminal interface for Solmu. Launch into a new or existing saved conversation.
 
-## Run
+## Install
 
-After using the [install script](../../docs/releases.md#install), create `.env`
-in your working directory and fill `OPENAI_API_KEY`. Start the installed backend:
+Linux/macOS:
 
 ```sh
-solmu-backend
+curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-cli.sh | sh
 ```
 
-In another terminal:
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-cli.ps1 | iex
+```
+
+Installs `solmu` from the latest release. Use an existing backend, or
+[install the backend separately](../../docs/releases.md#individual-components).
+
+## Run
+
+Assuming the backend is already running and the installed command is on PATH:
 
 ```sh
-solmu-cli
+solmu
 ```
 
 The default backend is `http://127.0.0.1:3000`. Set `SOLMU_BACKEND_URL` in `.env`
 or your shell to connect elsewhere. Provider keys belong to the backend.
 
-Use `solmu-cli --thread <id>` to reopen a conversation without creating another.
+Use `solmu --thread <id>` to reopen a conversation without creating another.
 Find IDs with `/threads`.
-`solmu-cli --help` shows startup options; `--version` shows the installed version.
+`solmu --help` shows startup options; `--version` shows the installed version.
 
 ## Use
 

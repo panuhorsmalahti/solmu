@@ -50,7 +50,7 @@ impl Terminal {
         command.arg(name);
         command.cwd(backend.directory.path());
         command.env("SOLMU_BACKEND_URL", &backend.url);
-        command.env("SOLMU_CLI_PATH", binary("solmu-cli"));
+        command.env("SOLMU_CLI_PATH", binary("solmu"));
         command.env(
             "SOLMU_MUXER_DIR",
             backend.directory.path().join("muxer-state"),
