@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Axis {
+    #[serde(alias = "right")]
     Right,
+    #[serde(alias = "down")]
     Down,
 }
 
@@ -189,6 +191,28 @@ impl Node {
             }
             if *direction == axis {
                 *ratio = (*ratio as i16 + delta).clamp(100, 900) as u16;
+                return true;
+            }
+        }
+        false
+    }
+    pub fn set_near_ratio(&mut self, id: u64, axis: Axis, value: u16) -> bool {
+        if let Self::Split {
+            axis: direction,
+            ratio,
+            first,
+            second,
+        } = self
+        {
+            if !first.contains(id) && !second.contains(id) {
+                return false;
+            }
+            let child = if first.contains(id) { first } else { second };
+            if child.set_near_ratio(id, axis, value) {
+                return true;
+            }
+            if *direction == axis {
+                *ratio = value;
                 return true;
             }
         }

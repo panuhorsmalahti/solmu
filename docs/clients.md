@@ -41,4 +41,5 @@ controls cancel a pending reply; the CLI uses `/stop` or Esc. `/exit` quits the
 CLI. Closing another client leaves saved conversations on the backend.
 `solmu-cli --thread <id>` reopens a thread at startup. Muxer sessions keep their
 panes running after detaching and restore layouts and conversations after a
-server restart; see the [Muxer guide](muxer.md).
+server restart; see the [Muxer guide](muxer.md). Scripts can manage layouts
+and inspect or send terminal input through [Muxer automation](muxer-automation.md).

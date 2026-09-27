@@ -19,6 +19,9 @@ use std::{error::Error, path::PathBuf};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+#[path = "app_control.rs"]
+mod automation;
+
 #[derive(Clone, Serialize, Deserialize)]
 struct Tab {
     id: u64,
@@ -231,6 +234,11 @@ pub struct View {
     dragging: Option<Divider>,
     menu: Option<Menu>,
     area: Rect,
+}
+impl View {
+    pub fn active_pane(&self) -> u64 {
+        self.active
+    }
 }
 impl App {
     pub fn snapshot(&self) -> Snapshot {
@@ -597,10 +605,13 @@ impl App {
             .expect("selected tab exists")
     }
     fn add_tab(&mut self) -> Result<(), Box<dyn Error>> {
+        self.add_tab_in(self.new_cwd()?)
+    }
+    fn add_tab_in(&mut self, directory: PathBuf) -> Result<(), Box<dyn Error>> {
         if self.spaces[self.space].tabs.len() >= 8 {
             return Err("Eight tabs are already open in this space".into());
         }
-        let pane = Pane::start(self.next_id, self.new_cwd()?, &self.executable)?;
+        let pane = Pane::start(self.next_id, directory, &self.executable)?;
         self.spaces[self.space].tabs.push(Tab {
             id: pane.id,
             name: None,
@@ -616,12 +627,21 @@ impl App {
         Ok(())
     }
     fn split(&mut self, axis: Axis) -> Result<(), Box<dyn Error>> {
+        self.split_in(axis, self.new_cwd()?, 500)
+    }
+    fn split_in(
+        &mut self,
+        axis: Axis,
+        directory: PathBuf,
+        ratio: u16,
+    ) -> Result<(), Box<dyn Error>> {
         if self.tab().layout.ids().len() >= 8 {
             return Err("Eight panes are already open in this tab".into());
         }
-        let pane = Pane::start(self.next_id, self.new_cwd()?, &self.executable)?;
+        let pane = Pane::start(self.next_id, directory, &self.executable)?;
         let selected = self.panes[self.active].id;
         self.tab_mut().layout.split(selected, pane.id, axis);
+        self.tab_mut().layout.set_near_ratio(selected, axis, ratio);
         self.tab_mut().selected = pane.id;
         self.tab_mut().zoomed = false;
         self.panes.push(pane);

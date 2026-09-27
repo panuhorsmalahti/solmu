@@ -7,9 +7,9 @@ pub(super) struct Session<'a> {
 impl Session<'_> {
     pub(super) fn command(&self, args: &[&str]) -> std::process::Output {
         std::process::Command::new(binary("muxer"))
-            .args(args)
             .arg("--session")
             .arg(self.name)
+            .args(args)
             .current_dir(self.backend.directory.path())
             .env("SOLMU_BACKEND_URL", &self.backend.url)
             .env("SOLMU_CLI_PATH", binary("solmu-cli"))

@@ -10,6 +10,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByText(/Group real terminal tabs into project spaces/)).toBeVisible()
   await expect(page.getByText(/Name your spaces, tabs, and panes; find them with instant search/)).toBeVisible()
   await expect(page.getByText(/Customize colors and shortcuts in Settings; changes apply automatically/)).toBeVisible()
+  await expect(page.getByText(/Local automation commands manage layouts, inspect sessions, send terminal input, and read pane screens/)).toBeVisible()
   await expect(page.getByText(/Split panes right or down, drag dividers to resize/)).toBeVisible()
   await expect(page.getByText(/Detach while replies keep running, then reattach/)).toBeVisible()
   await expect(page.getByText(/Layouts and Solmu conversations return after a server restart/)).toBeVisible()

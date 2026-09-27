@@ -227,7 +227,11 @@ impl Terminal {
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 if let Some(status) = self.child.try_wait().unwrap() {
-                    assert!(status.success());
+                    assert!(
+                        status.success(),
+                        "Muxer exited with {status}: {:?}",
+                        String::from_utf8_lossy(&self.raw.lock().unwrap())
+                    );
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(30)).await;
@@ -285,6 +289,7 @@ mod panes;
 mod workspaces;
 
 mod configuration;
+mod control;
 mod layouts;
 mod names;
 mod navigation;

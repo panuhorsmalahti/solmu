@@ -172,6 +172,14 @@ Session connection state and error logs live under `~/.solmu/muxer`
 directory. Keep it private to your account. The server listens only on localhost
 and authenticates clients using a per-session token.
 
+## Local automation
+
+Use `muxer api snapshot` to inspect a session and `muxer space`, `tab`, or `pane`
+commands to create, name, focus, arrange, close, and restart terminals. Scripts
+can send text/keys and read real pane screens while detached. See
+[Muxer automation](muxer-automation.md) for commands, JSON results, stable IDs,
+and selecting a particular attached terminal.
+
 ## Restart recovery
 
 Muxer saves each session's spaces, working directories, names, tabs, nested splits,

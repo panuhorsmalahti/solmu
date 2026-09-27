@@ -8,7 +8,10 @@ use ratatui::{
 use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        mpsc::{self, SyncSender},
+    },
 };
 
 #[derive(Default)]
@@ -54,13 +57,14 @@ impl vt100::Callbacks for Status {
 
 pub struct Pane {
     pub id: u64,
+    pub instance: String,
     pub name: Option<String>,
     pub directory: PathBuf,
     pub parser: Arc<Mutex<vt100::Parser<Status>>>,
     pub exited: Option<String>,
     master: Option<Box<dyn MasterPty + Send>>,
     child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
-    writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
+    writer: Option<SyncSender<Vec<u8>>>,
     redraw_at: Option<std::time::Instant>,
 }
 impl Pane {
@@ -93,7 +97,19 @@ impl Pane {
         command.env("SOLMU_MUXER", "1");
         let child = pair.slave.spawn_command(command)?;
         drop(pair.slave);
-        let writer = Arc::new(Mutex::new(pair.master.take_writer()?));
+        let mut terminal_writer = pair.master.take_writer()?;
+        let (writer, input_queue) = mpsc::sync_channel::<Vec<u8>>(64);
+        std::thread::spawn(move || {
+            while let Ok(bytes) = input_queue.recv() {
+                if terminal_writer
+                    .write_all(&bytes)
+                    .and_then(|_| terminal_writer.flush())
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
         let mut reader = pair.master.try_clone_reader()?;
         let parser = Arc::new(Mutex::new(vt100::Parser::new_with_callbacks(
             24,
@@ -119,18 +135,18 @@ impl Pane {
                     std::mem::take(&mut parser.callbacks_mut().replies)
                 };
                 if !replies.is_empty() {
-                    let mut writer = input.lock().unwrap_or_else(|error| error.into_inner());
                     for reply in replies {
-                        if writer.write_all(&reply).is_err() {
-                            return;
+                        match input.try_send(reply) {
+                            Ok(()) | Err(mpsc::TrySendError::Full(_)) => {}
+                            Err(mpsc::TrySendError::Disconnected(_)) => return,
                         }
                     }
-                    let _ = writer.flush();
                 }
             }
         });
         Ok(Self {
             id,
+            instance: uuid::Uuid::new_v4().to_string(),
             name: None,
             directory,
             parser,
@@ -155,6 +171,7 @@ impl Pane {
         parser.process(b"This pane is stopped. Use Restart to start a new conversation.");
         Self {
             id,
+            instance: uuid::Uuid::new_v4().to_string(),
             name: None,
             directory,
             parser: Arc::new(Mutex::new(parser)),
@@ -169,14 +186,22 @@ impl Pane {
         if self.exited.is_some() {
             return Ok(());
         }
-        let mut writer = self
-            .writer
+        if bytes.len() > 65548 {
+            return Err(std::io::Error::other("Pane input exceeds 64 KiB"));
+        }
+        self.writer
             .as_ref()
             .expect("running pane has a writer")
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        writer.write_all(bytes)?;
-        writer.flush()
+            .try_send(bytes.to_vec())
+            .map_err(|error| {
+                std::io::Error::new(
+                    std::io::ErrorKind::WouldBlock,
+                    format!("Pane input queue unavailable: {error}"),
+                )
+            })
+    }
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().and_then(|child| child.process_id())
     }
     pub fn poll(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self
@@ -189,7 +214,14 @@ impl Pane {
                     .lock()
                     .unwrap_or_else(|error| error.into_inner())
                     .process(b"\x1b[2J\x1b[H");
-                self.send(&[12])?;
+                if let Err(error) = self.send(&[12]) {
+                    if error.kind() == std::io::ErrorKind::WouldBlock {
+                        self.redraw_at =
+                            Some(std::time::Instant::now() + std::time::Duration::from_millis(75));
+                    } else {
+                        return Err(error.into());
+                    }
+                }
             }
         }
         if self.exited.is_none()

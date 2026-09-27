@@ -1,4 +1,5 @@
 use crate::app::{App, View, pane_inner};
+use crate::control;
 use crate::persistence::Persistence;
 use crossterm::{
     cursor,
@@ -40,6 +41,8 @@ enum Request {
         operation: String,
         width: u16,
         height: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        control: Option<control::Request>,
     },
     Input(Event),
 }
@@ -50,6 +53,7 @@ enum Response {
     Frame(Vec<u8>),
     Detached,
     Error(String),
+    Control(serde_json::Value),
 }
 
 pub fn validate_name(name: &str) -> Result<()> {
@@ -118,6 +122,15 @@ fn receive<T: DeserializeOwned>(stream: &mut TcpStream) -> io::Result<T> {
     Ok(serde_json::from_slice(&bytes)?)
 }
 fn connect(directory: &Path, name: &str, operation: &str, size: (u16, u16)) -> Result<TcpStream> {
+    connect_request(directory, name, operation, size, None)
+}
+fn connect_request(
+    directory: &Path,
+    name: &str,
+    operation: &str,
+    size: (u16, u16),
+    control: Option<control::Request>,
+) -> Result<TcpStream> {
     let endpoint: Endpoint =
         serde_json::from_slice(&fs::read(directory.join(format!("{name}.endpoint")))?)?;
     if endpoint.protocol != PROTOCOL {
@@ -138,6 +151,7 @@ fn connect(directory: &Path, name: &str, operation: &str, size: (u16, u16)) -> R
             operation: operation.into(),
             width: size.0,
             height: size.1,
+            control,
         },
     )?;
     match receive(&mut stream)? {
@@ -147,6 +161,15 @@ fn connect(directory: &Path, name: &str, operation: &str, size: (u16, u16)) -> R
         }
         Response::Error(error) => Err(error.into()),
         _ => Err("Unexpected Muxer handshake".into()),
+    }
+}
+pub fn rpc(name: &str, request: control::Request) -> Result<serde_json::Value> {
+    let mut stream = connect_request(&root()?, name, "control", (80, 24), Some(request))?;
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    match receive(&mut stream)? {
+        Response::Control(value) => Ok(value),
+        Response::Error(error) => Err(error.into()),
+        _ => Err("Unexpected Muxer control response".into()),
     }
 }
 #[cfg(windows)]
@@ -311,8 +334,22 @@ pub fn attach(name: &str, directories: &[PathBuf]) -> Result<()> {
                 Ok(Response::Error(error)) => return Err(error.into()),
                 _ => {}
             }
-            if event::poll(Duration::ZERO)? {
-                packet(&mut stream, &Request::Input(event::read()?))?;
+            if event::poll(Duration::ZERO)?
+                && let Err(error) = packet(&mut stream, &Request::Input(event::read()?))
+            {
+                // Closing the final pane or stopping the server can race
+                // one last resize/key event before the reader observes EOF.
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::BrokenPipe
+                        | io::ErrorKind::ConnectionReset
+                        | io::ErrorKind::ConnectionAborted
+                        | io::ErrorKind::NotConnected
+                        | io::ErrorKind::UnexpectedEof
+                ) {
+                    break;
+                }
+                return Err(error.into());
             }
         }
         Ok(())
@@ -505,6 +542,7 @@ fn run_server(
     let mut generation = 1;
     let mut last_view = app.view();
     let handshakes = Arc::new(AtomicUsize::new(0));
+    let replies = Arc::new(AtomicUsize::new(0));
     let mut saved_at = Instant::now();
     loop {
         if app.config.refresh(false) && clients.is_empty() {
@@ -547,6 +585,7 @@ fn run_server(
                             operation,
                             width,
                             height,
+                            control,
                         },
                 } => {
                     if protocol != PROTOCOL || token != endpoint.token {
@@ -559,12 +598,82 @@ fn run_server(
                     let read = operation
                         .strip_prefix("read:")
                         .and_then(|id| id.parse::<u64>().ok());
-                    if !matches!(operation.as_str(), "attach" | "status" | "stop") && read.is_none()
+                    if (!matches!(operation.as_str(), "attach" | "status" | "stop" | "control")
+                        && read.is_none())
+                        || (operation == "control") != control.is_some()
                     {
                         let _ = packet(
                             &mut stream,
                             &Response::Error("Unknown Muxer operation".into()),
                         );
+                        continue;
+                    }
+                    if let Some(request) = control {
+                        if replies.load(Ordering::Relaxed) >= 32 {
+                            let _ = packet(
+                                &mut stream,
+                                &Response::Error("Muxer control reply limit reached".into()),
+                            );
+                            continue;
+                        }
+                        let view = if let Some(id) = request.client() {
+                            let Some(client) = clients.get(&id) else {
+                                let _ = packet(
+                                    &mut stream,
+                                    &Response::Error("Client does not exist".into()),
+                                );
+                                continue;
+                            };
+                            client.view.clone()
+                        } else {
+                            last_view.clone()
+                        };
+                        app.use_view(&view);
+                        let result = app.automation(&request).map(|mut value| {
+                            if matches!(request, control::Request::Snapshot) {
+                                value["clients"] = serde_json::json!(clients.iter().map(|(id, client)| serde_json::json!({"id": id, "active_pane": client.view.active_pane(), "width": client.area.width, "height": client.area.height})).collect::<Vec<_>>());
+                                value["server_pid"] = serde_json::json!(endpoint.pid);
+                                value["protocol"] = serde_json::json!(PROTOCOL);
+                                value["muxer_version"] = serde_json::json!(env!("CARGO_PKG_VERSION"));
+                            }
+                            value
+                        });
+                        let changed = result.is_ok() && request.mutates();
+                        if changed {
+                            if !app.panes.is_empty() {
+                                last_view = app.view();
+                                if let Some(id) = request.client() {
+                                    let client = clients.get_mut(&id).unwrap();
+                                    client.view = last_view.clone();
+                                    generation += 1;
+                                    client.interacted = generation;
+                                }
+                                if clients.is_empty() {
+                                    app.resize_headless()?;
+                                }
+                            }
+                            persistence.save(app);
+                        }
+                        let response = match result {
+                            Ok(value) => Response::Control(value),
+                            Err(error) => Response::Error(error.to_string()),
+                        };
+                        if app.panes.is_empty() {
+                            let _ = packet(&mut stream, &Response::Ready { pid: endpoint.pid });
+                            let _ = packet(&mut stream, &response);
+                            return Ok(());
+                        }
+                        // Bounded response workers keep a slow local reader out
+                        // of the terminal coordinator and never retry mutations.
+                        replies.fetch_add(1, Ordering::Relaxed);
+                        let pending = replies.clone();
+                        let pid = endpoint.pid;
+                        std::thread::spawn(move || {
+                            if packet(&mut stream, &Response::Ready { pid }).is_ok() {
+                                let _ = packet(&mut stream, &response);
+                            }
+                            pending.fetch_sub(1, Ordering::Relaxed);
+                        });
                         continue;
                     }
                     if packet(&mut stream, &Response::Ready { pid: endpoint.pid }).is_err() {

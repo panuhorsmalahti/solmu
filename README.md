@@ -115,6 +115,8 @@ menus; **Find** searches across the session. **Navigate** and searchable **Help*
 make keyboard controls easy to discover.
 Customize shortcuts and colors in **Settings**; configuration changes apply
 automatically. [Muxer settings](docs/muxer-configuration.md).
+[Local automation commands](docs/muxer-automation.md) inspect sessions, manage
+layouts, send terminal input, and read pane screens without opening the TUI.
 [Run and use muxer](muxer/README.md).
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)
