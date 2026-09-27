@@ -88,8 +88,13 @@ impl App {
                     .unwrap_or_else(|error| error.into_inner());
                 let (rows, cols) = parser.screen().size();
                 let state = pane.exited.as_ref().unwrap_or(&parser.callbacks().label);
+                let native = parser
+                    .callbacks()
+                    .native
+                    .as_ref()
+                    .filter(|meta| meta.instance == pane.instance && pane.exited.is_none());
                 Ok(
-                    json!({"id": id, "space": space.id, "tab": tab.id, "name": pane.name, "cwd": pane.directory, "state": state, "thread": parser.callbacks().thread, "exited": pane.exited, "instance": pane.instance, "pid": pane.pid(), "rows": rows, "cols": cols}),
+                    json!({"id": id, "space": space.id, "tab": tab.id, "name": pane.name, "cwd": pane.directory, "state": state, "thread": parser.callbacks().thread, "exited": pane.exited, "instance": pane.instance, "pid": pane.pid(), "rows": rows, "cols": cols, "native":native}),
                 )
             }
         }
@@ -117,6 +122,64 @@ impl App {
     }
     fn automation_inner(&mut self, request: &Request) -> Result<Value, Box<dyn Error>> {
         match request {
+            Request::AgentList => Ok(
+                json!({"items":self.panes.iter().filter(|pane| pane.exited.is_none()).map(|pane| self.automation_record(Kind::Pane, pane.id).unwrap()).collect::<Vec<_>>()}),
+            ),
+            Request::AgentGet { target } => {
+                self.automation_record(Kind::Pane, crate::agent::resolve(self, target)?.id)
+            }
+            Request::AgentPrompt { .. }
+            | Request::AgentWait { .. }
+            | Request::AgentTurn { .. }
+            | Request::AgentStop { .. } => {
+                Err("Native requests belong to the session coordinator".into())
+            }
+            Request::AgentFocus { target, client } => {
+                let id = crate::agent::resolve(self, target)?.id;
+                self.automation_inner(&Request::Focus {
+                    target: Kind::Pane,
+                    id,
+                    client: *client,
+                })
+            }
+            Request::AgentRename {
+                target,
+                name: label,
+            } => {
+                let id = crate::agent::resolve(self, target)?.id;
+                let label = name(label)?;
+                if label.as_ref().is_some_and(|label| {
+                    self.panes.iter().any(|pane| {
+                        pane.id != id && pane.exited.is_none() && pane.name.as_ref() == Some(label)
+                    })
+                }) {
+                    return Err("Another live Solmu pane already has that name".into());
+                }
+                self.automation_inner(&Request::Rename {
+                    target: Kind::Pane,
+                    id,
+                    name: label,
+                })
+            }
+            Request::AgentRead {
+                target,
+                lines,
+                ansi,
+            } => {
+                let pane = crate::agent::resolve(self, target)?.id;
+                self.automation_inner(&Request::Read {
+                    pane,
+                    lines: *lines,
+                    ansi: *ansi,
+                })
+            }
+            Request::AgentKeys { target, keys } => {
+                let pane = crate::agent::resolve(self, target)?.id;
+                self.automation_inner(&Request::SendKeys {
+                    pane,
+                    keys: keys.clone(),
+                })
+            }
             Request::Wait { .. } | Request::WaitOutput { .. } | Request::Subscribe { .. } => {
                 Err("Monitor requests belong to the session coordinator".into())
             }

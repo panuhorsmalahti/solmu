@@ -288,6 +288,7 @@ mod panes;
 
 mod workspaces;
 
+mod agents;
 mod configuration;
 mod control;
 mod layouts;

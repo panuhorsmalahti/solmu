@@ -26,6 +26,9 @@ Read [Muxer settings](../docs/muxer-configuration.md) for examples.
 Scripts can inspect sessions, create and arrange panes, send terminal input,
 and read live screens through the [local automation commands](../docs/muxer-automation.md).
 Event streams report live changes; waits observe pane states or matching output.
+[Native prompt commands](../docs/muxer-agents.md) send messages without typing
+into the active screen, queue tasks in order, and wait for their saved replies.
+Stop cancels active and queued work while terminal and Profile drafts stay intact.
 Press **Ctrl+b**, then **n** for a new tab, **Tab** to switch tabs, Up/Down to
 switch spaces, **s** to split right, **-** to split down, or **q** to detach.
 Use **Ctrl+b h/j/k/l** to focus panes, **H/J/K/L** to swap them, **z** to zoom,
@@ -45,6 +48,8 @@ Run `muxer --help` or read the [muxer guide](../docs/muxer.md) for workspace
 selection, configuration, shortcuts, and session lifetime.
 
 ![Solmu client screenshot](../docs/screenshots/muxer.png)
+
+![Solmu prompt automation](../docs/screenshots/muxer-automation.png)
 
 ## Workspace tools
 

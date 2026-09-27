@@ -48,6 +48,8 @@ The CLI test records its real terminal cells into `artifacts/cli.html`;
 run `node scripts/capture-cli.mjs` to render it into `docs/screenshots/cli.png`.
 Muxer tests capture `artifacts/muxer.html`; run
 `node scripts/capture-cli.mjs muxer` for `docs/screenshots/muxer.png`.
+The native prompt queue test captures `artifacts/muxer-automation.html`;
+render it with `node scripts/capture-cli.mjs muxer-automation`.
 Installer tests under `e2e/install` use local release archives and temporary
 directories; they do not change your PATH or installed applications.
 

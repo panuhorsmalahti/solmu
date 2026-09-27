@@ -1637,7 +1637,7 @@ impl App {
                     "{}{} · {}{}",
                     if index == self.active { "› " } else { "  " },
                     pane_header_title(pane, rect.width, self.tab().zoomed),
-                    pane.state(),
+                    pane.display_state(),
                     if self.tab().zoomed { " · zoomed" } else { "" }
                 ))
                 .fg(if index == self.active {
@@ -1978,7 +1978,7 @@ fn pane_header_title(pane: &Pane, width: u16, zoomed: bool) -> String {
         let suffix = format!(
             " #{} · {}{}",
             pane.id,
-            pane.state(),
+            pane.display_state(),
             if zoomed { " · zoomed" } else { "" }
         );
         let available =

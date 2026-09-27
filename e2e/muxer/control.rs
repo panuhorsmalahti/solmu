@@ -36,7 +36,10 @@ async fn idle(session: &Session<'_>, pane: u64) -> Value {
     tokio::time::timeout(Duration::from_secs(25), async {
         loop {
             let record = command(session, &["pane", "get", &pane.to_string()]);
-            if record["state"] == "idle" && record["thread"].is_string() {
+            if record["state"] == "idle"
+                && record["thread"].is_string()
+                && record["native"]["ready"] == true
+            {
                 break record;
             }
             observed = record;

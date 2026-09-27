@@ -18,6 +18,12 @@ pub enum Zoom {
     Off,
     Toggle,
 }
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum AgentTarget {
+    Id(u64),
+    Name(String),
+}
 #[derive(Deserialize, Serialize)]
 #[serde(
     tag = "method",
@@ -26,6 +32,52 @@ pub enum Zoom {
     deny_unknown_fields
 )]
 pub enum Request {
+    AgentList,
+    AgentGet {
+        target: AgentTarget,
+    },
+    AgentPrompt {
+        target: AgentTarget,
+        text: String,
+        #[serde(default)]
+        wait: bool,
+        #[serde(default)]
+        timeout_ms: Option<u64>,
+    },
+    AgentWait {
+        target: AgentTarget,
+        #[serde(default)]
+        turn: Option<String>,
+        #[serde(default)]
+        timeout_ms: Option<u64>,
+    },
+    AgentTurn {
+        target: AgentTarget,
+        turn: String,
+    },
+    AgentStop {
+        target: AgentTarget,
+    },
+    AgentRename {
+        target: AgentTarget,
+        name: Option<String>,
+    },
+    AgentFocus {
+        target: AgentTarget,
+        #[serde(default)]
+        client: Option<u64>,
+    },
+    AgentRead {
+        target: AgentTarget,
+        #[serde(default)]
+        lines: Option<u16>,
+        #[serde(default)]
+        ansi: bool,
+    },
+    AgentKeys {
+        target: AgentTarget,
+        keys: Vec<String>,
+    },
     Snapshot,
     List {
         target: Kind,
@@ -140,6 +192,15 @@ fn half() -> u16 {
     500
 }
 impl Request {
+    pub fn native(&self) -> bool {
+        matches!(
+            self,
+            Self::AgentPrompt { .. }
+                | Self::AgentWait { .. }
+                | Self::AgentTurn { .. }
+                | Self::AgentStop { .. }
+        )
+    }
     pub fn monitored(&self) -> bool {
         matches!(
             self,
@@ -148,7 +209,9 @@ impl Request {
     }
     pub fn client(&self) -> Option<u64> {
         match self {
-            Self::Focus { client, .. } | Self::Zoom { client, .. } => *client,
+            Self::Focus { client, .. }
+            | Self::Zoom { client, .. }
+            | Self::AgentFocus { client, .. } => *client,
             _ => None,
         }
     }
@@ -156,6 +219,7 @@ impl Request {
         matches!(
             self,
             Self::Focus { .. }
+                | Self::AgentFocus { .. }
                 | Self::Zoom { .. }
                 | Self::CreateSpace { focus: true, .. }
                 | Self::CreateTab { focus: true, .. }
@@ -165,7 +229,13 @@ impl Request {
     pub fn mutates(&self) -> bool {
         !matches!(
             self,
-            Self::Snapshot | Self::List { .. } | Self::Get { .. } | Self::Read { .. }
+            Self::Snapshot
+                | Self::List { .. }
+                | Self::Get { .. }
+                | Self::Read { .. }
+                | Self::AgentList
+                | Self::AgentGet { .. }
+                | Self::AgentRead { .. }
         )
     }
 }
@@ -201,6 +271,12 @@ pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
   muxer pane wait ID --until idle|working|error|exited [--until STATE]... [--timeout MS]
   muxer pane wait-output ID --match TEXT|--regex PATTERN [--timeout MS]
   muxer events [--pane ID] [--timeout MS] [--count N]
+  muxer agent list | get TARGET | read TARGET [--json] | focus TARGET [--client ID]
+  muxer agent rename TARGET NAME|--clear | send-keys TARGET KEY [KEY ...]
+  muxer agent prompt TARGET TEXT [--wait] [--timeout MS]
+  muxer agent wait TARGET [--turn UUID] [--timeout MS] | turn TARGET UUID | stop TARGET
+Agent targets are pane IDs or unique live pane names. Prompts queue while busy;
+turn waits track the exact submitted turn and preserve terminal drafts.
 Focus commands accept --client ID; otherwise they change the server's next-attach view.
 New spaces, tabs, and splits preserve focus unless --focus is supplied.
 Names can be cleared with rename ID --clear. JSON success goes to stdout;
@@ -212,6 +288,19 @@ struct Args {
     options: bool,
 }
 impl Args {
+    fn agent_target(&mut self) -> Result<AgentTarget, String> {
+        let value = self.pop()?;
+        if value.bytes().all(|b| b.is_ascii_digit()) {
+            Ok(AgentTarget::Id(number(&value)?))
+        } else if value.trim().is_empty()
+            || value.chars().count() > 80
+            || value.chars().any(char::is_control)
+        {
+            Err("Agent target must be a pane ID or live pane name".into())
+        } else {
+            Ok(AgentTarget::Name(value))
+        }
+    }
     fn timeout(&mut self) -> Result<Option<u64>, String> {
         self.take("--timeout")?
             .map(|v| {
@@ -313,6 +402,80 @@ fn number(value: &str) -> Result<u64, String> {
         .ok_or_else(|| "IDs must be positive integers".into())
 }
 fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
+    if group == "agent" {
+        let action = args.pop()?;
+        if action == "list" {
+            return Ok(Request::AgentList);
+        }
+        let target = args.agent_target()?;
+        return match action.as_str() {
+            "get" => Ok(Request::AgentGet { target }),
+            "prompt" => {
+                let wait = args.flag("--wait");
+                let timeout_ms = args.timeout()?;
+                let text = args.pop()?;
+                solmu_client::automation::validate_text(&text)?;
+                Ok(Request::AgentPrompt {
+                    target,
+                    text,
+                    wait,
+                    timeout_ms,
+                })
+            }
+            "wait" => Ok(Request::AgentWait {
+                target,
+                turn: args
+                    .take("--turn")?
+                    .map(|id| {
+                        uuid::Uuid::parse_str(&id)
+                            .map(|id| id.to_string())
+                            .map_err(|_| "Invalid turn ID".to_string())
+                    })
+                    .transpose()?,
+                timeout_ms: args.timeout()?,
+            }),
+            "turn" => {
+                let id = args.pop()?;
+                let turn = uuid::Uuid::parse_str(&id)
+                    .map_err(|_| "Invalid turn ID")?
+                    .to_string();
+                Ok(Request::AgentTurn { target, turn })
+            }
+            "stop" => Ok(Request::AgentStop { target }),
+            "rename" => Ok(Request::AgentRename {
+                target,
+                name: if args.flag("--clear") {
+                    None
+                } else {
+                    Some(args.pop()?)
+                },
+            }),
+            "focus" => Ok(Request::AgentFocus {
+                target,
+                client: args.optional_id("--client")?,
+            }),
+            "read" => Ok(Request::AgentRead {
+                target,
+                lines: args
+                    .take("--lines")?
+                    .map(|v| {
+                        v.parse()
+                            .map_err(|_| "Lines must be 1 through 100".to_string())
+                    })
+                    .transpose()?,
+                ansi: args.flag("--ansi"),
+            }),
+            "send-keys" => {
+                if args.values.first().is_some_and(|v| v == "--") {
+                    args.values.remove(0);
+                }
+                let keys = std::mem::take(&mut args.values);
+                key_bytes(&keys)?;
+                Ok(Request::AgentKeys { target, keys })
+            }
+            _ => Err("Unknown agent command".into()),
+        };
+    }
     if group == "events" {
         return Ok(Request::Subscribe {
             pane: args.optional_id("--pane")?,
@@ -521,7 +684,7 @@ pub fn cli(values: Vec<OsString>) -> bool {
     };
     if !matches!(
         group,
-        "space" | "tab" | "pane" | "api" | "status" | "events"
+        "space" | "tab" | "pane" | "api" | "status" | "events" | "agent"
     ) {
         return false;
     }
@@ -550,12 +713,12 @@ pub fn cli(values: Vec<OsString>) -> bool {
     {
         failure("Could not load .env", 1);
     }
-    let text = matches!(request, Request::Read { .. }) && !json_output;
+    let text = matches!(request, Request::Read { .. } | Request::AgentRead { .. }) && !json_output;
     if matches!(request, Request::Subscribe { .. }) {
         session::subscribe(&name, request).unwrap_or_else(|e| failure(e, 1));
         return true;
     }
-    let result = session::rpc(&name, request).unwrap_or_else(|e| failure(e, 1));
+    let result = session::rpc(&name, request).unwrap_or_else(|error| runtime_failure(error));
     if text {
         print!("{}", result["text"].as_str().unwrap_or_default());
     } else {
@@ -565,4 +728,14 @@ pub fn cli(values: Vec<OsString>) -> bool {
 }
 pub fn success(result: Value) -> Value {
     json!({"ok": true, "result": result})
+}
+fn runtime_failure(error: Box<dyn std::error::Error>) -> ! {
+    if let Some(error) = error.downcast_ref::<crate::agent::Failure>() {
+        eprintln!(
+            "{}",
+            json!({"ok":false,"error":error.failure.message,"code":error.failure.code,"accepted":error.failure.accepted,"turn":error.failure.turn,"pane":error.pane,"instance":error.instance,"thread":error.thread})
+        );
+        std::process::exit(1);
+    }
+    failure(error, 1)
 }

@@ -8,7 +8,9 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 use solmu_client::{Action, Api, Connection, Session, Update};
+use std::io::Write as _;
 use std::{error::Error, io};
+mod automation;
 use tokio::sync::mpsc;
 mod settings;
 
@@ -55,13 +57,18 @@ fn launch(
     session: &mut Session,
     action: Action,
     sender: &mpsc::UnboundedSender<Update>,
+    runtime: &mut automation::Runtime,
 ) -> Option<tokio::task::JoinHandle<()>> {
+    let sending = matches!(action, Action::Send(_));
     let updates = if matches!(action, Action::Refresh) {
         session.refresh()
     } else {
         session.begin(action)
     };
     if let Some(mut updates) = updates {
+        if sending {
+            runtime.start_if_needed(session);
+        }
         let sender = sender.clone();
         Some(tokio::spawn(async move {
             while let Some(update) = updates.next().await {
@@ -79,7 +86,9 @@ fn stop(
     session: &mut Session,
     active: &mut Option<tokio::task::JoinHandle<()>>,
     sender: &mpsc::UnboundedSender<Update>,
+    runtime: &mut automation::Runtime,
 ) {
+    runtime.cancel_queue();
     if !session.responding {
         return;
     }
@@ -116,13 +125,16 @@ fn stop(
 async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
     let mut terminal = ratatui::init();
     let result = async {
+        let mut bridge = automation::Bridge::start()?;
+        let mut runtime = automation::Runtime::default();
+        let mut reported_metadata = String::new();
         let mut session = Session::new(Api::from_env().with_workspace(std::env::current_dir()?));
         let (settings_sender, mut settings_receiver) = mpsc::unbounded_channel();
         let mut page: Option<settings::Page> = None;
         let (sender, mut receiver) = mpsc::unbounded_channel();
         let mut startup_thread = thread.clone();
         let initial = thread.map(Action::Open).unwrap_or_else(|| Action::New("New conversation".into()));
-        let mut active = launch(&mut session, initial, &sender);
+        let mut active = launch(&mut session, initial, &sender, &mut runtime);
         let mut events = EventStream::new();
         let mut input = String::new();
         let mut show_threads = false;
@@ -138,7 +150,13 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
         let mut reported_title = String::new();
         let mut pending_enter = None;
         loop {
-            let state = if session.error.is_some() { "error" } else if session.busy { "working" } else { "idle" };
+            runtime.observe(&session);
+            runtime.poll(&session);
+            if let Some(text) = runtime.next(&session) {
+                active = launch(&mut session, Action::Send(text), &sender, &mut runtime);
+                scroll = 0;
+            }
+            let state = if session.responding || runtime.active() { "working" } else if session.error.is_some() { "error" } else if session.current.is_none() { "starting" } else { "idle" };
             let identity = session.current.as_ref().map(|thread| thread.id.as_str()).or(startup_thread.as_deref()).unwrap_or("-");
             let title = format!("Solmu | {state} | {identity}");
             if title != reported_title {
@@ -147,9 +165,20 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                 crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(&title))?;
                 reported_title = title;
             }
+            if bridge.port != 0 {
+                let metadata = serde_json::to_string(&runtime.metadata(&bridge, &session))?;
+                if metadata != reported_metadata {
+                    write!(io::stdout(), "\x1b]777;solmu;{metadata}\x07")?;
+                    io::stdout().flush()?;
+                    reported_metadata = metadata;
+                }
+            }
             terminal.draw(|frame| if let Some(page) = &page { page.draw(frame); } else { draw(frame, &session, &input, show_threads, scroll, spinner, connected); draw_commands(frame, &input, command_selection); })?;
             let can_submit = !session.busy;
             tokio::select! {
+                Some(command) = bridge.receiver.recv() => {
+                    if runtime.handle(command, &session) { stop(&mut session, &mut active, &sender, &mut runtime); }
+                },
                 _ = animation.tick(), if session.busy => spinner = spinner.wrapping_add(1),
                 Some(change) = changes.next() => {
                     match change {
@@ -157,15 +186,16 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                         Connection::Disconnected => connected = false,
                         Connection::Connected | Connection::Changed => {
                             connected = true;
-                            if session.busy { pending_refresh = true; } else { active = launch(&mut session, Action::Refresh, &sender); }
+                            if session.busy { pending_refresh = true; } else { active = launch(&mut session, Action::Refresh, &sender, &mut runtime); }
                         }
                     }
                 },
                 Some(event) = settings_receiver.recv() => { if let Some(page) = &mut page { page.update(event); } },
                 Some(update) = receiver.recv() => {
                     if matches!(update, Update::Opened(_, _)) { startup_thread = None; }
+                    runtime.update(&update);
                     session.apply(update);
-                    if !session.busy && pending_refresh { pending_refresh = false; active = launch(&mut session, Action::Refresh, &sender); }
+                    if !session.busy && pending_refresh { pending_refresh = false; active = launch(&mut session, Action::Refresh, &sender, &mut runtime); }
                 },
                 event = async {
                     if can_submit && let Some(event) = pending_enter.take() { Some(Ok(event)) }
@@ -184,7 +214,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                         match current_page.key(key) {
                             settings::Action::Close => page = None,
                             settings::Action::Save(text, model) => settings::save(session.api.clone(), text, model, settings_sender.clone()),
-                            settings::Action::Model(model) => { page = None; active = launch(&mut session, Action::Model(model), &sender); },
+                            settings::Action::Model(model) => { page = None; active = launch(&mut session, Action::Model(model), &sender, &mut runtime); },
                             settings::Action::None => {},
                         }
                         continue;
@@ -195,7 +225,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             let count = command_matches(&input).len();
                             command_selection = if key.code == KeyCode::Up { (command_selection + count - 1) % count } else { (command_selection + 1) % count };
                         },
-                        KeyCode::Esc => { stop(&mut session, &mut active, &sender); input.clear(); },
+                        KeyCode::Esc => { stop(&mut session, &mut active, &sender, &mut runtime); input.clear(); },
                         KeyCode::Tab => {
                             let (prefix, index) = completion.get_or_insert_with(|| (input.clone(), 0));
                             if !prefix.starts_with('/') || prefix.contains(' ') { continue; }
@@ -216,7 +246,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             }
                             let text = input.trim().to_owned();
                             if text == "/exit" { break; }
-                            if text == "/stop" { stop(&mut session, &mut active, &sender); input.clear(); continue; }
+                            if text == "/stop" { stop(&mut session, &mut active, &sender, &mut runtime); input.clear(); continue; }
                             if text.is_empty() { continue; }
                             if session.busy {
                                 // Live refreshes and conversation operations can
@@ -240,7 +270,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
-                            active = launch(&mut session, action, &sender);
+                            active = launch(&mut session, action, &sender, &mut runtime);
                         },
                         _ => {},
                     }

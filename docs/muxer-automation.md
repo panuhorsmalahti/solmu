@@ -30,6 +30,9 @@ session starts a new ID sequence.
 `api snapshot` reports the selected space/tab/pane, all spaces, tabs and panes,
 attached clients, active monitor count, server PID, protocol version, and installed
 Muxer version.
+It also reports active native agent requests. Pane records include native
+readiness, queued prompt count, and the latest turn when available; see
+[Solmu prompt automation](muxer-agents.md).
 `pane get ID` includes its working directory, state, native Solmu conversation
 ID (`thread`), process ID, and terminal rows/columns. `instance` identifies the
 particular pane process and changes when it restarts. A stopped pane remains
@@ -172,9 +175,9 @@ error. The UI and other control commands remain available during subscriptions.
 keep receiving updates until disconnection or session shutdown.
 
 State waits accept `idle`, `working`, `error`, and `exited`; repeat `--until` to
-accept any of several states. These reflect the native CLI's status: `working`
-can include conversation operations and automatic refreshes as well as model
-responses. An already matching state succeeds immediately. Waiting for `idle`
+accept any of several states. `working` indicates a model response or pending
+stop acknowledgement; background refreshes do not set it. An already matching
+state succeeds immediately. Waiting for `idle`
 does not submit a message or prove that a particular reply has completed.
 
 Output waits inspect the plain-text visible viewport immediately, then as it
@@ -207,8 +210,9 @@ muxer api request '{"method":"split_pane","params":{"pane":1,"axis":"right","rat
 
 Request names are `snapshot`, `list`, `get`, `create_space`, `create_tab`,
 `split_pane`, `focus`, `rename`, `close`, `swap`, `zoom`, `resize`, `restart`,
-`read`, `send_text`, `send_keys`, `wait`, `wait_output`, and `subscribe`. `snapshot` has no `params`; other requests
-use the following fields. Optional fields may be omitted.
+`read`, `send_text`, `send_keys`, `wait`, `wait_output`, and `subscribe`, plus
+the native `agent_*` requests below. `snapshot` and `agent_list` have no
+`params`; other requests use the following fields. Optional fields may be omitted.
 
 | Request | Required fields | Optional fields |
 | --- | --- | --- |
@@ -230,6 +234,16 @@ use the following fields. Optional fields may be omitted.
 | `wait` | `pane`, `until`: array of states | `timeout_ms` |
 | `wait_output` | `pane`, `pattern` | `regex` (false), `timeout_ms` |
 | `subscribe` | | `pane`, `count`, `timeout_ms` |
+| `agent_list` | No `params` | |
+| `agent_get` | `target`: pane ID or unique name | |
+| `agent_prompt` | `target`, `text` | `wait` (false), `timeout_ms` |
+| `agent_wait` | `target` | `turn`, `timeout_ms` |
+| `agent_turn` | `target`, `turn` | |
+| `agent_stop` | `target` | |
+| `agent_rename` | `target`, `name` (string or null) | |
+| `agent_focus` | `target` | `client` |
+| `agent_read` | `target` | `lines`, `ansi` (false) |
+| `agent_keys` | `target`, `keys` | |
 
 API ratios are integer thousandths (100–900), unlike the CLI's decimal ratios.
 Direct `cwd` paths are interpreted by the server; use absolute paths.
@@ -247,8 +261,12 @@ length-prefixed UTF-8 JSON frames, capped at 4 MiB. Send one request in its Hell
 
 The server replies with `{"Ready":{"pid":123}}`, followed by
 `{"Control":RESULT}` or `{"Error":"..."}`, then closes the connection.
-Handshake errors may return `Error` without `Ready`. Authentication reads and
-bounded reply writers run outside the terminal coordinator. Subscriptions keep the connection open after `Ready` and receive
+Handshake errors may return `Error` without `Ready`. Native agent requests
+may return `{"AgentError":FAILURE}` after `Ready`,
+where `FAILURE` contains `pane`, `instance`, `thread`, and a nested `failure`
+with `code`, `message`, `accepted`, and `turn`.
+Authentication reads and bounded reply writers run outside the terminal
+coordinator. Subscriptions keep the connection open after `Ready` and receive
 `{"Event":EVENT}` frames followed by `{"End":{"reason":"count_reached"}}`
 or `{"End":{"reason":"timeout"}}` when a limit is reached. Waits keep the
 connection open until their `Control` result or `Error`. A connection owns

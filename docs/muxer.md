@@ -118,6 +118,11 @@ desktop and web too. `/profile` edits the shared system prompt and optional
 default model; `/model` selects a model for the current thread. Tabs use their
 space's directory as the thread workspace.
 
+Scripts can [send prompts directly to Solmu](muxer-agents.md), queue tasks,
+wait for an individual saved reply, and cancel active and queued work.
+Terminal drafts and unsaved Profile edits remain intact. Pane headers show
+the number of unsent queued prompts.
+
 ## Configuration and lifetime
 
 **Settings** edits colors, shortcuts, sidebar presentation, working-directory

@@ -5,6 +5,8 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{pin::Pin, time::Duration};
 
+pub mod automation;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Thread {
     pub id: String,

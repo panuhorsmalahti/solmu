@@ -56,6 +56,7 @@ pub(crate) enum Response {
     Control(serde_json::Value),
     Event(serde_json::Value),
     End(serde_json::Value),
+    AgentError(crate::agent::Failure),
 }
 
 pub fn validate_name(name: &str) -> Result<()> {
@@ -166,7 +167,7 @@ fn connect_request(
     }
 }
 pub fn rpc(name: &str, request: control::Request) -> Result<serde_json::Value> {
-    let monitored = request.monitored();
+    let monitored = request.monitored() || request.native();
     let mut stream = connect_request(&root()?, name, "control", (80, 24), Some(request))?;
     stream.set_read_timeout(if monitored {
         None
@@ -175,6 +176,7 @@ pub fn rpc(name: &str, request: control::Request) -> Result<serde_json::Value> {
     })?;
     match receive(&mut stream)? {
         Response::Control(value) => Ok(value),
+        Response::AgentError(error) => Err(Box::new(error)),
         Response::Error(error) => Err(error.into()),
         _ => Err("Unexpected Muxer control response".into()),
     }
@@ -566,6 +568,7 @@ fn run_server(
     let handshakes = Arc::new(AtomicUsize::new(0));
     let replies = Arc::new(AtomicUsize::new(0));
     let mut monitors = crate::monitor::Manager::default();
+    let agents = Arc::new(AtomicUsize::new(0));
     let mut saved_at = Instant::now();
     loop {
         if app.config.refresh(false) && clients.is_empty() {
@@ -632,6 +635,39 @@ fn run_server(
                         continue;
                     }
                     if let Some(request) = control {
+                        if request.native() {
+                            app.use_view(&last_view);
+                            if agents.load(Ordering::Relaxed) >= 16 {
+                                let _ = packet(
+                                    &mut stream,
+                                    &Response::Error(
+                                        "Sixteen native agent requests are already active".into(),
+                                    ),
+                                );
+                                continue;
+                            }
+                            let job = match crate::agent::Job::prepare(app, &request) {
+                                Ok(job) => job,
+                                Err(error) => {
+                                    let _ = packet(&mut stream, &Response::Error(error));
+                                    continue;
+                                }
+                            };
+                            agents.fetch_add(1, Ordering::Relaxed);
+                            let pending = agents.clone();
+                            let pid = endpoint.pid;
+                            std::thread::spawn(move || {
+                                if packet(&mut stream, &Response::Ready { pid }).is_ok() {
+                                    let response = match job.run(&mut stream) {
+                                        Ok(value) => Response::Control(value),
+                                        Err(error) => Response::AgentError(error),
+                                    };
+                                    let _ = packet(&mut stream, &response);
+                                }
+                                pending.fetch_sub(1, Ordering::Relaxed);
+                            });
+                            continue;
+                        }
                         if request.monitored() {
                             app.use_view(&last_view);
                             match monitors.prepare(&request, app) {
@@ -669,6 +705,7 @@ fn run_server(
                                 value["protocol"] = serde_json::json!(PROTOCOL);
                                 value["muxer_version"] = serde_json::json!(env!("CARGO_PKG_VERSION"));
                                 value["active_monitors"] = serde_json::json!(monitors.len());
+                                value["active_agents"] = serde_json::json!(agents.load(Ordering::Relaxed));
                             }
                             value
                         });
@@ -799,6 +836,7 @@ fn run_server(
             value["protocol"] = serde_json::json!(PROTOCOL);
             value["muxer_version"] = serde_json::json!(env!("CARGO_PKG_VERSION"));
             value["active_monitors"] = serde_json::json!(monitors.len());
+            value["active_agents"] = serde_json::json!(agents.load(Ordering::Relaxed));
             value
         });
         monitors.poll(app, monitor_snapshot.as_ref());

@@ -4426,8 +4426,10 @@ dependencies = [
  "dotenvy",
  "futures-util",
  "ratatui",
+ "serde_json",
  "solmu-client",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -4489,6 +4491,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "solmu-client",
  "toml_edit",
  "unicode-segmentation",
  "unicode-width",

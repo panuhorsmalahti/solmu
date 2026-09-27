@@ -18,9 +18,36 @@ use std::{
 pub struct Status {
     pub label: String,
     pub thread: Option<String>,
+    pub native: Option<solmu_client::automation::Metadata>,
+    pub closed: bool,
     replies: Vec<Vec<u8>>,
 }
 impl vt100::Callbacks for Status {
+    fn unhandled_osc(&mut self, _: &mut vt100::Screen, params: &[&[u8]]) {
+        if params.len() == 3
+            && params[0] == b"777"
+            && params[1] == b"solmu"
+            && let Ok(metadata) =
+                serde_json::from_slice::<solmu_client::automation::Metadata>(params[2])
+            && metadata.version == 1
+            && metadata.port != 0
+            && metadata.queued <= 16
+            && uuid::Uuid::parse_str(&metadata.instance).is_ok()
+            && metadata
+                .thread
+                .as_ref()
+                .is_none_or(|id| uuid::Uuid::parse_str(id).is_ok())
+            && metadata.turn.as_ref().is_none_or(|turn| {
+                uuid::Uuid::parse_str(&turn.id).is_ok()
+                    && matches!(
+                        turn.state.as_str(),
+                        "queued" | "working" | "succeeded" | "stopped" | "failed"
+                    )
+            })
+        {
+            self.native = Some(metadata);
+        }
+    }
     fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
         if let Some(state) = title.strip_prefix(b"Solmu | ") {
             let state = String::from_utf8_lossy(state);
@@ -62,6 +89,7 @@ pub struct Pane {
     pub directory: PathBuf,
     pub parser: Arc<Mutex<vt100::Parser<Status>>>,
     pub exited: Option<String>,
+    pub agent_token: Option<String>,
     master: Option<Box<dyn MasterPty + Send>>,
     child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
     writer: Option<SyncSender<Vec<u8>>>,
@@ -88,6 +116,8 @@ impl Pane {
             pixel_height: 0,
         })?;
         let mut command = CommandBuilder::new(executable);
+        let instance = uuid::Uuid::new_v4().to_string();
+        let agent_token = uuid::Uuid::new_v4().to_string();
         if let Some(thread) = &thread {
             command.arg("--thread");
             command.arg(thread);
@@ -95,6 +125,8 @@ impl Pane {
         command.cwd(&directory);
         command.env("TERM", "xterm-256color");
         command.env("SOLMU_MUXER", "1");
+        command.env("SOLMU_MUXER_INSTANCE", &instance);
+        command.env("SOLMU_MUXER_AGENT_TOKEN", &agent_token);
         let child = pair.slave.spawn_command(command)?;
         drop(pair.slave);
         let mut terminal_writer = pair.master.take_writer()?;
@@ -125,7 +157,7 @@ impl Pane {
         let input = writer.clone();
         std::thread::spawn(move || {
             let mut bytes = [0; 8192];
-            while let Ok(count) = reader.read(&mut bytes) {
+            'read: while let Ok(count) = reader.read(&mut bytes) {
                 if count == 0 {
                     break;
                 }
@@ -138,19 +170,25 @@ impl Pane {
                     for reply in replies {
                         match input.try_send(reply) {
                             Ok(()) | Err(mpsc::TrySendError::Full(_)) => {}
-                            Err(mpsc::TrySendError::Disconnected(_)) => return,
+                            Err(mpsc::TrySendError::Disconnected(_)) => break 'read,
                         }
                     }
                 }
             }
+            capture
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .callbacks_mut()
+                .closed = true;
         });
         Ok(Self {
             id,
-            instance: uuid::Uuid::new_v4().to_string(),
+            instance,
             name: None,
             directory,
             parser,
             exited: None,
+            agent_token: Some(agent_token),
             master: Some(pair.master),
             child: Some(child),
             writer: Some(writer),
@@ -176,6 +214,7 @@ impl Pane {
             directory,
             parser: Arc::new(Mutex::new(parser)),
             exited: Some(reason),
+            agent_token: None,
             master: None,
             child: None,
             writer: None,
@@ -280,6 +319,15 @@ impl Pane {
                 .label
                 .clone()
         })
+    }
+    pub fn display_state(&self) -> String {
+        let state = self.state();
+        let queued = crate::agent::metadata(self).map_or(0, |meta| meta.queued);
+        if queued == 0 {
+            state
+        } else {
+            format!("{state} · {queued} queued")
+        }
     }
 }
 impl Drop for Pane {

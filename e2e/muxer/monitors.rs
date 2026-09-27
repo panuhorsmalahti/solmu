@@ -12,9 +12,9 @@ fn command(session: &Session<'_>, args: &[&str]) -> Value {
     );
     serde_json::from_slice::<Value>(&output.stdout).unwrap()["result"].clone()
 }
-struct Pending(Option<Child>);
+pub(super) struct Pending(Option<Child>);
 impl Pending {
-    fn new(session: &Session<'_>, args: &[&str]) -> Self {
+    pub(super) fn new(session: &Session<'_>, args: &[&str]) -> Self {
         Self(Some(
             session
                 .process(args)
@@ -24,7 +24,7 @@ impl Pending {
                 .unwrap(),
         ))
     }
-    async fn finish(mut self, success: bool) -> Value {
+    pub(super) async fn finish(mut self, success: bool) -> Value {
         tokio::time::timeout(Duration::from_secs(15), async {
             while self.0.as_mut().unwrap().try_wait().unwrap().is_none() {
                 tokio::time::sleep(Duration::from_millis(20)).await;
@@ -45,6 +45,11 @@ impl Pending {
             &output.stderr
         })
         .unwrap()
+    }
+    pub(super) fn cancel(mut self) {
+        let child = self.0.as_mut().unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }
 impl Drop for Pending {

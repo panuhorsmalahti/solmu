@@ -118,6 +118,8 @@ automatically. [Muxer settings](docs/muxer-configuration.md).
 [Local automation commands](docs/muxer-automation.md) inspect sessions, manage
 layouts, send terminal input, and read pane screens without opening the TUI.
 Subscribe to live session updates or wait for a pane state or matching output.
+[Send prompts directly to Solmu](docs/muxer-agents.md), queue tasks in order,
+wait for a specific reply, and cancel pending work while preserving terminal drafts.
 [Run and use muxer](muxer/README.md).
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)
