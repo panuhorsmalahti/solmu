@@ -1,11 +1,14 @@
 use crate::{
     Policy,
-    policy::{self, Mode},
+    policy::{self, Mode, Network},
 };
 use std::{io, os::unix::process::CommandExt, process::Command};
 
 pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
-    let profile = if policy.mode == Mode::Workspace {
+    if policy.network == Network::Deny {
+        crate::unix::prepare_network_denial()?;
+    }
+    let mut profile = if policy.mode == Mode::Workspace {
         let executable = policy::executable(&command)?;
         let mut read = policy::runtime_paths();
         read.extend(policy.read.clone());
@@ -28,8 +31,11 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
         write.extend(policy.write.clone());
         read.extend(write.clone());
         let mut profile = String::from(
-            "(version 1)(deny default)(allow process*)(allow signal)(allow sysctl-read)(allow mach-lookup)(allow network*)(allow file-read-metadata)",
+            "(version 1)(deny default)(allow process*)(allow signal)(allow sysctl-read)(allow mach-lookup)(allow file-read-metadata)",
         );
+        if policy.network == Network::Allow {
+            profile.push_str("(allow network*)");
+        }
         for directory in policy::runtime_list() {
             profile.push_str(&format!(
                 "(allow file-read* (literal {}))",
@@ -74,6 +80,9 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
     } else {
         "(version 1)(allow default)".to_owned()
     };
+    if policy.network == Network::Deny {
+        profile.push_str("(deny network*)(deny system-socket)");
+    }
     let mut sandbox = Command::new("/usr/bin/sandbox-exec");
     sandbox
         .arg("-p")

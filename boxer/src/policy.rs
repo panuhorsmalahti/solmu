@@ -37,10 +37,19 @@ pub enum Mode {
     Isolated,
 }
 
+#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Network {
+    #[default]
+    Allow,
+    Deny,
+}
+
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Policy {
     pub mode: Mode,
+    pub network: Network,
     pub read_only: bool,
     pub read: Vec<PathBuf>,
     pub write: Vec<PathBuf>,

@@ -3,6 +3,7 @@
 Solmu uses two system prompts for every reply:
 
 - **Internal:** built-in instructions introduce Solmu, describe workspace tools,
+  require respecting filesystem and network restrictions,
   and explain installing skills in `.agents/skills/<name>/SKILL.md`, reading
   relevant instructions, and resolving resources. Profile cannot replace this
   prompt; it is maintained with the backend.

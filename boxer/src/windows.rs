@@ -30,6 +30,11 @@ impl Drop for Handle {
 }
 
 pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
+    if policy.network == crate::policy::Network::Deny {
+        return Err(io::Error::other(
+            "Network restrictions are not supported by the Windows Job Object backend; use Linux/WSL or macOS for an offline policy",
+        ));
+    }
     if policy.read_only || policy.mode != crate::policy::Mode::Unrestricted {
         return Err(io::Error::other(
             "Filesystem restrictions are not supported by the Windows Job Object backend; use Linux/WSL or macOS for a filesystem policy",

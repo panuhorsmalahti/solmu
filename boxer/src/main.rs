@@ -1,6 +1,8 @@
 use std::{ffi::OsString, io, process::Command};
 mod policy;
-use policy::{Mode, Policy};
+use policy::{Mode, Network, Policy};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod unix;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -30,6 +32,7 @@ fn run() -> io::Result<i32> {
     let mut arguments = std::env::args_os().skip(1);
     let mut policy = Policy::default();
     let mut mode = None;
+    let mut network = None;
     let mut policy_file = None;
     let mut profile = false;
     let mut print_policy = false;
@@ -39,7 +42,10 @@ fn run() -> io::Result<i32> {
     while let Some(argument) = arguments.next() {
         if argument == "--help" || argument == "-h" {
             println!(
-                "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--profile solmu: workspace policy, clean environment, and Solmu workspace configuration.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem restrictions are rejected."
+                "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--profile solmu: workspace policy, clean environment, and Solmu workspace configuration.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
+            );
+            println!(
+                "--network allow|deny: allow all socket networking (default), or block it on Linux/macOS. Denial closes inherited nonstandard descriptors and rejects socket-based standard I/O."
             );
             return Ok(0);
         } else if argument == "--version" {
@@ -49,6 +55,12 @@ fn run() -> io::Result<i32> {
             policy.read_only = true;
         } else if argument == "--workspace" {
             mode = Some(Mode::Workspace);
+        } else if argument == "--network" {
+            network = Some(match arguments.next().as_deref() {
+                Some(value) if value == "allow" => Network::Allow,
+                Some(value) if value == "deny" => Network::Deny,
+                _ => return Err(io::Error::other("--network requires allow or deny")),
+            });
         } else if argument == "--isolated" {
             mode = Some(Mode::Isolated);
         } else if argument == "--read" || argument == "--write" {
@@ -148,6 +160,7 @@ fn run() -> io::Result<i32> {
         Policy::default()
     };
     resolved.mode = mode.unwrap_or(resolved.mode);
+    resolved.network = network.unwrap_or(resolved.network);
     resolved.read_only |= policy.read_only;
     resolved.clean_env |= policy.clean_env;
     resolved.read.extend(policy.read);
@@ -170,11 +183,15 @@ fn run() -> io::Result<i32> {
     resolved.environment(&mut command);
     if print_policy {
         let supported = if cfg!(windows) {
-            resolved.mode == Mode::Unrestricted && !resolved.read_only
+            resolved.mode == Mode::Unrestricted
+                && !resolved.read_only
+                && resolved.network == Network::Allow
         } else if cfg!(target_os = "macos") {
             !resolved.isolated
         } else {
             cfg!(target_os = "linux")
+                && ((resolved.network == Network::Allow && !resolved.isolated)
+                    || cfg!(any(target_arch = "x86_64", target_arch = "aarch64")))
         };
         let forwarded: Vec<_> = command
             .get_envs()
@@ -184,7 +201,8 @@ fn run() -> io::Result<i32> {
         println!("{}", serde_json::to_string_pretty(&serde_json::json!({
             "version": 1, "platform": std::env::consts::OS, "platform_supported": supported,
             "enforcement": "not-applied",
-            "workspace": workspace, "policy": resolved, "network": "allowed",
+            "workspace": workspace, "policy": resolved,
+            "network": if resolved.network == Network::Allow { "allowed" } else { "denied" },
             "runtime_read": match resolved.mode {
                 Mode::Unrestricted => Vec::new(),
                 Mode::Workspace => policy::runtime_paths(),

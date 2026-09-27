@@ -1,6 +1,6 @@
 use crate::{
     Policy,
-    policy::{self, Mode},
+    policy::{self, Mode, Network},
 };
 use landlock::{
     ABI, Access, AccessFs, CompatLevel, Compatible, PathBeneath, PathFd, Ruleset, RulesetAttr,
@@ -24,6 +24,9 @@ extern "C" fn interrupted(signal: i32) {
 }
 
 pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
+    if policy.network == Network::Deny {
+        crate::unix::prepare_network_denial()?;
+    }
     if policy.isolated {
         return isolated(command, policy);
     }
@@ -96,8 +99,9 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
             .map_err(io::Error::other)?;
     }
     rules.restrict_self().map_err(io::Error::other)?;
-    // Network access is deliberately not handled by the ruleset: all requests
-    // are allowed. Existing caller permissions still apply.
+    if policy.network == Network::Deny {
+        seccomp::install_network_denial()?;
+    }
     Err(command.exec())
 }
 
@@ -133,6 +137,9 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         "solmu",
         "--clearenv",
     ]);
+    if policy.network == Network::Deny {
+        sandbox.arg("--unshare-net");
+    }
     // Share only runtime files, not the host's home, /run, or arbitrary mounts.
     for &path in policy::ISOLATED_RUNTIME {
         sandbox.args(["--ro-bind-try", path, path]);
@@ -180,7 +187,7 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         .arg("--")
         .arg("/opt/solmu/agent")
         .args(command.get_args());
-    // No network namespace is created: host networking stays available.
+    // Host networking is shared only when the policy allows it.
     let group = cgroup::Group::create(&policy)?;
     group.validate_workspace(&directory)?;
     for path in policy.read.iter().chain(&policy.write) {
@@ -195,7 +202,7 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         }
         group.validate_workspace(path)?;
     }
-    let filter = seccomp::filter()?;
+    let filter = seccomp::filter(policy.network == Network::Deny)?;
     let filter_fd = filter.as_raw_fd();
     let group_fd = group.as_raw_fd();
     // Options must precede the agent separator.

@@ -68,7 +68,7 @@ does not grant a shared temporary directory; point `TMPDIR` at an existing
 directory inside your project and add `--pass-env TMPDIR` if a tool needs
 temporary files under a clean environment.
 
-Networking remains unrestricted, including local services. This mode restricts
+Networking remains unrestricted by default, including local services. This mode restricts
 filesystem operations; it does not create private processes or resource limits.
 macOS also permits file metadata lookups, listing the root directory for system
 library startup, terminal I/O, and system IPC used by native services. The root
@@ -134,9 +134,41 @@ mode and resource options override file values, and `--read-only` and
 
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
-`clean_env`, `pass_env`, `cpus`, `memory_mib`, `pids`, and `cgroup_root`.
+`network` (`allow` or `deny`), `clean_env`, `pass_env`, `cpus`, `memory_mib`, `pids`, and `cgroup_root`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
+
+## Run an offline command
+
+Linux and macOS can deny socket networking explicitly:
+
+```sh
+boxer --workspace --network deny --cwd /path/to/project -- /bin/sh ./script.sh
+```
+
+The restriction applies to threads and subprocesses. It blocks IPv4 and IPv6,
+TCP listening and connections, UDP, and connections to Unix sockets. Localhost
+is blocked too; proxy environment variables do not grant an exception.
+Use `--network allow` for the default unrestricted socket networking. The same
+choice can be saved as `"network": "deny"` in a policy file, with a command-line
+value overriding that file.
+
+Offline launches close inherited descriptors above standard input/output/error
+on exec and reject socket-based standard I/O before starting the program.
+Normal terminal and pipe I/O remain available. Other explicit communication
+channels, such as shared writable files, caller-provided pipes, and macOS Mach
+services, retain their permissions. Combine network denial with workspace or
+isolated permissions to limit filesystem access too.
+
+On Linux, seccomp also blocks io_uring, tracing, copying another process's
+descriptors, namespace changes, and privileged kernel operations. Isolated mode
+adds a private network namespace. macOS uses Seatbelt network rules. Failure to
+apply a required control stops launch; native Windows currently rejects the
+offline policy before starting a process.
+
+Solmu's clients and backend need network access to communicate and call an LLM.
+Keep networking allowed for those processes; use the offline option for
+standalone commands that do not need their backend or a provider connection.
 
 ## Linux isolation
 
@@ -173,7 +205,8 @@ accessible to the program.
 Kernel control directories (`/sys`, `/proc`, `/dev`) and the delegated cgroup
 hierarchy cannot be selected as the workspace.
 
-Networking remains unrestricted, including network access to host services.
+Networking remains unrestricted by default, including network access to host services.
+Add `--network deny` to run an offline command in a private network namespace.
 The sandbox shares the host kernel; it is not a VM. The default permissive
 mode does not protect your files or credentials and applies no resource limits.
 
@@ -190,8 +223,9 @@ SIGKILL cannot run cleanup; a service manager should own the delegated hierarchy
 
 Seccomp rejects namespace creation, mount changes, tracing, kernel modules,
 kernel keyrings, BPF, io_uring, and other privileged kernel operations. Ordinary
-processes, threads, file operations within the workspace, and network requests
-remain available. Linux x86_64 and aarch64 are supported.
+processes, threads, and file operations within the workspace remain available.
+Network requests remain available unless `--network deny` is selected.
+Linux x86_64 and aarch64 are supported.
 
 Systemd delegation is detected automatically. Your user service manager must
 have the `cpu`, `memory`, and `pids` controllers delegated by the host. If it

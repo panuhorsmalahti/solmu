@@ -40,7 +40,15 @@ workspace. Tools run in the backend, so launch the backend inside Boxer to prote
 their file access. A boxed client uses its existing backend's permissions.
 Keep reusable grants in an explicit JSON policy and inspect them with
 `boxer --policy /path/to/boxer.json --cwd /path/to/project --print-policy -- solmu`.
-Native Windows currently rejects filesystem restrictions.
+For an offline command on Linux/macOS, add `--network deny`, for example:
+
+```sh
+boxer --workspace --network deny --cwd /path/to/project -- /bin/sh ./script.sh
+```
+
+This also blocks localhost and Unix socket connections, and applies to
+subprocesses. Solmu's clients and backend need networking to communicate.
+Native Windows currently rejects filesystem and network restrictions.
 
 On Linux, choose container-style isolation with a private process tree and
 filesystem view, a writable workspace, read-only system files, filtered system

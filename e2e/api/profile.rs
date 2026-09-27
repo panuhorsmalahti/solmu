@@ -133,6 +133,7 @@ async fn internal_instructions_remain_with_editable_preferences_for_both_provide
         };
         assert!(system.contains(".agents/skills/<name>/SKILL.md"));
         assert!(system.contains("Use Bash, Edit, Glob, Grep, Read, and Write"));
+        assert!(system.contains("Respect its filesystem and network restrictions"));
         assert!(system.contains(preferences));
     }
 }

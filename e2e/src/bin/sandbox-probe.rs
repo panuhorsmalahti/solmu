@@ -5,6 +5,34 @@ use std::{
 
 fn main() {
     let path = std::env::args().nth(1).expect("probe output path");
+    #[cfg(unix)]
+    if path == "--network-check" || path == "--network-check-descendant" {
+        network_check();
+        if path == "--network-check-descendant" {
+            std::thread::spawn(network_check).join().unwrap();
+            assert!(
+                std::process::Command::new(std::env::current_exe().unwrap())
+                    .arg("--network-check")
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        return;
+    }
+    #[cfg(unix)]
+    if path == "--check-inherited" {
+        let descriptor: libc::c_int = std::env::var("SOLMU_TEST_DESCRIPTOR")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let closed = unsafe { libc::fcntl(descriptor, libc::F_GETFD) } < 0;
+        assert_eq!(
+            closed,
+            std::env::var("SOLMU_TEST_DESCRIPTOR_CLOSED").unwrap() == "yes"
+        );
+        return;
+    }
     if path == "--access-check" || path == "--access-check-descendant" {
         access_check();
         if path == "--access-check-descendant" {
@@ -122,6 +150,69 @@ fn main() {
     }
     println!("Solmu sandbox probe complete");
     std::process::exit(7);
+}
+
+#[cfg(unix)]
+fn network_check() {
+    use std::net::{TcpListener, UdpSocket};
+    use std::os::unix::net::UnixStream;
+    for key in ["SOLMU_TEST_TCP4", "SOLMU_TEST_TCP6"] {
+        let address = std::env::var(key).unwrap().parse().unwrap();
+        assert!(
+            TcpStream::connect_timeout(&address, std::time::Duration::from_millis(200)).is_err(),
+            "{key} must be denied"
+        );
+    }
+    assert!(
+        TcpListener::bind("127.0.0.1:0").is_err(),
+        "TCP listening must be denied"
+    );
+    assert!(
+        TcpListener::bind("[::1]:0").is_err(),
+        "IPv6 TCP listening must be denied"
+    );
+    assert!(
+        UdpSocket::bind("127.0.0.1:0").is_err(),
+        "UDP must be denied"
+    );
+    assert!(
+        UdpSocket::bind("[::1]:0").is_err(),
+        "IPv6 UDP must be denied"
+    );
+    assert!(
+        UnixStream::connect(std::env::var("SOLMU_TEST_UNIX").unwrap()).is_err(),
+        "Unix socket connections must be denied"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        // Netlink is normally available without root, so this checks kernel
+        // enforcement independently of ordinary raw-IP privilege checks.
+        assert_eq!(
+            unsafe { libc::socket(libc::AF_NETLINK, libc::SOCK_RAW, libc::NETLINK_ROUTE) },
+            -1
+        );
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM)
+        );
+        assert_eq!(
+            unsafe { libc::syscall(libc::SYS_io_uring_setup, 0, std::ptr::null::<u8>()) },
+            -1
+        );
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM)
+        );
+        assert_eq!(
+            unsafe { libc::syscall(libc::SYS_pidfd_getfd, -1, 0, 0) },
+            -1
+        );
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM)
+        );
+    }
+    println!("socket networking denied");
 }
 
 fn access_check() {

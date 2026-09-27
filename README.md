@@ -138,6 +138,7 @@ The Rust `boxer` launcher starts Solmu or another program. All network
 requests are allowed. On Linux/macOS, `--profile solmu` restricts file access
 to a writable project and read-only runtime files. Add explicit read/write grants
 or reuse a JSON policy; preview permissions before launch with `--print-policy`.
+Use `--network deny` for offline commands, including their subprocesses.
 Launch the backend inside Boxer to protect its tool calls.
 On Linux, `--isolated --cwd /path/to/project` also gives it
 private processes and a filesystem view with only the workspace writable,
