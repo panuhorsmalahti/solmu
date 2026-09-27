@@ -41,6 +41,12 @@ async fn stopping_releases_the_session_lock_before_an_immediate_restart() {
     for _ in 0..5 {
         let started = session.command(&["server", "start"]);
         assert!(started.status.success(), "{started:?}");
+        // A session endpoint starts before its CLI has created and reported its
+        // conversation. Let that initial state become persistent before stop;
+        // the stop-to-restart lock check below remains immediate.
+        let ready =
+            session.command(&["pane", "wait", "1", "--until", "idle", "--timeout", "10000"]);
+        assert!(ready.status.success(), "{ready:?}");
         let stopped = session.command(&["server", "stop"]);
         assert!(stopped.status.success(), "{stopped:?}");
         let lock = std::fs::File::open(
