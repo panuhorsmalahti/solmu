@@ -3,7 +3,7 @@
 An open-source autonomous agent. A Rust backend with terminal,
 native desktop, and web clients that share your conversations.
 
-[Website](https://panuhorsmalahti.github.io/solmu/) · [Client guide](docs/clients.md) · [Configuration](docs/configuration.md) · [Releases](https://github.com/panuhorsmalahti/solmu/releases)
+[Website](https://panuhorsmalahti.github.io/solmu/) · [Docs](https://panuhorsmalahti.github.io/solmu/docs/) · [Client guide](docs/clients.md) · [Configuration](docs/configuration.md) · [Releases](https://github.com/panuhorsmalahti/solmu/releases)
 
 Licensed under [MIT](LICENSE).
 

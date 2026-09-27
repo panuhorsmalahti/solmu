@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test('website describes Solmu features and links to every client and installation', async ({ page }) => {
-  await page.goto('http://127.0.0.1:4174')
+  await page.goto('http://127.0.0.1:4174/solmu/')
   await expect(page).toHaveTitle('Solmu — your ideas, connected')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Good ideas')
   for (const feature of ['See it take shape', 'Follow your threads', 'Bring your model', 'Make it yours', 'Put ideas to work']) await expect(page.getByRole('heading', { name: feature })).toBeVisible()
@@ -33,7 +33,7 @@ test('website describes Solmu features and links to every client and installatio
     await image.scrollIntoViewIfNeeded()
     await expect(image).toBeVisible()
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)
-    expect((await page.request.get(`http://127.0.0.1:4174/screenshots/${client}.png`)).status()).toBe(200)
+    expect((await page.request.get(`http://127.0.0.1:4174/solmu/screenshots/${client}.png`)).status()).toBe(200)
   }
   await expect(page.getByRole('link', { name: 'Meet your Solmu' })).toHaveAttribute('href', 'https://github.com/panuhorsmalahti/solmu#install')
   await page.getByRole('link', { name: 'Find your space' }).click()
@@ -43,7 +43,7 @@ test('website describes Solmu features and links to every client and installatio
 
 test('website is usable on a narrow screen and by keyboard', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('http://127.0.0.1:4174')
+  await page.goto('http://127.0.0.1:4174/solmu/')
   await page.keyboard.press('Tab')
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused()
   await page.keyboard.press('Enter')

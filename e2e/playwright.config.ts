@@ -7,6 +7,6 @@ export default defineConfig({
   use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:5175', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   webServer: [
     { command: 'node e2e/web/server.mjs', cwd: '..', url: 'http://127.0.0.1:5175', reuseExistingServer: false, timeout: 60_000 },
-    { command: 'node website/serve.mjs', cwd: '..', url: 'http://127.0.0.1:4174', reuseExistingServer: false, timeout: 20_000 },
+    { command: 'node website/serve.mjs --base /solmu/', cwd: '..', url: 'http://127.0.0.1:4174/solmu/', reuseExistingServer: false, timeout: 20_000 },
   ],
 })

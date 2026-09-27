@@ -11,10 +11,14 @@
     "build:web": "npm run build --workspace @solmu/web",
     "lint:web": "npm run lint --workspace @solmu/web",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
-    "dev:website": "node website/serve.mjs"
+    "dev:website": "node website/serve.mjs",
+    "build:website": "node website/build.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "fflate": "0.8.3"
+    "fflate": "0.8.3",
+    "github-slugger": "2.0.0",
+    "marked": "18.0.14",
+    "sanitize-html": "2.17.7"
   }
 }

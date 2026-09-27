@@ -10,6 +10,7 @@ cargo test --workspace --all-targets --locked
 npm ci
 npm run lint:web
 npm run build:web
+npm run build:website
 npx playwright install chromium
 npm run test:e2e
 ```
@@ -69,3 +70,15 @@ requests. Rust is checked on Linux, Windows, and macOS. The website workflow
 tests the site before deploying it; the container workflow publishes backend
 images to GitHub Container Registry after relevant `main` changes. It starts
 the published container and checks thread CRUD and persistence across restart.
+
+## Website documentation
+
+The website's **Docs** section is generated from the Markdown files in this
+folder. Add or edit a guide here; it appears in navigation automatically, and
+changes on `main` publish through GitHub Pages. The documentation overview is
+[index.md](index.md). Keep guide content here as the single source of truth.
+
+Use `npm run dev:website` to preview the website and guides at
+`http://127.0.0.1:4174`, or `npm run build:website` to generate `website/dist/`.
+The website tests exercise the generated pages under the `/solmu/` project path,
+including guide links, section anchors, screenshots, and mobile navigation.
