@@ -528,7 +528,7 @@ impl App {
             Restart => self.restart(),
             Detach => return Ok(true),
             SendPrefix => {
-                self.panes[self.active].send(&encode(self.config.current.keys.prefix.event()))?
+                self.send_terminal_input(&encode(self.config.current.keys.prefix.event()))?
             }
             ToggleSidebar => self.sidebar = Some((self.config.generation, !self.sidebar_visible())),
         }
@@ -1032,6 +1032,15 @@ impl App {
             .get(index)
             .is_some_and(|label| self.action(label))
     }
+    fn send_terminal_input(&mut self, bytes: &[u8]) -> Result<(), Box<dyn Error>> {
+        if self.panes[self.active].terminal_lease.is_some() {
+            self.notice =
+                "Pane controlled by a direct terminal; detach that controller to type here".into();
+            return Ok(());
+        }
+        self.panes[self.active].send(bytes)?;
+        Ok(())
+    }
     pub fn paste(&mut self, text: &str) -> Result<(), Box<dyn Error>> {
         if let Some(setting) = &mut self.setting {
             setting.editor.insert(text);
@@ -1043,7 +1052,7 @@ impl App {
             picker.editor.insert(text);
             picker.selected = 0;
         } else if self.menu.is_none() && !self.navigation && !self.prefix && !self.resizing {
-            self.panes[self.active].send(text.as_bytes())?;
+            self.send_terminal_input(text.as_bytes())?;
         }
         Ok(())
     }
@@ -1160,7 +1169,7 @@ impl App {
         if prefixed && key.code != KeyCode::Esc {
             self.notice = "Unknown Muxer shortcut; open Help to see active bindings".into();
         } else if !self.navigation && !prefixed {
-            self.panes[self.active].send(&encode(key))?;
+            self.send_terminal_input(&encode(key))?;
         }
         Ok(false)
     }

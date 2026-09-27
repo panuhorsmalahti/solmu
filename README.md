@@ -118,6 +118,9 @@ layouts, send terminal input, and read pane screens without opening the TUI.
 Subscribe to live session updates or wait for a pane state or matching output.
 [Send prompts directly to Solmu](docs/muxer-agents.md), queue tasks in order,
 wait for a specific reply, and cancel pending work while preserving terminal drafts.
+[Direct terminal attachment](docs/muxer-terminals.md) opens one existing pane or
+streams its live screen to scripts. Several observers can watch while one
+controller owns input and size, with explicit takeover and draft-preserving detach.
 [Run and use muxer](muxer/README.md).
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)

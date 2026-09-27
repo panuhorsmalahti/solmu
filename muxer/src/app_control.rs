@@ -94,7 +94,7 @@ impl App {
                     .as_ref()
                     .filter(|meta| meta.instance == pane.instance && pane.exited.is_none());
                 Ok(
-                    json!({"id": id, "space": space.id, "tab": tab.id, "name": pane.name, "cwd": pane.directory, "state": state, "thread": parser.callbacks().thread, "exited": pane.exited, "instance": pane.instance, "pid": pane.pid(), "rows": rows, "cols": cols, "native":native}),
+                    json!({"id": id, "space": space.id, "tab": tab.id, "name": pane.name, "cwd": pane.directory, "state": state, "thread": parser.callbacks().thread, "exited": pane.exited, "instance": pane.instance, "pid": pane.pid(), "controller": pane.terminal_lease, "rows": rows, "cols": cols, "native":native}),
                 )
             }
         }
@@ -122,6 +122,9 @@ impl App {
     }
     fn automation_inner(&mut self, request: &Request) -> Result<Value, Box<dyn Error>> {
         match request {
+            Request::TerminalOpen { .. } => {
+                Err("Terminal streams belong to the session coordinator".into())
+            }
             Request::AgentList => Ok(
                 json!({"items":self.panes.iter().filter(|pane| pane.exited.is_none()).map(|pane| self.automation_record(Kind::Pane, pane.id).unwrap()).collect::<Vec<_>>()}),
             ),

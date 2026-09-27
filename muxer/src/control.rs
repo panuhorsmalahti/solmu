@@ -32,6 +32,17 @@ pub enum AgentTarget {
     deny_unknown_fields
 )]
 pub enum Request {
+    TerminalOpen {
+        target: AgentTarget,
+        #[serde(default)]
+        observe: bool,
+        #[serde(default)]
+        takeover: bool,
+        #[serde(default)]
+        cols: Option<u16>,
+        #[serde(default)]
+        rows: Option<u16>,
+    },
     AgentList,
     AgentGet {
         target: AgentTarget,
@@ -275,6 +286,11 @@ pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
   muxer agent rename TARGET NAME|--clear | send-keys TARGET KEY [KEY ...]
   muxer agent prompt TARGET TEXT [--wait] [--timeout MS]
   muxer agent wait TARGET [--turn UUID] [--timeout MS] | turn TARGET UUID | stop TARGET
+  muxer terminal attach TARGET [--takeover] | agent attach TARGET [--takeover]
+  muxer terminal session control TARGET [--takeover] [--cols N] [--rows N]
+  muxer terminal session observe TARGET [--cols N] [--rows N]
+Direct attachment uses Ctrl+b q to detach and Ctrl+b Ctrl+b for a literal prefix.
+Terminal sessions stream JSON frames; control reads JSON input/resize/scroll/release.
 Agent targets are pane IDs or unique live pane names. Prompts queue while busy;
 turn waits track the exact submitted turn and preserve terminal drafts.
 Focus commands accept --client ID; otherwise they change the server's next-attach view.
@@ -402,10 +418,28 @@ fn number(value: &str) -> Result<u64, String> {
         .ok_or_else(|| "IDs must be positive integers".into())
 }
 fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
+    if group == "terminal" {
+        let action = args.pop()?;
+        let observe = if action == "session" {
+            match args.pop()?.as_str() {
+                "control" => false,
+                "observe" => true,
+                _ => return Err("Use terminal session control or observe".into()),
+            }
+        } else if action == "attach" {
+            false
+        } else {
+            return Err("Use terminal attach or terminal session control/observe".into());
+        };
+        return terminal_options(args, observe);
+    }
     if group == "agent" {
         let action = args.pop()?;
         if action == "list" {
             return Ok(Request::AgentList);
+        }
+        if action == "attach" {
+            return terminal_options(args, false);
         }
         let target = args.agent_target()?;
         return match action.as_str() {
@@ -659,6 +693,29 @@ fn failure(error: impl std::fmt::Display, code: i32) -> ! {
     eprintln!("{}", json!({"ok": false, "error": error.to_string()}));
     std::process::exit(code);
 }
+fn terminal_options(args: &mut Args, observe: bool) -> Result<Request, String> {
+    let target = args.agent_target()?;
+    let takeover = args.flag("--takeover");
+    let cols = args
+        .take("--cols")?
+        .map(|v| v.parse::<u16>().map_err(|_| "Invalid columns".to_owned()))
+        .transpose()?;
+    let rows = args
+        .take("--rows")?
+        .map(|v| v.parse::<u16>().map_err(|_| "Invalid rows".to_owned()))
+        .transpose()?;
+    crate::terminal::validate_size(cols, rows)?;
+    if observe && takeover {
+        return Err("Observers cannot take over a terminal".into());
+    }
+    Ok(Request::TerminalOpen {
+        target,
+        observe,
+        takeover,
+        cols,
+        rows,
+    })
+}
 /// Returns false for the existing interactive/server/session command families.
 pub fn cli(values: Vec<OsString>) -> bool {
     let mut values = values;
@@ -684,7 +741,7 @@ pub fn cli(values: Vec<OsString>) -> bool {
     };
     if !matches!(
         group,
-        "space" | "tab" | "pane" | "api" | "status" | "events" | "agent"
+        "space" | "tab" | "pane" | "api" | "status" | "events" | "agent" | "terminal"
     ) {
         return false;
     }
@@ -705,6 +762,7 @@ pub fn cli(values: Vec<OsString>) -> bool {
         return true;
     }
     let json_output = args.flag("--json");
+    let interactive = group != "api" && args.values.first().is_some_and(|v| v == "attach");
     let request = parse(&mut args, &group).unwrap_or_else(|e| failure(e, 2));
     args.done().unwrap_or_else(|e| failure(e, 2));
     session::validate_name(&name).unwrap_or_else(|e| failure(e, 2));
@@ -714,6 +772,10 @@ pub fn cli(values: Vec<OsString>) -> bool {
         failure("Could not load .env", 1);
     }
     let text = matches!(request, Request::Read { .. } | Request::AgentRead { .. }) && !json_output;
+    if matches!(request, Request::TerminalOpen { .. }) {
+        crate::terminal::run(&name, request, interactive).unwrap_or_else(|e| runtime_failure(e));
+        return true;
+    }
     if matches!(request, Request::Subscribe { .. }) {
         session::subscribe(&name, request).unwrap_or_else(|e| failure(e, 1));
         return true;

@@ -19,6 +19,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByText(/Split panes right or down, drag dividers to resize/)).toBeVisible()
   await expect(page.getByText(/Detach while replies keep running, then reattach/)).toBeVisible()
   await expect(page.getByText(/Layouts and Solmu conversations return after a server restart/)).toBeVisible()
+  await expect(page.getByText(/Attach directly to one pane, or stream its screen to scripts with multiple observers and one controller/)).toBeVisible()
   for (const tool of ['Boxer', 'Docker', 'Muxer']) await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
   expect(await page.getByRole('heading', { level: 3 }).allTextContents()).toEqual(expect.arrayContaining(['Boxer', 'Docker', 'Muxer']))
   expect(await page.locator('.tool-grid > article h3').allTextContents()).toEqual(['Boxer', 'Docker', 'Muxer'])

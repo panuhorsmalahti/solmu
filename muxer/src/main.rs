@@ -10,6 +10,7 @@ mod monitor;
 mod pane;
 mod persistence;
 mod session;
+mod terminal;
 #[cfg(windows)]
 mod windows;
 

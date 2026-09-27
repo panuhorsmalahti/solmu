@@ -220,3 +220,7 @@ Stop cancels pending work. See [tools](tools.md) for usage and limits.
 
 `muxer server stop` waits for terminal processes to exit and the session lock
 to be released, so the same named session can be restarted immediately.
+
+[Direct terminal attachment](muxer-terminals.md) opens one existing pane or streams its
+live screen to scripts. Several observers can watch while one controller owns
+input and size, with explicit takeover and draft-preserving detach.

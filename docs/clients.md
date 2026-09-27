@@ -49,3 +49,7 @@ server restart; see the [Muxer guide](muxer.md). Scripts can manage layouts
 and inspect or send terminal input through [Muxer automation](muxer-automation.md).
 [Native Solmu controls](muxer-agents.md) queue prompts, wait for individual
 replies, and stop pending work while preserving CLI and Profile drafts.
+
+[Direct terminal attachment](muxer-terminals.md) opens one existing pane or streams its
+live screen to scripts. Several observers can watch while one controller owns
+input and size, with explicit takeover and draft-preserving detach.

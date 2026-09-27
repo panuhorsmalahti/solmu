@@ -34,7 +34,7 @@ struct Endpoint {
     pid: u32,
 }
 #[derive(Serialize, Deserialize)]
-enum Request {
+pub(crate) enum Request {
     Hello {
         protocol: u32,
         token: String,
@@ -45,9 +45,11 @@ enum Request {
         control: Option<control::Request>,
     },
     Input(Event),
+    Terminal(crate::terminal::Command),
 }
 #[derive(Serialize, Deserialize)]
 pub(crate) enum Response {
+    Terminal(crate::terminal::Record),
     Text(String),
     Ready { pid: u32 },
     Frame(Vec<u8>),
@@ -113,7 +115,7 @@ pub(crate) fn packet<T: Serialize>(stream: &mut TcpStream, value: &T) -> io::Res
     stream.write_all(&(bytes.len() as u32).to_be_bytes())?;
     stream.write_all(&bytes)
 }
-fn receive<T: DeserializeOwned>(stream: &mut TcpStream) -> io::Result<T> {
+pub(crate) fn receive<T: DeserializeOwned>(stream: &mut TcpStream) -> io::Result<T> {
     let mut size = [0; 4];
     stream.read_exact(&mut size)?;
     let size = u32::from_be_bytes(size) as usize;
@@ -127,7 +129,7 @@ fn receive<T: DeserializeOwned>(stream: &mut TcpStream) -> io::Result<T> {
 fn connect(directory: &Path, name: &str, operation: &str, size: (u16, u16)) -> Result<TcpStream> {
     connect_request(directory, name, operation, size, None)
 }
-fn connect_request(
+pub(crate) fn connect_request(
     directory: &Path,
     name: &str,
     operation: &str,
@@ -577,6 +579,7 @@ fn run_server(
     let handshakes = Arc::new(AtomicUsize::new(0));
     let replies = Arc::new(AtomicUsize::new(0));
     let mut monitors = crate::monitor::Manager::default();
+    let mut terminals = crate::terminal::Manager::default();
     let agents = Arc::new(AtomicUsize::new(0));
     let mut saved_at = Instant::now();
     loop {
@@ -644,6 +647,14 @@ fn run_server(
                         continue;
                     }
                     if let Some(request) = control {
+                        if matches!(request, control::Request::TerminalOpen { .. }) {
+                            if let Err(error) =
+                                terminals.accept(&mut stream, app, &request, endpoint.pid)
+                            {
+                                let _ = packet(&mut stream, &Response::Error(error));
+                            }
+                            continue;
+                        }
                         if request.native() {
                             app.use_view(&last_view);
                             if agents.load(Ordering::Relaxed) >= 16 {
@@ -837,6 +848,7 @@ fn run_server(
         for pane in &mut app.panes {
             pane.poll()?;
         }
+        terminals.poll(app);
         app.use_view(&last_view);
         let monitor_snapshot = monitors.has_subscribers().then(|| {
             let mut value = app.automation_snapshot();

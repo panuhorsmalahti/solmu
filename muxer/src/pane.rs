@@ -90,6 +90,7 @@ pub struct Pane {
     pub parser: Arc<Mutex<vt100::Parser<Status>>>,
     pub exited: Option<String>,
     pub agent_token: Option<String>,
+    pub terminal_lease: Option<u64>,
     master: Option<Box<dyn MasterPty + Send>>,
     child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
     writer: Option<SyncSender<Vec<u8>>>,
@@ -189,6 +190,7 @@ impl Pane {
             parser,
             exited: None,
             agent_token: Some(agent_token),
+            terminal_lease: None,
             master: Some(pair.master),
             child: Some(child),
             writer: Some(writer),
@@ -215,6 +217,7 @@ impl Pane {
             parser: Arc::new(Mutex::new(parser)),
             exited: Some(reason),
             agent_token: None,
+            terminal_lease: None,
             master: None,
             child: None,
             writer: None,
@@ -222,6 +225,15 @@ impl Pane {
         }
     }
     pub fn send(&self, bytes: &[u8]) -> std::io::Result<()> {
+        if self.terminal_lease.is_some() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Pane is controlled by a direct terminal attachment",
+            ));
+        }
+        self.send_direct(bytes)
+    }
+    pub fn send_direct(&self, bytes: &[u8]) -> std::io::Result<()> {
         if self.exited.is_some() {
             return Ok(());
         }
@@ -253,7 +265,7 @@ impl Pane {
                     .lock()
                     .unwrap_or_else(|error| error.into_inner())
                     .process(b"\x1b[2J\x1b[H");
-                if let Err(error) = self.send(&[12]) {
+                if let Err(error) = self.send_direct(&[12]) {
                     if error.kind() == std::io::ErrorKind::WouldBlock {
                         self.redraw_at =
                             Some(std::time::Instant::now() + std::time::Duration::from_millis(75));
@@ -279,6 +291,12 @@ impl Pane {
         Ok(())
     }
     pub fn resize(&mut self, area: Rect) -> Result<(), Box<dyn std::error::Error>> {
+        if self.terminal_lease.is_some() {
+            return Ok(());
+        }
+        self.resize_direct(area)
+    }
+    pub fn resize_direct(&mut self, area: Rect) -> Result<(), Box<dyn std::error::Error>> {
         let size = (area.height.max(1), area.width.max(1));
         let mut parser = self
             .parser

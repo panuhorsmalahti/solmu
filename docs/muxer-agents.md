@@ -114,3 +114,7 @@ directly. Focus without `--client` changes the next-attach view; a client ID
 selects one attached terminal.
 
 ![Solmu Muxer with queued prompts and an unsent terminal draft](screenshots/muxer-automation.png)
+
+[Direct terminal attachment](muxer-terminals.md) opens one existing pane or streams its
+live screen to scripts. Several observers can watch while one controller owns
+input and size, with explicit takeover and draft-preserving detach.

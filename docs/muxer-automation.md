@@ -274,3 +274,7 @@ one request; it cannot send additional mutations after Hello. Attach clients
 and control clients share the session, with separate view state.
 
 ![Solmu Muxer](screenshots/muxer.png)
+
+[Direct terminal attachment](muxer-terminals.md) opens one existing pane or streams its
+live screen to scripts. Several observers can watch while one controller owns
+input and size, with explicit takeover and draft-preserving detach.

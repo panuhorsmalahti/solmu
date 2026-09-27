@@ -21,6 +21,7 @@ unicode-segmentation = "1.13.3"
 unicode-width = "0.2.2"
 toml_edit = "0.25.15"
 regex = "1.13.1"
+base64 = "0.22.1"
 solmu-client = { path = "../clients/common" }
 
 [target.'cfg(windows)'.dependencies]

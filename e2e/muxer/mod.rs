@@ -34,6 +34,20 @@ impl Terminal {
         config: Option<&std::path::Path>,
         home: Option<&std::path::Path>,
     ) -> Self {
+        Self::start_command(backend, directories, foreground, name, config, home, None)
+    }
+    fn start_direct(backend: &Backend, name: &str, target: &str) -> Self {
+        Self::start_command(backend, &[], false, name, None, None, Some(target))
+    }
+    fn start_command(
+        backend: &Backend,
+        directories: &[&std::path::Path],
+        foreground: bool,
+        name: &str,
+        config: Option<&std::path::Path>,
+        home: Option<&std::path::Path>,
+        direct: Option<&str>,
+    ) -> Self {
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: 40,
@@ -48,6 +62,11 @@ impl Terminal {
         }
         command.arg("--session");
         command.arg(name);
+        if let Some(target) = direct {
+            command.arg("terminal");
+            command.arg("attach");
+            command.arg(target);
+        }
         command.cwd(backend.directory.path());
         command.env("SOLMU_BACKEND_URL", &backend.url);
         command.env("SOLMU_CLI_PATH", binary("solmu"));
@@ -300,3 +319,5 @@ mod sessions;
 mod startup;
 mod tabs;
 mod tools;
+
+mod terminals;

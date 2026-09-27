@@ -49,6 +49,9 @@ Event streams report live changes; waits observe pane states or matching output.
 [Native prompt commands](../docs/muxer-agents.md) send messages without typing
 into the active screen, queue tasks in order, and wait for their saved replies.
 Stop cancels active and queued work while terminal and Profile drafts stay intact.
+[Direct terminal attachment](../docs/muxer-terminals.md) opens one existing pane or
+streams its live screen to scripts. Several observers can watch while one
+controller owns input and size, with explicit takeover and draft-preserving detach.
 Press **Ctrl+b**, then **n** for a new tab, **Tab** to switch tabs, Up/Down to
 switch spaces, **s** to split right, **-** to split down, or **q** to detach.
 Use **Ctrl+b h/j/k/l** to focus panes, **H/J/K/L** to swap them, **z** to zoom,
@@ -71,6 +74,8 @@ For source builds, see [development](../docs/development.md).
 ![Solmu client screenshot](../docs/screenshots/muxer.png)
 
 ![Solmu prompt automation](../docs/screenshots/muxer-automation.png)
+
+![Direct terminal control](../docs/screenshots/muxer-terminal.png)
 
 ## Workspace tools
 

@@ -52,6 +52,8 @@ Muxer tests capture `artifacts/muxer.html`; run
 `node scripts/capture-cli.mjs muxer` for `docs/screenshots/muxer.png`.
 The native prompt queue test captures `artifacts/muxer-automation.html`;
 render it with `node scripts/capture-cli.mjs muxer-automation`.
+The direct terminal control test captures `artifacts/muxer-terminal.html`;
+render it with `node scripts/capture-cli.mjs muxer-terminal`.
 Installer tests under `e2e/install` use local release archives and temporary
 directories; they do not change your PATH or installed applications. Background
 service tests replace OS service commands with recorders, so no real service is
