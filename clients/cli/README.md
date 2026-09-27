@@ -4,23 +4,24 @@ A Rust terminal interface for Solmu. Launch into a new or existing saved convers
 
 ## Run
 
-From the repository root, fill `OPENAI_API_KEY` in `.env`, then start the backend:
+After using the [install script](../../docs/releases.md#install), create `.env`
+in your working directory and fill `OPENAI_API_KEY`. Start the installed backend:
 
 ```sh
-cargo run -p solmu-backend
+solmu-backend
 ```
 
 In another terminal:
 
 ```sh
-cargo run -p solmu-cli
+solmu-cli
 ```
 
 The default backend is `http://127.0.0.1:3000`. Set `SOLMU_BACKEND_URL` in `.env`
 or your shell to connect elsewhere. Provider keys belong to the backend.
 
 Use `solmu-cli --thread <id>` to reopen a conversation without creating another.
-From source, run `cargo run -p solmu-cli -- --thread <id>`. Find IDs with `/threads`.
+Find IDs with `/threads`.
 `solmu-cli --help` shows startup options; `--version` shows the installed version.
 
 ## Use
@@ -56,6 +57,7 @@ and Esc returns. The empty Model field shows the actual backend default.
 
 See [CLI usage](../../docs/cli.md), [configuration](../../docs/configuration.md),
 and [Docker instructions](../../docs/running.md).
+For source builds, see [development](../../docs/development.md).
 
 ![Solmu client screenshot](../../docs/screenshots/cli.png)
 

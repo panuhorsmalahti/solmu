@@ -3,8 +3,9 @@
 The desktop uses the web client's light background, forest green controls,
 soft conversation cards, and highlighted thread selection.
 
-Start the backend, then run `cargo run -p solmu-desktop` from the repository
-root. The app uses `SOLMU_BACKEND_URL` (default `http://127.0.0.1:3000`).
+After [installation](releases.md#install), start `solmu-backend`, then run
+`solmu-desktop` in another terminal. The app uses `SOLMU_BACKEND_URL`
+(default `http://127.0.0.1:3000`).
 
 The left sidebar lists saved conversations. Click one to load its history;
 click **+** to create a new thread. A new thread is also created on startup.

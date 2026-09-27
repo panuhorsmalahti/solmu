@@ -7,13 +7,13 @@ in a nested layout. Every pane starts its own conversation and keeps running
 while you switch tabs or spaces. The sidebar shows spaces and their tab counts;
 tabs show activity, and each terminal shows its status.
 
-Start the backend, then build and launch from the repository root:
+After [installation](releases.md#install), configure your provider key in
+`.env` and start the backend. Launch Muxer from your project folder:
 
 ```sh
-cargo run -p solmu-backend
+solmu-backend
 # In another terminal:
-cargo build -p solmu-cli -p solmu-muxer
-cargo run -p solmu-muxer
+muxer
 ```
 
 Installed releases provide the `muxer` command. Select initial workspaces with

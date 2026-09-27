@@ -14,17 +14,18 @@ shown as needed.
 Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
 [Web](screenshots/web.png) · [Muxer](screenshots/muxer.png).
 
-| Client | Start from repository root | Guide |
+| Client | Start after installation | Guide |
 | --- | --- | --- |
-| CLI | `cargo run -p solmu-cli` | [Terminal client](cli.md) |
-| Muxer (spaces and CLI tabs) | `cargo build -p solmu-cli`, then `cargo run -p solmu-muxer` | [Terminal workspace](muxer.md) |
-| Desktop | `cargo run -p solmu-desktop` | [Desktop client](desktop.md) |
-| Web | `npm ci`, then `npm run dev:web` | [Web client](web.md) |
+| CLI | `solmu-cli` | [Terminal client](cli.md) |
+| Muxer (spaces and CLI tabs) | `muxer` | [Terminal workspace](muxer.md) |
+| Desktop | `solmu-desktop` | [Desktop client](desktop.md) |
+| Web | Serve the published web archive; see setup | [Web client](web.md) |
 
-Start the backend first with `cargo run -p solmu-backend`, or use
+Use the [install script](releases.md#install), then start `solmu-backend`, or use
 [Docker](running.md). The default backend address is `http://127.0.0.1:3000`.
 Rust clients load `SOLMU_BACKEND_URL` from `.env` or the environment. Set it in
 the Vite process environment for web development.
+Source build instructions are in [development](development.md).
 
 Every client supports creating, listing, opening, renaming, and deleting threads;
 reading saved history; sending messages; receiving streamed replies; and seeing

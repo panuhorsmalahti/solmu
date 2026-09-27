@@ -5,11 +5,14 @@ Each tab holds a layout of real terminal panes. Each pane starts its own Solmu
 conversation and keeps running while you switch tabs or spaces.
 
 ```sh
-cargo build -p solmu-cli -p solmu-muxer
-cargo run -p solmu-backend
+solmu-backend
 # In another terminal:
-cargo run -p solmu-muxer
+muxer
 ```
+
+These commands are available on PATH after using the
+[install script](../docs/releases.md#install). Configure the backend's `.env`
+with your provider key before starting it.
 
 Click **+ Space** to choose a project and **+ Tab** to add a session. Select
 spaces in the sidebar and tabs along the top; **×** closes a tab. Each space
@@ -46,6 +49,7 @@ All Solmu conversation commands work inside panes, including `/stop` and `/exit`
 
 Run `muxer --help` or read the [muxer guide](../docs/muxer.md) for workspace
 selection, configuration, shortcuts, and session lifetime.
+For source builds, see [development](../docs/development.md).
 
 ![Solmu client screenshot](../docs/screenshots/muxer.png)
 

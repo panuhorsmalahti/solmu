@@ -1,8 +1,41 @@
 # Web client
 
-With the backend running, use `npm ci` and `npm run dev:web` from the repository
-root. Open `http://127.0.0.1:5173`. Set `SOLMU_BACKEND_URL` in the Vite process
-environment to change the backend address (default `http://127.0.0.1:3000`).
+## Run the published web client
+
+After [installation](releases.md#install), configure your provider key in
+`.env` and run `solmu-backend`. Download `solmu-v<VERSION>-web.zip` from
+[GitHub Releases](https://github.com/panuhorsmalahti/solmu/releases) and extract
+it into a folder named `solmu-web`. The installer installs native binaries;
+the web archive is a separate download.
+
+Serve the extracted files with a web server that proxies `/api/*` to
+`http://127.0.0.1:3000`, including WebSocket upgrades, and serves `index.html`
+for conversation and Profile URLs. For example, with
+[Caddy installed](https://caddyserver.com/docs/install), save this `Caddyfile`
+beside the `solmu-web` folder:
+
+```caddyfile
+http://127.0.0.1:8080 {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3000
+    }
+    handle {
+        root * ./solmu-web
+        try_files {path} /index.html
+        file_server
+    }
+}
+```
+
+In another terminal, run `caddy run --config Caddyfile` from that directory,
+then open `http://127.0.0.1:8080`. This follows Caddy's
+[single-page app configuration](https://caddyserver.com/docs/caddyfile/patterns#single-page-apps-spas).
+If your backend uses another address, change `reverse_proxy` accordingly.
+Provider keys stay on the backend. Rust and Node.js are not needed to use
+the published web files. The marketing website on GitHub Pages is separate
+from this client and does not host a backend or conversations.
+
+## Use
 
 A new conversation is created when opening the root URL. Each thread has a
 linkable `/threads/{id}` URL; opening that URL loads the existing conversation.
@@ -29,12 +62,7 @@ appear above the composer; user messages remain saved.
 the unfinished reply. Changes from other clients and generated titles arrive
 automatically over WebSockets, with reconnect after a lost connection.
 
-For a production build, run `npm run build:web`. Serve `clients/web/dist` with
-a reverse proxy that sends `/api` to the backend on the same origin, including
-WebSocket upgrades for `/api/v1/events`. Serve `index.html` for `/threads/*` and `/profile`
-so conversation links and reloads work. Keep all
-provider credentials on the backend. The marketing website on GitHub Pages
-is separate from this client and does not host a backend or conversations.
+For source builds and web development, see [development](development.md).
 
 ![Solmu client screenshot](screenshots/web.png)
 

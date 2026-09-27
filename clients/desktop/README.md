@@ -4,11 +4,17 @@ A native Rust desktop client built with Iced.
 
 ## Run
 
-Start the backend from the repository root with `cargo run -p solmu-backend`.
-Then run in another terminal:
+After using the [install script](../../docs/releases.md#install), create `.env`
+in your working directory with your provider credentials. Start the installed backend:
 
 ```sh
-cargo run -p solmu-desktop
+solmu-backend
+```
+
+In another terminal:
+
+```sh
+solmu-desktop
 ```
 
 Fill provider credentials in the backend's `.env`. The desktop client connects
@@ -31,6 +37,7 @@ for that thread. Repeated **+** clicks reuse the empty thread until you send a
 message. See [Profile](../../docs/profile.md) and [workspaces](../../docs/workspaces.md).
 
 See [desktop usage](../../docs/desktop.md) and [configuration](../../docs/configuration.md).
+For source builds, see [development](../../docs/development.md).
 
 ![Solmu client screenshot](../../docs/screenshots/desktop.png)
 

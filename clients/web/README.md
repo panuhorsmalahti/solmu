@@ -4,16 +4,22 @@ A React and TypeScript client with shadcn/ui components.
 
 ## Run
 
-Start the backend with `cargo run -p solmu-backend`, then from the repository root:
+After using the [install script](../../docs/releases.md#install), configure
+your provider key in `.env` and start the installed backend:
 
 ```sh
-npm ci
-npm run dev:web
+solmu-backend
 ```
 
-Open `http://127.0.0.1:5173`. The development server connects to the backend at
-`http://127.0.0.1:3000`; set `SOLMU_BACKEND_URL` in the shell running Vite to
-choose another backend. Provider keys stay in the backend's `.env`.
+Download `solmu-v<VERSION>-web.zip` from
+[GitHub Releases](https://github.com/panuhorsmalahti/solmu/releases) and extract
+it into `solmu-web`. Serve these files with a web server that proxies `/api`
+to the backend at `http://127.0.0.1:3000`. Follow the
+[web setup guide](../../docs/web.md#run-the-published-web-client) for a complete
+local example, then open `http://127.0.0.1:8080`.
+
+The install script installs the backend and native clients; the web archive
+is downloaded separately. Provider keys stay in the backend's `.env`.
 
 ## Use
 
@@ -34,19 +40,8 @@ conversation's model button to choose a model for that thread. Repeated **+**
 clicks reuse the empty thread until you send a message. Profile updates appear
 automatically and preserve unsaved edits. See [Profile](../../docs/profile.md).
 
-## Build
-
-```sh
-npm run lint:web
-npm run build:web
-```
-
-The static build is in `clients/web/dist`. In production, serve it on the same
-origin as the backend and proxy `/api` to Solmu, including WebSocket upgrades.
-Serve `index.html` for `/threads/*` and `/profile`. The web client does not embed
-provider keys or connect directly to LLM providers.
-
 See [web usage](../../docs/web.md).
+For source builds, see [development](../../docs/development.md).
 
 ![Solmu client screenshot](../../docs/screenshots/web.png)
 
