@@ -149,7 +149,7 @@ filtered system calls, dropped capabilities, and CPU/memory/task limits.
 Example (Linux/macOS backend workspace permissions):
 
 ```sh
-SOLMU_BIND_ADDR=127.0.0.1:3001 boxer --profile solmu --cwd /path/to/project -- solmu-backend
+boxer --profile solmu --cwd /path/to/project -- solmu-backend
 ```
 
 ## Docker

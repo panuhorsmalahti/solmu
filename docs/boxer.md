@@ -83,11 +83,10 @@ sandbox an already running backend. To apply kernel restrictions to Bash and
 other tool calls, launch a separate backend inside Boxer:
 
 ```sh
-SOLMU_BIND_ADDR=127.0.0.1:3001 \
-  boxer --profile solmu --cwd /path/to/project -- solmu-backend
+boxer --profile solmu --cwd /path/to/project -- solmu-backend
 
 # In another terminal, connect a client to that backend.
-SOLMU_BACKEND_URL=http://127.0.0.1:3001 solmu
+solmu
 ```
 
 The Solmu profile sets the default thread workspace to that project. The default
@@ -95,6 +94,8 @@ SQLite database lives there too. If your backend uses a database or published
 web files elsewhere, grant their directory explicitly with `--write` or `--read`
 and keep the corresponding `SOLMU_*` settings. File operations outside the
 declared paths fail, including Bash commands reaching outside the project.
+Stop your regular backend before starting its boxed replacement on the default
+port, 3000. See [service management](services.md).
 
 Native Windows currently contains process trees with a Job Object; it rejects
 workspace policies rather than launching without filesystem protection.
