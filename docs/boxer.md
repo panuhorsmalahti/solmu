@@ -126,6 +126,37 @@ apply restrictions, or print environment values. `platform_supported` describes
 OS support, not a kernel or resource-delegation readiness check. Starting a
 program still fails if required kernel controls cannot be applied.
 
+### Check whether a policy can run
+
+Use `--check` to apply the resolved permissions to a short-lived Boxer probe:
+
+```sh
+boxer --profile solmu --cwd /path/to/project --check
+boxer --workspace --network deny --cwd /path/to/project --check
+```
+
+Success returns JSON with `"enforcement": "checked"` and exits with status 0.
+Failure exits with status 125 and explains the unavailable control. Your agent
+is never started, even if you provide a program after `--`. The check does not
+verify that program's installation, libraries, configuration, or API credentials.
+It checks the current OS permissions, not future availability at launch time.
+Choose either `--check` or `--print-policy`: a preview only describes permissions,
+while a check starts a probe to apply them.
+
+For Linux isolated policies, run the check in the same delegated cgroup as the
+agent. It tests Bubblewrap, namespaces, seccomp, and the resource limits, then
+removes the probe's cgroup:
+
+```sh
+systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
+  boxer --isolated --network deny --cwd /path/to/project --check
+```
+
+On Windows, the permissive check verifies Job Object containment. Checks for
+unsupported filesystem, network, or isolated policies fail.
+
+### Policy paths and fields
+
 Relative paths in a policy are resolved against its containing directory.
 `$HOME` and `$WORKSPACE` can prefix a path using `/`; other variables, shell
 commands, and wildcards are not expanded. Command-line grants extend the policy;

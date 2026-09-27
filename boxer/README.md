@@ -40,6 +40,9 @@ workspace. Tools run in the backend, so launch the backend inside Boxer to prote
 their file access. A boxed client uses its existing backend's permissions.
 Keep reusable grants in an explicit JSON policy and inspect them with
 `boxer --policy /path/to/boxer.json --cwd /path/to/project --print-policy -- solmu`.
+Check that your OS can apply the permissions before launching an agent with
+`boxer --profile solmu --cwd /path/to/project --check`. This starts only a
+short-lived Boxer probe and reports readiness as JSON.
 For an offline command on Linux/macOS, add `--network deny`, for example:
 
 ```sh

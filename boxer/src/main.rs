@@ -1,4 +1,5 @@
 use std::{ffi::OsString, io, process::Command};
+mod check;
 mod policy;
 use policy::{Mode, Network, Policy};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -29,6 +30,9 @@ fn main() {
 }
 
 fn run() -> io::Result<i32> {
+    if let Some(code) = check::worker()? {
+        return Ok(code);
+    }
     let mut arguments = std::env::args_os().skip(1);
     let mut policy = Policy::default();
     let mut mode = None;
@@ -36,6 +40,7 @@ fn run() -> io::Result<i32> {
     let mut policy_file = None;
     let mut profile = false;
     let mut print_policy = false;
+    let mut check_policy = false;
     let mut directory = None;
     let mut program: Option<OsString> = None;
     let mut command_arguments = Vec::new();
@@ -46,6 +51,9 @@ fn run() -> io::Result<i32> {
             );
             println!(
                 "--network allow|deny: allow all socket networking (default), or block it on Linux/macOS. Denial closes inherited nonstandard descriptors and rejects socket-based standard I/O."
+            );
+            println!(
+                "--check: test enforcement in a short-lived Boxer process without starting the requested program."
             );
             return Ok(0);
         } else if argument == "--version" {
@@ -84,6 +92,8 @@ fn run() -> io::Result<i32> {
             );
         } else if argument == "--print-policy" {
             print_policy = true;
+        } else if argument == "--check" {
+            check_policy = true;
         } else if argument == "--policy" {
             if policy_file.is_some() {
                 return Err(io::Error::other("Specify only one --policy file"));
@@ -178,6 +188,12 @@ fn run() -> io::Result<i32> {
         return Err(io::Error::other("Workspace must be a directory"));
     }
     resolved.resolve(&workspace)?;
+    if check_policy {
+        if print_policy {
+            return Err(io::Error::other("Choose either --check or --print-policy"));
+        }
+        return check::run(&resolved, &workspace);
+    }
     let mut command = Command::new(program.unwrap_or_else(|| "solmu".into()));
     command.args(command_arguments).current_dir(&workspace);
     resolved.environment(&mut command);

@@ -29,6 +29,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.locator('.tool-grid').getByText('SOLMU_BACKEND_URL=http://127.0.0.1:3001', { exact: true })).toBeVisible()
   await expect(page.getByText('Launch the backend inside Boxer to protect its tools.', { exact: false })).toBeVisible()
   await expect(page.getByText('choose offline execution for standalone commands', { exact: false })).toBeVisible()
+  await expect(page.getByText('Check that your OS can apply them before launching.', { exact: false })).toBeVisible()
   await expect(page.locator('pre').filter({ hasText: 'docker run --rm --env-file .env -p 127.0.0.1:3000:3000 -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest' })).toBeVisible()
   await expect(page.getByText('Boxer is the recommended agent sandbox.', { exact: false })).toBeVisible()
   for (const script of ['install-bundle.sh', 'install-bundle.ps1']) await expect(page.locator('#install pre').filter({ hasText: `https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/${script}` })).toBeVisible()

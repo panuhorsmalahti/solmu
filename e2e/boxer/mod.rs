@@ -5,6 +5,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 mod network;
 mod permissions;
 mod policies;
+mod readiness;
 
 #[cfg(target_os = "linux")]
 mod isolation;
