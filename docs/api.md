@@ -20,6 +20,7 @@ authentication is not implemented.
 | PUT | `/api/v1/profile` | Required `system_prompt`, optional `model`. Omission preserves the model; null clears it. Returns the saved profile. |
 | GET | `/api/v1/models` | Provider, effective `default_model`, and named `models` (`id`, `name`). |
 | GET | `/api/v1/tools` | Available tool definitions and their input schemas in `items`. |
+| GET | `/api/v1/threads/{id}/skills` | Workspace skill catalog: `directory`, `items`, and validation `issues`. See [skills](skills.md). |
 | GET | `/api/v1/threads/{id}/tools` | Saved tool activity in execution order; supports pagination. |
 
 List endpoints accept `limit` (1–100, default 50) and `offset` (default 0).
@@ -61,6 +62,9 @@ produces the final text reply. Saved native tool exchanges are included in
 future model requests and deleted with their thread. See [tools](tools.md).
 
 ## Live updates
+
+`{ "type": "skills_changed", "thread_id": "..." }` means fetch that thread's
+workspace skill catalog again. Catalogs update when skill files change.
 
 Connect to `ws://127.0.0.1:3000/api/v1/events` (use `wss` behind HTTPS).
 The server sends `{ "type": "ready" }`, then

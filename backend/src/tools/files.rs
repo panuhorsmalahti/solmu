@@ -171,7 +171,7 @@ impl FileTool {
                 if offset == 0 || !(1..=2000).contains(&limit) {
                     return Err("offset must be positive; limit must be between 1 and 2000".into());
                 }
-                let text = read(&context.path(&args.path, false)?)?;
+                let text = read(&context.read_path(&args.path)?)?;
                 let lines: Vec<_> = text.lines().collect();
                 let content = lines
                     .iter()
@@ -217,7 +217,7 @@ impl FileTool {
             }
             Self::Glob | Self::Grep => {
                 let args: FindArgs = parse(arguments)?;
-                let base = context.path(args.path.as_deref().unwrap_or("."), false)?;
+                let base = context.read_path(args.path.as_deref().unwrap_or("."))?;
                 let glob = if matches!(self, Self::Glob) {
                     Some(glob::Pattern::new(&args.pattern).map_err(|error| error.to_string())?)
                 } else {
@@ -253,7 +253,7 @@ impl FileTool {
                     let path = entry.path();
                     let relative = path
                         .strip_prefix(&context.workspace)
-                        .map_err(|error| error.to_string())?
+                        .unwrap_or(path)
                         .to_string_lossy()
                         .replace('\\', "/");
                     if let Some(glob) = &glob {

@@ -16,6 +16,14 @@ pub struct Change {
     kind: &'static str,
     thread_id: Option<String>,
 }
+impl Change {
+    pub fn skills(id: &str) -> Self {
+        Self {
+            kind: "skills_changed",
+            thread_id: Some(id.to_owned()),
+        }
+    }
+}
 
 use super::error::ApiError;
 use crate::llm::Llm;
@@ -27,6 +35,7 @@ pub struct AppState {
     pub pool: SqlitePool,
     pub llm: Llm,
     pub tools: crate::tools::Registry,
+    pub skills: crate::skills::Manager,
     locks: ThreadLocks,
     pub events: broadcast::Sender<Change>,
     responses: Arc<Mutex<HashMap<String, CancellationToken>>>,
@@ -34,12 +43,14 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(pool: SqlitePool, llm: Llm) -> Self {
+        let events = broadcast::channel(256).0;
         Self {
             pool,
             llm,
             tools: crate::tools::Registry::new(),
             locks: Arc::default(),
-            events: broadcast::channel(256).0,
+            skills: crate::skills::Manager::new(events.clone()),
+            events,
             responses: Arc::default(),
         }
     }

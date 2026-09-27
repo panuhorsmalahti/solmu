@@ -57,6 +57,9 @@ The direct terminal control test captures `artifacts/muxer-terminal.html`;
 render it with `node scripts/capture-cli.mjs muxer-terminal`.
 The shell and command test captures `artifacts/muxer-commands.html`;
 render it with `node scripts/capture-cli.mjs muxer-commands`.
+Skills tests capture `artifacts/cli-skills.html` and `artifacts/muxer-skills.html`;
+render them with `node scripts/capture-cli.mjs cli-skills` and
+`node scripts/capture-cli.mjs muxer-skills`.
 Installer tests under `e2e/install` use local release archives and temporary
 directories; they do not change your PATH or installed applications. Background
 service tests replace OS service commands with recorders, so no real service is

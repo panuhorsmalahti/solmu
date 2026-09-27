@@ -15,7 +15,7 @@ async fn profile_is_validated_persistent_and_used_for_subsequent_replies() {
         .unwrap();
     assert_eq!(
         profile["system_prompt"],
-        "You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace."
+        "You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace. Users can install skills in .agents/skills/. Read relevant SKILL.md instructions before applying a skill."
     );
     for prompt in [" ".to_owned(), "x".repeat(64_001)] {
         assert_eq!(

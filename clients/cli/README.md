@@ -71,6 +71,13 @@ For source builds, see [development](../../docs/development.md).
 
 ![Solmu client screenshot](../../docs/screenshots/cli.png)
 
+## Skills
+
+Use `/skills` to see installed [workspace skills](../../docs/skills.md).
+They are discovered automatically from `.agents/skills/`.
+
+![CLI workspace skills](../../docs/screenshots/cli-skills.png)
+
 ## Workspace tools
 
 Solmu can read, edit, and search files and run Bash commands in the thread's

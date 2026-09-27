@@ -1,5 +1,8 @@
 # Solmu muxer
 
+Use `/skills` in a Solmu pane to list its workspace's installed
+[skills](skills.md). The catalog updates automatically.
+
 Muxer groups **real Solmu CLI terminals** into spaces on Linux, macOS, and
 Windows. Each space is a working directory and can hold up to eight tabs;
 up to eight spaces can be open. Each tab holds up to eight real terminal panes

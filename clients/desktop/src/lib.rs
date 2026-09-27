@@ -25,6 +25,7 @@ pub struct Desktop {
     settings_busy: bool,
     settings_notice: String,
     model_open: bool,
+    skills_open: bool,
     catalog: Option<ModelCatalog>,
     custom_model: String,
 }
@@ -47,6 +48,7 @@ pub enum Event {
     ProfileSaved(Result<Profile, String>),
     ReloadProfile,
     OpenModels,
+    OpenSkills,
     ModelsLoaded(Result<ModelCatalog, String>),
     CustomModel(String),
     ProfileModel(String),
@@ -89,6 +91,7 @@ impl Desktop {
             settings_busy: false,
             settings_notice: String::new(),
             model_open: false,
+            skills_open: false,
             catalog: None,
             custom_model: String::new(),
         };
@@ -115,7 +118,14 @@ impl Desktop {
         let saved_profile = matches!(&event, Event::ProfileSaved(_));
         let opened_profile = matches!(&event, Event::OpenProfile);
         match event {
+            Event::OpenSkills => {
+                self.skills_open = true;
+                self.profile_open = false;
+                self.model_open = false;
+                Task::none()
+            }
             Event::OpenProfile | Event::ReloadProfile => {
+                self.skills_open = false;
                 self.profile_open = true;
                 self.model_open = false;
                 self.settings_busy = true;
@@ -176,11 +186,13 @@ impl Desktop {
                 )
             }
             Event::CloseSettings => {
+                self.skills_open = false;
                 self.profile_open = false;
                 self.model_open = false;
                 Task::none()
             }
             Event::OpenModels => {
+                self.skills_open = false;
                 self.model_open = true;
                 self.profile_open = false;
                 self.settings_busy = true;
@@ -263,6 +275,7 @@ impl Desktop {
             }
             Event::Action(action) => {
                 if !matches!(action, Action::Refresh) {
+                    self.skills_open = false;
                     self.profile_open = false;
                     self.model_open = false;
                 }
@@ -441,6 +454,61 @@ impl Desktop {
             .height(Length::Fill)
             .into();
         }
+        if self.skills_open {
+            let skills = &self.session.skills;
+            let mut content = column![
+                text("Workspace skills").size(36),
+                text("Discovered automatically in .agents/skills/.")
+                    .size(14)
+                    .color(appearance::MUTED),
+                text(&skills.directory).size(11).color(appearance::MUTED),
+            ]
+            .spacing(18);
+            if skills.items.is_empty() {
+                content = content.push(text("No skills installed in this workspace.").size(16));
+            }
+            for skill in &skills.items {
+                let mut details = column![
+                    text(&skill.name).size(20),
+                    text(&skill.description).size(14),
+                    text(&skill.path).size(11).color(appearance::MUTED)
+                ]
+                .spacing(10);
+                if let Some(compatibility) = &skill.compatibility {
+                    details = details.push(text(format!("Requires: {compatibility}")).size(12));
+                }
+                content = content.push(
+                    container(details)
+                        .padding(20)
+                        .width(Length::Fill)
+                        .style(|theme| appearance::message(theme, false)),
+                );
+            }
+            for issue in &skills.issues {
+                content = content
+                    .push(text(format!("Not loaded: {}\n{}", issue.path, issue.message)).size(13));
+            }
+            content = content.push(
+                text("Install skill folders in .agents/skills/; each needs SKILL.md.")
+                    .size(13)
+                    .color(appearance::MUTED),
+            );
+            content = content.push(
+                button("Back to conversation")
+                    .padding(14)
+                    .style(appearance::ghost)
+                    .on_press(Event::CloseSettings),
+            );
+            return row![
+                sidebar,
+                container(scrollable(content))
+                    .padding(40)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+            ]
+            .height(Length::Fill)
+            .into();
+        }
         if self.model_open {
             let enabled = !self.settings_busy && !self.session.busy;
             let mut choices = column![
@@ -611,6 +679,11 @@ impl Desktop {
             .and_then(|thread| thread.model.as_deref())
             .unwrap_or("Default model");
         let model = row![
+            button(text("Skills").size(12))
+                .style(appearance::ghost)
+                .on_press_maybe(
+                    (enabled && self.session.current.is_some()).then_some(Event::OpenSkills)
+                ),
             button(text(model_label).size(12))
                 .style(appearance::ghost)
                 .on_press_maybe(

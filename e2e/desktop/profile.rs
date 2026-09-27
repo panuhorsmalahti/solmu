@@ -46,7 +46,7 @@ async fn desktop_profile_edits_prompt_model_and_tracks_live_changes() {
         .unwrap();
     assert_eq!(
         stored["system_prompt"],
-        "Use Finnish. You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace."
+        "Use Finnish. You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace. Users can install skills in .agents/skills/. Read relevant SKILL.md instructions before applying a skill."
     );
     assert_eq!(stored["model"], "gpt-6-luna");
     assert_ne!(stored["edited_at"], original["edited_at"]);

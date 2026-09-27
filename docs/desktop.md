@@ -35,3 +35,8 @@ the user message is retained. Closing the window exits without deleting history.
 Solmu can read, edit, and search files and run Bash commands in the thread's
 workspace. Tool activity and results appear live and stay in conversation history.
 Stop cancels pending work. See [tools](tools.md) for usage and limits.
+
+## Skills
+
+Choose **Skills** in the conversation controls to see the workspace's installed
+[skills](skills.md). The list updates automatically and preserves your draft.

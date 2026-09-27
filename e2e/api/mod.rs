@@ -39,5 +39,6 @@ mod responses;
 mod events;
 
 mod configuration;
+mod skills;
 mod tools;
 mod web;

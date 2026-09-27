@@ -12,7 +12,7 @@ const sourceUrl = 'https://github.com/panuhorsmalahti/solmu/blob/main/'
 const groups = [
   ['Getting started', ['index', 'bundle', 'services', 'configuration', 'running', 'releases']],
   ['Clients', ['clients', 'cli', 'desktop', 'web', 'muxer']],
-  ['Agent', ['agent', 'profile', 'workspaces', 'tools', 'boxer']],
+  ['Agent', ['agent', 'profile', 'workspaces', 'tools', 'skills', 'boxer']],
   ['Muxer', ['muxer-commands', 'muxer-configuration', 'muxer-automation', 'muxer-agents', 'muxer-terminals']],
   ['Reference', ['api', 'development', 'license']],
 ]

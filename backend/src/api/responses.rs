@@ -82,6 +82,11 @@ pub async fn create(
             .map_err(crate::storage::StoreError::from)?;
     }
     let model = thread.model.clone().or(profile.model.clone());
+    let skills = state
+        .skills
+        .load(&thread_id, workspace.clone().into())
+        .await;
+    history.insert(0, ChatMessage::user(skills.context()));
     let mut reply = tokio::select! {
         result=state.llm.stream(&history,&profile.system_prompt,model.as_deref(),state.tools.definitions())=>result?,
         _=token.cancelled()=>return Err(stopped()),
@@ -105,7 +110,7 @@ pub async fn create(
         let _permit=permit;
         let mut recovery=Recovery{state:state.clone(),thread_id:thread_id.clone(),ids:Vec::new()};
         yield Ok(event("start",json!({"message_id":input.message_id})));
-        let context=Context{workspace:workspace.into(),cancellation:token.clone()};
+        let context=Context{workspace:workspace.into(),skill_roots:skills.roots,cancellation:token.clone()};
         let mut pending=Some(first);
         let mut total_calls=0;
         for round in 0..16 {

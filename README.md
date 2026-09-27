@@ -13,6 +13,7 @@ Licensed under [MIT](LICENSE).
 - See changes across clients instantly and stop responses anytime.
 - Link directly to conversations in the web client.
 - Customize the shared system prompt and default model in Profile.
+- Use project skills discovered automatically from `.agents/skills/`.
 - Choose a model per thread and work from your CLI's current folder.
 - Run locally, in Docker, or in a Linux sandbox workspace.
 - Group Solmu terminal tabs into project spaces with nested panes and mouse controls.
@@ -173,3 +174,10 @@ daily production releases when there are new commits, plus a manual release work
 Solmu can read, edit, and search files and run Bash commands in the thread's
 workspace. Tool activity and results appear live and stay in conversation history.
 Stop cancels pending work. See [tools](docs/tools.md) for usage and limits.
+
+## Skills
+
+Install skill folders with `SKILL.md` under your workspace's `.agents/skills/`.
+Solmu discovers them automatically and reads relevant instructions as needed.
+Use `/skills` in the terminal or **Skills** in desktop and web to see the live
+catalog. [Install and use skills](docs/skills.md).

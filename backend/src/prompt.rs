@@ -1,1 +1,1 @@
-pub const SYSTEM_PROMPT: &str = "You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace.";
+pub const SYSTEM_PROMPT: &str = "You are Solmu, an autonomous agent. Use Bash, Edit, Glob, Grep, Read, and Write to work in the conversation's workspace. Users can install skills in .agents/skills/. Read relevant SKILL.md instructions before applying a skill.";

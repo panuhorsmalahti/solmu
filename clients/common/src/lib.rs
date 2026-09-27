@@ -33,6 +33,59 @@ pub struct Model {
     pub name: String,
 }
 #[derive(Debug, Clone, Deserialize)]
+pub struct Skill {
+    pub name: String,
+    pub description: String,
+    pub path: String,
+    pub compatibility: Option<String>,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct SkillIssue {
+    pub path: String,
+    pub message: String,
+}
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SkillCatalog {
+    pub directory: String,
+    pub items: Vec<Skill>,
+    pub issues: Vec<SkillIssue>,
+}
+impl SkillCatalog {
+    pub fn text(&self) -> String {
+        let mut lines = vec![
+            format!(
+                "{} {} discovered",
+                self.items.len(),
+                if self.items.len() == 1 {
+                    "skill"
+                } else {
+                    "skills"
+                }
+            ),
+            String::new(),
+        ];
+        if self.items.is_empty() {
+            lines.push("No skills installed in this workspace.".into());
+        }
+        for skill in &self.items {
+            lines.extend([
+                skill.name.clone(),
+                skill.description.clone(),
+                skill.path.clone(),
+            ]);
+            if let Some(compatibility) = &skill.compatibility {
+                lines.push(format!("Requires: {compatibility}"));
+            }
+            lines.push(String::new());
+        }
+        for issue in &self.issues {
+            lines.push(format!("Not loaded: {}\n{}\n", issue.path, issue.message));
+        }
+        lines.push("Install skill folders in .agents/skills/; each needs SKILL.md.".into());
+        lines.join("\n")
+    }
+}
+#[derive(Debug, Clone, Deserialize)]
 pub struct Message {
     pub id: String,
     pub role: String,
@@ -80,7 +133,7 @@ impl Api {
                         if message.is_close() { break; }
                         if let Ok(text) = message.to_text() && let Ok(event) = serde_json::from_str::<Value>(text) {
                             match event["type"].as_str() {
-                                Some("conversation_changed") => {
+                                Some("conversation_changed" | "skills_changed") => {
                                     yield Connection::Changed;
                                     if event["thread_id"].is_null() { yield Connection::ProfileChanged; }
                                 },
@@ -131,6 +184,10 @@ impl Api {
     }
     pub async fn models(&self) -> Result<ModelCatalog, String> {
         self.json(Method::GET, "/models", None).await
+    }
+    pub async fn skills(&self, thread: &str) -> Result<SkillCatalog, String> {
+        self.json(Method::GET, &format!("/threads/{thread}/skills"), None)
+            .await
     }
     pub async fn stop(&self, id: &str) -> Result<(), String> {
         self.request(Method::POST, &format!("/threads/{id}/stop"), None, false)
@@ -277,8 +334,15 @@ impl Api {
                             Err(error)=>{yield Update::Failed(error);return;}
                         }
                     } else {Vec::new()};
+                    let skills = if let Some(thread) = &thread {
+                        match api.skills(&thread.id).await {
+                            Ok(skills) => skills,
+                            Err(error) => SkillCatalog { directory: String::new(), items: Vec::new(), issues: vec![SkillIssue { path: ".agents/skills/".into(), message: error }] },
+                        }
+                    } else { SkillCatalog::default() };
                     yield Update::Opened(thread, messages);
                     yield Update::Tools(tools);
+                    yield Update::Skills(skills);
                     match api.list("/threads").await { Ok(threads) => yield Update::Threads(threads), Err(error) => { yield Update::Failed(error); return; } }
                 },
             }
@@ -318,6 +382,7 @@ pub enum Update {
     Reset,
     Tool(ToolRun),
     Tools(Vec<ToolRun>),
+    Skills(SkillCatalog),
 }
 
 pub struct Session {
@@ -326,6 +391,7 @@ pub struct Session {
     pub threads: Vec<Thread>,
     pub messages: Vec<Message>,
     pub tools: Vec<ToolRun>,
+    pub skills: SkillCatalog,
     pub partial: String,
     pub error: Option<String>,
     pub busy: bool,
@@ -339,6 +405,7 @@ impl Session {
             threads: Vec::new(),
             messages: Vec::new(),
             tools: Vec::new(),
+            skills: SkillCatalog::default(),
             partial: String::new(),
             error: None,
             busy: false,
@@ -374,6 +441,7 @@ impl Session {
         match update {
             Update::Reset => self.partial.clear(),
             Update::Tools(tools) => self.tools = tools,
+            Update::Skills(skills) => self.skills = skills,
             Update::Tool(run) => {
                 if let Some(existing) = self.tools.iter_mut().find(|tool| tool.id == run.id) {
                     *existing = run;

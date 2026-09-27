@@ -153,6 +153,7 @@ mod responses;
 mod input;
 mod models;
 mod profile;
+mod skills;
 mod startup;
 mod tools;
 

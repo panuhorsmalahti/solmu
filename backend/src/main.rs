@@ -7,6 +7,7 @@ mod config;
 mod db;
 mod llm;
 mod prompt;
+mod skills;
 mod storage;
 mod tools;
 mod web;

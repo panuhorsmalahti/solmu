@@ -8,6 +8,7 @@ use std::{
 };
 
 mod screenshot;
+pub mod skills;
 mod tools;
 pub use screenshot::capture_terminal;
 

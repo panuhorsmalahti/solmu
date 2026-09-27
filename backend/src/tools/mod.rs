@@ -18,9 +18,37 @@ pub const FILE_LIMIT: u64 = 1_000_000;
 #[derive(Clone)]
 pub struct Context {
     pub workspace: PathBuf,
+    pub skill_roots: Vec<PathBuf>,
     pub cancellation: CancellationToken,
 }
 impl Context {
+    pub fn read_path(&self, requested: &str) -> Result<PathBuf, String> {
+        if let Ok(path) = self.path(requested, false) {
+            return Ok(path);
+        }
+        let requested = Path::new(requested);
+        if requested
+            .components()
+            .any(|part| part == std::path::Component::ParentDir)
+        {
+            return Err("Parent-directory traversal is not allowed".into());
+        }
+        let path = if requested.is_absolute() {
+            requested.to_owned()
+        } else {
+            self.workspace.join(requested)
+        };
+        let resolved = path.canonicalize().map_err(|error| error.to_string())?;
+        if self
+            .skill_roots
+            .iter()
+            .any(|root| resolved.starts_with(root))
+        {
+            Ok(resolved)
+        } else {
+            Err("Path is outside the workspace and installed skill resources".into())
+        }
+    }
     pub fn path(&self, requested: &str, create: bool) -> Result<PathBuf, String> {
         let requested = Path::new(requested);
         if requested
