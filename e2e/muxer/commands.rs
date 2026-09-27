@@ -39,6 +39,9 @@ async fn file(path: &std::path::Path) -> String {
         loop {
             if let Ok(value) = std::fs::read_to_string(path)
                 && !value.is_empty()
+                // The fixture appends JSON followed by a newline. File creation
+                // and the first write do not mean the complete record is ready.
+                && value.ends_with('\n')
             {
                 return value;
             }
