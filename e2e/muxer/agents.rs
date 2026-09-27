@@ -80,6 +80,7 @@ async fn active(session: &Session<'_>, present: bool) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn native_prompts_queue_in_order_and_wait_for_exact_turns_without_sending_terminal_drafts() {
     let backend = Backend::start().await;
+    backend.hold_next_reply();
     let session = Session {
         backend: &backend,
         name: "prompts",
@@ -133,6 +134,7 @@ async fn native_prompts_queue_in_order_and_wait_for_exact_turns_without_sending_
             "muxer-automation",
         );
     }
+    backend.release_reply();
     let first_id = first["turn"]["id"].as_str().unwrap();
     let result = command(
         &session,
@@ -283,6 +285,7 @@ async fn prompts_preserve_open_profile_edits_and_ambiguous_names_never_redirect_
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stopping_cancels_active_and_queued_turns_without_saving_unsubmitted_prompts() {
     let backend = Backend::start().await;
+    backend.hold_next_reply();
     let session = Session {
         backend: &backend,
         name: "stop",

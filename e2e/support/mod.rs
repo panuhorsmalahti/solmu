@@ -73,6 +73,12 @@ pub fn binary(name: &str) -> PathBuf {
 }
 
 pub type Requests = Arc<Mutex<Vec<(String, Value)>>>;
+#[derive(Default)]
+struct ReplyControl {
+    remaining: std::sync::atomic::AtomicUsize,
+    release: tokio::sync::Notify,
+}
+type ProviderState = (Requests, Arc<ReplyControl>);
 static STARTUP_LIMIT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 
 pub struct Backend {
@@ -87,6 +93,7 @@ pub struct Backend {
     credentials: bool,
     dotenv: bool,
     title_model: Option<String>,
+    reply_control: Arc<ReplyControl>,
 }
 
 impl Backend {
@@ -98,10 +105,11 @@ impl Backend {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}/v1/", listener.local_addr().unwrap());
         let requests = Requests::default();
+        let reply_control = Arc::new(ReplyControl::default());
         let router = Router::new()
             .route("/v1/chat/completions", post(openai))
             .route("/v1/messages", post(anthropic))
-            .with_state(requests.clone());
+            .with_state((requests.clone(), reply_control.clone()));
         let provider_task = tokio::spawn(async move {
             axum::serve(listener, router).await.unwrap();
         });
@@ -117,6 +125,7 @@ impl Backend {
             credentials,
             dotenv,
             title_model: None,
+            reply_control,
         };
         if dotenv {
             std::fs::write(backend.directory.path().join(".env"), format!("LLM_PROVIDER=openai\nLLM_MODEL=test-model\nLLM_ENDPOINT={}\nOPENAI_API_KEY=fixture-key\nANTHROPIC_API_KEY=fixture-key\nSOLMU_BIND_ADDR=invalid-dotenv-value\n", backend.endpoint)).unwrap();
@@ -126,6 +135,15 @@ impl Backend {
         }
         backend.launch().await;
         backend
+    }
+
+    pub fn hold_next_reply(&self) {
+        self.reply_control
+            .remaining
+            .store(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    pub fn release_reply(&self) {
+        self.reply_control.release.notify_one();
     }
 
     async fn launch(&mut self) {
@@ -268,14 +286,25 @@ impl Drop for Backend {
     }
 }
 
-async fn openai(State(requests): State<Requests>, Json(body): Json<Value>) -> Response {
-    provider_response("openai", requests, body)
+async fn openai(
+    State((requests, control)): State<ProviderState>,
+    Json(body): Json<Value>,
+) -> Response {
+    provider_response("openai", requests, control, body)
 }
-async fn anthropic(State(requests): State<Requests>, Json(body): Json<Value>) -> Response {
-    provider_response("anthropic", requests, body)
+async fn anthropic(
+    State((requests, control)): State<ProviderState>,
+    Json(body): Json<Value>,
+) -> Response {
+    provider_response("anthropic", requests, control, body)
 }
 
-fn provider_response(kind: &'static str, requests: Requests, body: Value) -> Response {
+fn provider_response(
+    kind: &'static str,
+    requests: Requests,
+    control: Arc<ReplyControl>,
+    body: Value,
+) -> Response {
     let latest_user = body["messages"]
         .as_array()
         .and_then(|messages| {
@@ -321,13 +350,24 @@ fn provider_response(kind: &'static str, requests: Requests, body: Value) -> Res
     if let Some(calls) = calls {
         return tools::response(kind, calls);
     }
+    let held = control
+        .remaining
+        .fetch_update(
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+            |remaining| remaining.checked_sub(1),
+        )
+        .is_ok();
     let stream = async_stream::stream! {
         if kind == "anthropic" {
             yield Ok::<_, Infallible>(Event::default().event("message_start").data(json!({"type":"message_start","message":{"id":"fixture","type":"message","role":"assistant","content":[],"model":"test-model","usage":{"input_tokens":1,"output_tokens":0}}}).to_string()));
             yield Ok(Event::default().event("content_block_start").data(json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}).to_string()));
         }
         for (index, text) in ["Hello", " from Solmu"].into_iter().enumerate() {
-            if index > 0 { tokio::time::sleep(Duration::from_secs(1)).await; }
+            if index > 0 {
+                if held { control.release.notified().await; }
+                else { tokio::time::sleep(Duration::from_secs(1)).await; }
+            }
             let data = if kind == "anthropic" {
                 json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":text}})
             } else {
