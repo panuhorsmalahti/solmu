@@ -29,6 +29,10 @@ impl Terminal {
     fn start_boxed(backend: &Backend) -> Self {
         Self::start_with_policy(backend, Some("--profile"), None)
     }
+    #[cfg(target_os = "linux")]
+    fn start_routed(backend: &Backend) -> Self {
+        Self::start_with_policy(backend, Some("--network"), None)
+    }
     fn start_with_policy(backend: &Backend, policy: Option<&str>, thread: Option<&str>) -> Self {
         let pair = native_pty_system()
             .openpty(PtySize {
@@ -42,6 +46,12 @@ impl Terminal {
             CommandBuilder::new(binary(if policy.is_some() { "boxer" } else { "solmu" }));
         if let Some(policy) = policy {
             command.arg(policy);
+            if policy == "--network" {
+                command.arg("proxy");
+                command.arg("--isolated");
+                command.arg("--allow-local");
+                command.arg(backend.url.strip_prefix("http://").unwrap());
+            }
             if policy == "--profile" {
                 command.arg("solmu");
             }

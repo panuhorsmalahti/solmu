@@ -1,3 +1,4 @@
+use crate::policy::Network;
 use std::{
     fs::File,
     io::{self, Seek, Write},
@@ -6,7 +7,7 @@ use std::{
 
 // Classic BPF over seccomp_data. Reject other ABIs before interpreting syscall
 // numbers; x32 shares AUDIT_ARCH_X86_64 but has a separate syscall-number bit.
-fn instructions(deny_network: bool) -> io::Result<Vec<libc::sock_filter>> {
+fn instructions(network: Network) -> io::Result<Vec<libc::sock_filter>> {
     #[cfg(target_arch = "x86_64")]
     let arch = 0xc000003e;
     #[cfg(target_arch = "aarch64")]
@@ -75,7 +76,7 @@ fn instructions(deny_network: bool) -> io::Result<Vec<libc::sock_filter>> {
             emit(EQ, 0, 1, syscall as u32);
             emit(RET, 0, 0, DENY);
         }
-        if deny_network {
+        if network == Network::Deny {
             for syscall in [
                 libc::SYS_socket,
                 libc::SYS_socketpair,
@@ -99,6 +100,19 @@ fn instructions(deny_network: bool) -> io::Result<Vec<libc::sock_filter>> {
                 emit(EQ, 0, 1, syscall as u32);
                 emit(RET, 0, 0, DENY);
             }
+        }
+        if network == Network::Proxy {
+            // Shared pathname Unix sockets cross Linux network namespaces.
+            // Only IP sockets are created here; the trusted worker receives
+            // its preopened broker channels and never passes them to the agent.
+            emit(EQ, 0, 1, libc::SYS_socketpair as u32);
+            emit(RET, 0, 0, DENY);
+            emit(EQ, 0, 5, libc::SYS_socket as u32);
+            emit(LOAD, 0, 0, 16);
+            emit(EQ, 2, 0, libc::AF_INET as u32);
+            emit(EQ, 1, 0, libc::AF_INET6 as u32);
+            emit(RET, 0, 0, DENY);
+            emit(RET, 0, 0, 0x7fff0000);
         }
         // glibc falls back to clone when clone3 is unavailable. Its pointed-to
         // flags cannot be safely inspected by classic BPF.
@@ -125,7 +139,7 @@ fn instructions(deny_network: bool) -> io::Result<Vec<libc::sock_filter>> {
 }
 
 pub fn install_network_denial() -> io::Result<()> {
-    let mut instructions = instructions(true)?;
+    let mut instructions = instructions(Network::Deny)?;
     let program = libc::sock_fprog {
         len: instructions.len().try_into().map_err(io::Error::other)?,
         filter: instructions.as_mut_ptr(),
@@ -142,9 +156,9 @@ pub fn install_network_denial() -> io::Result<()> {
     Ok(())
 }
 
-pub fn filter(deny_network: bool) -> io::Result<File> {
+pub fn filter(network: Network) -> io::Result<File> {
     let mut program = Vec::new();
-    for instruction in instructions(deny_network)? {
+    for instruction in instructions(network)? {
         program.extend(instruction.code.to_ne_bytes());
         program.extend([instruction.jt, instruction.jf]);
         program.extend(instruction.k.to_ne_bytes());

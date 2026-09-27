@@ -43,6 +43,7 @@ pub enum Network {
     #[default]
     Allow,
     Deny,
+    Proxy,
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -50,6 +51,9 @@ pub enum Network {
 pub struct Policy {
     pub mode: Mode,
     pub network: Network,
+    pub hosts: Vec<String>,
+    pub local: Vec<String>,
+    pub publish: Vec<u16>,
     pub read_only: bool,
     pub read: Vec<PathBuf>,
     pub write: Vec<PathBuf>,
@@ -109,6 +113,43 @@ impl Policy {
 
     pub fn resolve(&mut self, workspace: &Path) -> io::Result<()> {
         self.isolated = self.mode == Mode::Isolated;
+        if self.network == Network::Proxy && !self.isolated {
+            return Err(io::Error::other(
+                "Proxy networking requires Linux --isolated mode",
+            ));
+        }
+        if self.network != Network::Proxy
+            && (!self.hosts.is_empty() || !self.local.is_empty() || !self.publish.is_empty())
+        {
+            return Err(io::Error::other("Network routes require --network proxy"));
+        }
+        for host in &mut self.hosts {
+            *host = crate::network::Target::parse(host, false)?.authority();
+        }
+        for local in &mut self.local {
+            *local = crate::network::Target::parse(local, true)?.authority();
+        }
+        self.hosts.sort();
+        self.hosts.dedup();
+        self.local.sort();
+        self.local.dedup();
+        self.publish.sort_unstable();
+        self.publish.dedup();
+        if self.publish.contains(&0) {
+            return Err(io::Error::other(
+                "Published ports must be between 1 and 65535",
+            ));
+        }
+        for local in &self.local {
+            if self
+                .publish
+                .contains(&crate::network::Target::parse(local, true)?.port)
+            {
+                return Err(io::Error::other(
+                    "Local forwarding and publishing cannot use the same guest port",
+                ));
+            }
+        }
         if (!self.read.is_empty() || !self.write.is_empty()) && self.mode == Mode::Unrestricted {
             return Err(io::Error::other(
                 "Path grants require --workspace or --isolated",

@@ -5,6 +5,23 @@ use std::{
 
 fn main() {
     let path = std::env::args().nth(1).expect("probe output path");
+    #[cfg(target_os = "linux")]
+    if path == "--proxy-check" || path == "--proxy-child-check" {
+        proxy_boundaries();
+        if path == "--proxy-check" {
+            proxy_check();
+            std::thread::spawn(proxy_boundaries).join().unwrap();
+            assert!(
+                std::process::Command::new(std::env::current_exe().unwrap())
+                    .arg("--proxy-child-check")
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            println!("routed network enforced");
+        }
+        return;
+    }
     #[cfg(unix)]
     if path == "--network-check" || path == "--network-check-descendant" {
         network_check();
@@ -150,6 +167,149 @@ fn main() {
     }
     println!("Solmu sandbox probe complete");
     std::process::exit(7);
+}
+
+#[cfg(target_os = "linux")]
+fn proxy_boundaries() {
+    use std::{net::SocketAddr, os::unix::net::UnixStream, time::Duration};
+    assert!(UnixStream::connect(std::env::var("SOLMU_TEST_UNIX").unwrap()).is_err());
+    for address in [
+        std::env::var("SOLMU_TEST_FORBIDDEN").unwrap(),
+        "1.1.1.1:443".into(),
+    ] {
+        assert!(
+            TcpStream::connect_timeout(
+                &address.parse::<SocketAddr>().unwrap(),
+                Duration::from_millis(200)
+            )
+            .is_err()
+        );
+    }
+    assert_eq!(
+        unsafe { libc::socket(libc::AF_NETLINK, libc::SOCK_RAW, libc::NETLINK_ROUTE) },
+        -1
+    );
+    assert_eq!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::EPERM)
+    );
+    // Check before creating any of the probe's own connections. Broker channels
+    // and connected host sockets belong only to the worker, never this process.
+    let descriptors = std::fs::read_dir("/proc/self/fd")
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    for descriptor in descriptors {
+        let Ok(descriptor) = descriptor.to_string_lossy().parse::<i32>() else {
+            continue;
+        };
+        if descriptor <= 2 {
+            continue;
+        }
+        let mut kind = 0i32;
+        let mut length = std::mem::size_of_val(&kind) as libc::socklen_t;
+        assert_ne!(
+            unsafe {
+                libc::getsockopt(
+                    descriptor,
+                    libc::SOL_SOCKET,
+                    libc::SO_TYPE,
+                    (&mut kind as *mut i32).cast(),
+                    &mut length,
+                )
+            },
+            0,
+            "inherited broker socket {descriptor}"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn proxy_check() {
+    fn request(mut stream: TcpStream, request: &str) -> String {
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        stream.write_all(request.as_bytes()).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        response
+    }
+    let allowed = std::env::var("SOLMU_TEST_ALLOWED").unwrap();
+    let forbidden = std::env::var("SOLMU_TEST_FORBIDDEN").unwrap();
+    let proxy = std::env::var("HTTP_PROXY").unwrap();
+    let proxy = proxy.strip_prefix("http://").unwrap();
+    assert!(
+        request(
+            TcpStream::connect(&allowed).unwrap(),
+            "GET / HTTP/1.1\r\nHost: fixture\r\nConnection: close\r\n\r\n"
+        )
+        .contains("allowed route")
+    );
+    assert!(
+        request(
+            TcpStream::connect(proxy).unwrap(),
+            &format!("GET http://{allowed}/ HTTP/1.1\r\nHost: fixture\r\n\r\n")
+        )
+        .contains("allowed route")
+    );
+    let mut tunnel = TcpStream::connect(proxy).unwrap();
+    tunnel
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .unwrap();
+    tunnel
+        .write_all(format!("CONNECT {allowed} HTTP/1.1\r\nHost: fixture\r\n\r\n").as_bytes())
+        .unwrap();
+    let mut header = Vec::new();
+    while !header.ends_with(b"\r\n\r\n") {
+        let mut byte = [0];
+        tunnel.read_exact(&mut byte).unwrap();
+        header.push(byte[0]);
+    }
+    assert!(header.starts_with(b"HTTP/1.1 200"));
+    assert!(
+        request(
+            tunnel,
+            "GET / HTTP/1.1\r\nHost: fixture\r\nConnection: close\r\n\r\n"
+        )
+        .contains("allowed route")
+    );
+    for authority in [
+        forbidden,
+        "example.com:443".into(),
+        format!("localhost:{}", allowed.rsplit_once(':').unwrap().1),
+    ] {
+        assert!(
+            request(
+                TcpStream::connect(proxy).unwrap(),
+                &format!("CONNECT {authority} HTTP/1.1\r\nHost: fixture\r\n\r\n")
+            )
+            .starts_with("HTTP/1.1 403"),
+            "{authority}"
+        );
+    }
+    let output = std::process::Command::new("/usr/bin/curl")
+        .args([
+            "--disable",
+            "--noproxy",
+            "",
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--max-time",
+            "5",
+            "--proxy",
+            &format!("http://{proxy}"),
+            &format!("http://{allowed}/"),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("allowed route"));
 }
 
 #[cfg(unix)]

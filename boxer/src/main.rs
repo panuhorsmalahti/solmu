@@ -1,5 +1,6 @@
 use std::{ffi::OsString, io, process::Command};
 mod check;
+mod network;
 mod policy;
 use policy::{Mode, Network, Policy};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -30,6 +31,10 @@ fn main() {
 }
 
 fn run() -> io::Result<i32> {
+    #[cfg(target_os = "linux")]
+    if let Some(code) = linux::proxy::worker()? {
+        return Ok(code);
+    }
     if let Some(code) = check::worker()? {
         return Ok(code);
     }
@@ -50,7 +55,7 @@ fn run() -> io::Result<i32> {
                 "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--profile solmu: workspace policy, clean environment, and Solmu workspace configuration.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
             );
             println!(
-                "--network allow|deny: allow all socket networking (default), or block it on Linux/macOS. Denial closes inherited nonstandard descriptors and rejects socket-based standard I/O."
+                "--network allow|deny|proxy: unrestricted (default), offline on Linux/macOS, or a routed Linux isolated network.\n--allow-host HOST[:PORT]: exact remote hostname for proxy networking, default port 443 (repeatable).\n--allow-local IP:PORT: explicitly forward a host loopback service into the private network (repeatable).\n--publish PORT: expose a guest service on the same host loopback port (repeatable)."
             );
             println!(
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."
@@ -67,8 +72,29 @@ fn run() -> io::Result<i32> {
             network = Some(match arguments.next().as_deref() {
                 Some(value) if value == "allow" => Network::Allow,
                 Some(value) if value == "deny" => Network::Deny,
-                _ => return Err(io::Error::other("--network requires allow or deny")),
+                Some(value) if value == "proxy" => Network::Proxy,
+                _ => return Err(io::Error::other("--network requires allow, deny, or proxy")),
             });
+        } else if argument == "--allow-host" || argument == "--allow-local" {
+            let value = arguments
+                .next()
+                .and_then(|value| value.into_string().ok())
+                .ok_or_else(|| {
+                    io::Error::other("Network routes require a host and optional port")
+                })?;
+            if argument == "--allow-host" {
+                policy.hosts.push(value);
+            } else {
+                policy.local.push(value);
+            }
+        } else if argument == "--publish" {
+            policy.publish.push(
+                arguments
+                    .next()
+                    .and_then(|value| value.to_str().and_then(|value| value.parse::<u16>().ok()))
+                    .filter(|port| *port != 0)
+                    .ok_or_else(|| io::Error::other("--publish requires a port from 1 to 65535"))?,
+            );
         } else if argument == "--isolated" {
             mode = Some(Mode::Isolated);
         } else if argument == "--read" || argument == "--write" {
@@ -171,6 +197,9 @@ fn run() -> io::Result<i32> {
     };
     resolved.mode = mode.unwrap_or(resolved.mode);
     resolved.network = network.unwrap_or(resolved.network);
+    resolved.hosts.extend(policy.hosts);
+    resolved.local.extend(policy.local);
+    resolved.publish.extend(policy.publish);
     resolved.read_only |= policy.read_only;
     resolved.clean_env |= policy.clean_env;
     resolved.read.extend(policy.read);
@@ -203,7 +232,7 @@ fn run() -> io::Result<i32> {
                 && !resolved.read_only
                 && resolved.network == Network::Allow
         } else if cfg!(target_os = "macos") {
-            !resolved.isolated
+            !resolved.isolated && resolved.network != Network::Proxy
         } else {
             cfg!(target_os = "linux")
                 && ((resolved.network == Network::Allow && !resolved.isolated)
@@ -218,7 +247,7 @@ fn run() -> io::Result<i32> {
             "version": 1, "platform": std::env::consts::OS, "platform_supported": supported,
             "enforcement": "not-applied",
             "workspace": workspace, "policy": resolved,
-            "network": if resolved.network == Network::Allow { "allowed" } else { "denied" },
+            "network": match resolved.network { Network::Allow => "allowed", Network::Deny => "denied", Network::Proxy => "routed" },
             "runtime_read": match resolved.mode {
                 Mode::Unrestricted => Vec::new(),
                 Mode::Workspace => policy::runtime_paths(),

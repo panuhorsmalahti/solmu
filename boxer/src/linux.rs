@@ -16,6 +16,7 @@ use std::{
 };
 
 mod cgroup;
+pub mod proxy;
 mod seccomp;
 
 static INTERRUPTED: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
@@ -24,7 +25,7 @@ extern "C" fn interrupted(signal: i32) {
 }
 
 pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
-    if policy.network == Network::Deny {
+    if policy.network != Network::Allow {
         crate::unix::prepare_network_denial()?;
     }
     if policy.isolated {
@@ -137,7 +138,7 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         "solmu",
         "--clearenv",
     ]);
-    if policy.network == Network::Deny {
+    if policy.network != Network::Allow {
         sandbox.arg("--unshare-net");
     }
     // Share only runtime files, not the host's home, /run, or arbitrary mounts.
@@ -181,12 +182,6 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
             sandbox.arg("--setenv").arg(key).arg(value);
         }
     }
-    sandbox
-        .arg("--chdir")
-        .arg(&directory)
-        .arg("--")
-        .arg("/opt/solmu/agent")
-        .args(command.get_args());
     // Host networking is shared only when the policy allows it.
     let group = cgroup::Group::create(&policy)?;
     group.validate_workspace(&directory)?;
@@ -202,9 +197,47 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         }
         group.validate_workspace(path)?;
     }
-    let filter = seccomp::filter(policy.network == Network::Deny)?;
+    let filter = seccomp::filter(policy.network)?;
     let filter_fd = filter.as_raw_fd();
     let group_fd = group.as_raw_fd();
+    let mut bridge = if policy.network == Network::Proxy {
+        Some(proxy::Host::new(&policy)?)
+    } else {
+        None
+    };
+    let bridge_fds: Vec<_> = bridge
+        .as_ref()
+        .map(|bridge| bridge.children.iter().map(AsRawFd::as_raw_fd).collect())
+        .unwrap_or_default();
+    if let Some(bridge) = &bridge {
+        let worker = proxy::Worker {
+            bridge: bridge.children[0].as_raw_fd(),
+            inbound: bridge.children[1].as_raw_fd(),
+            arguments: command.get_args().map(std::ffi::OsStr::to_owned).collect(),
+            local: policy
+                .local
+                .iter()
+                .map(|route| crate::network::Target::parse(route, true))
+                .collect::<io::Result<_>>()?,
+        };
+        sandbox
+            .arg("--ro-bind")
+            .arg(std::env::current_exe()?)
+            .arg("/opt/solmu/boxer")
+            .arg("--chdir")
+            .arg(&directory)
+            .arg("--")
+            .arg("/opt/solmu/boxer")
+            .arg(proxy::WORKER)
+            .arg(serde_json::to_string(&worker).map_err(io::Error::other)?);
+    } else {
+        sandbox
+            .arg("--chdir")
+            .arg(&directory)
+            .arg("--")
+            .arg("/opt/solmu/agent")
+            .args(command.get_args());
+    }
     // Options must precede the agent separator.
     let mut supervised = Command::new("bwrap");
     supervised
@@ -218,6 +251,11 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
             cgroup::attach(group_fd)?;
             if libc::fcntl(filter_fd, libc::F_SETFD, 0) < 0 {
                 return Err(io::Error::last_os_error());
+            }
+            for descriptor in &bridge_fds {
+                if libc::fcntl(*descriptor, libc::F_SETFD, 0) < 0 {
+                    return Err(io::Error::last_os_error());
+                }
             }
             Ok(())
         });
@@ -234,6 +272,9 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
             "Could not start Bubblewrap with enforced cgroup limits: {error}"
         ))
     })?;
+    if let Some(bridge) = &mut bridge {
+        bridge.children.clear();
+    }
     let mut cancelled = 0;
     let status = loop {
         let signal = INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed);

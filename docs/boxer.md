@@ -166,7 +166,8 @@ mode and resource options override file values, and `--read-only` and
 
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
-`network` (`allow` or `deny`), `clean_env`, `pass_env`, `cpus`, `memory_mib`, `pids`, and `cgroup_root`.
+`network` (`allow`, `deny`, or `proxy`), `hosts`, `local`, `publish`, `clean_env`,
+`pass_env`, `cpus`, `memory_mib`, `pids`, and `cgroup_root`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
 
@@ -201,6 +202,80 @@ offline policy before starting a process.
 Solmu's clients and backend need network access to communicate and call an LLM.
 Keep networking allowed for those processes; use the offline option for
 standalone commands that do not need their backend or a provider connection.
+
+## Choose allowed network destinations on Linux
+
+Use `--isolated --network proxy` to give a sandbox a private network with explicit
+routes. It requires the same Bubblewrap and delegated cgroup setup as Linux
+isolation below. There is no direct route to the Internet or the host network.
+HTTP requests and HTTPS CONNECT tunnels go through Boxer's local proxy;
+overriding proxy variables or disabling a program's proxy does not restore
+direct access. Unix socket creation, raw network families, tracing, and copying
+another process's descriptors are denied. Broker channels and host-connected
+sockets are not inherited by the launched agent.
+
+For a backend that calls OpenAI, stop the regular backend, then run:
+
+```sh
+systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
+  boxer --profile solmu --isolated --network proxy \
+  --allow-host api.openai.com --publish 3000 \
+  --cwd /path/to/project -- solmu-backend
+
+# In another terminal, use the usual client and default backend port.
+solmu
+```
+
+`--allow-host HOST[:PORT]` allows one exact DNS hostname and port, defaulting to
+443. Repeat it for other services, for example `--allow-host api.anthropic.com`.
+Wildcards, URLs, embedded credentials, and numeric IP addresses are rejected.
+The broker resolves names outside the sandbox and rejects private, loopback,
+and special-use addresses. TLS stays between the client and the destination;
+Boxer controls the destination, not encrypted API paths, HTTP methods, or bodies.
+TCP tunnels can carry any protocol supported by an allowed destination.
+
+`--publish PORT` exposes a guest service on the same **host loopback** port.
+For Solmu's backend, `--publish 3000` keeps HTTP, streaming replies, and WebSocket
+updates available to all clients using their normal settings. Publishing does
+not grant a route from the guest to other host services.
+
+To run the CLI inside a private network while its backend runs outside it:
+
+```sh
+systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
+  boxer --isolated --network proxy --allow-local 127.0.0.1:3000 \
+  --cwd /path/to/project -- solmu
+```
+
+`--allow-local IP:PORT` forwards exactly that host loopback service into the
+guest at the same address and port. IPv6 uses `[::1]:PORT`. This supports direct
+TCP and WebSocket clients as well as HTTP clients. Other host loopback ports
+remain inaccessible. Do not publish and forward the same guest port.
+Proxy and `NO_PROXY` settings are set automatically for these routes.
+
+Routes can be saved in an explicit policy:
+
+```json
+{
+  "version": 1,
+  "mode": "isolated",
+  "network": "proxy",
+  "hosts": ["api.openai.com:443"],
+  "local": [],
+  "publish": [3000]
+}
+```
+
+Use `--check` in your delegated cgroup to verify this policy before launching.
+It also checks that published ports are available. Up to 64 active connections
+are handled per sandbox; idle connections close after five minutes. Socket
+creation restrictions can affect programs that require Unix sockets internally.
+macOS and Windows currently reject routed policies before launching a program.
+Permissive networking remains the default on every platform.
+
+Provider keys are still forwarded to the agent, and `.env` files within shared
+paths remain readable. Network routing does not yet provide credential injection
+or protection for secrets in the workspace.
 
 ## Linux isolation
 
@@ -256,7 +331,8 @@ SIGKILL cannot run cleanup; a service manager should own the delegated hierarchy
 Seccomp rejects namespace creation, mount changes, tracing, kernel modules,
 kernel keyrings, BPF, io_uring, and other privileged kernel operations. Ordinary
 processes, threads, and file operations within the workspace remain available.
-Network requests remain available unless `--network deny` is selected.
+Network requests remain unrestricted with `--network allow`; `deny` blocks them,
+and `proxy` permits only declared routes.
 Linux x86_64 and aarch64 are supported.
 
 Systemd delegation is detected automatically. Your user service manager must

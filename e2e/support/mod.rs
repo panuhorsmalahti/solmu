@@ -97,6 +97,7 @@ pub struct Backend {
     title_model: Option<String>,
     reply_control: Arc<ReplyControl>,
     boxed: bool,
+    routed: bool,
 }
 
 impl Backend {
@@ -105,11 +106,16 @@ impl Backend {
     }
 
     pub async fn configured(provider: Option<&str>, credentials: bool, dotenv: bool) -> Self {
-        Self::configured_with_boxer(provider, credentials, dotenv, false).await
+        Self::configured_with_boxer(provider, credentials, dotenv, false, false).await
     }
 
     pub async fn boxed() -> Self {
-        Self::configured_with_boxer(None, true, false, true).await
+        Self::configured_with_boxer(None, true, false, true, false).await
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn routed() -> Self {
+        Self::configured_with_boxer(None, true, false, true, true).await
     }
 
     async fn configured_with_boxer(
@@ -117,6 +123,7 @@ impl Backend {
         credentials: bool,
         dotenv: bool,
         boxed: bool,
+        routed: bool,
     ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}/v1/", listener.local_addr().unwrap());
@@ -143,6 +150,7 @@ impl Backend {
             title_model: None,
             reply_control,
             boxed,
+            routed,
         };
         if dotenv {
             std::fs::write(backend.directory.path().join(".env"), format!("LLM_PROVIDER=openai\nLLM_MODEL=test-model\nLLM_ENDPOINT={}\nOPENAI_API_KEY=fixture-key\nANTHROPIC_API_KEY=fixture-key\nSOLMU_BIND_ADDR=invalid-dotenv-value\n", backend.endpoint)).unwrap();
@@ -173,23 +181,42 @@ impl Backend {
         // Bound simultaneous native launches (not test execution), avoiding
         // startup resource contention on Windows runners.
         let _startup = STARTUP_LIMIT.acquire().await.unwrap();
+        let bind = if self.routed {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.local_addr().unwrap().to_string()
+        } else {
+            std::env::var("SOLMU_FIXTURE_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:0".into())
+        };
         let mut command = if self.boxed {
             let mut command = Command::new(binary("boxer"));
             command
                 .args(["--profile", "solmu", "--cwd"])
-                .arg(self.directory.path())
-                .arg("--")
-                .arg(binary("solmu-backend"));
+                .arg(self.directory.path());
+            if self.routed {
+                let provider = self
+                    .endpoint
+                    .strip_prefix("http://")
+                    .unwrap()
+                    .strip_suffix("/v1/")
+                    .unwrap();
+                command.args([
+                    "--isolated",
+                    "--network",
+                    "proxy",
+                    "--allow-local",
+                    provider,
+                    "--publish",
+                    bind.rsplit_once(':').unwrap().1,
+                ]);
+            }
+            command.arg("--").arg(binary("solmu-backend"));
             command
         } else {
             Command::new(binary("solmu-backend"))
         };
         command
             .current_dir(self.directory.path())
-            .env(
-                "SOLMU_BIND_ADDR",
-                std::env::var("SOLMU_FIXTURE_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:0".into()),
-            )
+            .env("SOLMU_BIND_ADDR", bind)
             .env("SOLMU_WEB_DIR", self.directory.path().join("web"))
             .env("SOLMU_DATABASE_URL", "sqlite://solmu.db")
             .env("SOLMU_WORKSPACE", self.directory.path().join("workspace"))
@@ -256,6 +283,15 @@ impl Backend {
 
     pub fn stop(&mut self) {
         if let Some(mut child) = self.child.take() {
+            #[cfg(unix)]
+            if self.routed {
+                unsafe {
+                    libc::kill(child.id() as i32, libc::SIGTERM);
+                }
+            } else {
+                let _ = child.kill();
+            }
+            #[cfg(not(unix))]
             let _ = child.kill();
             let _ = child.wait();
         }

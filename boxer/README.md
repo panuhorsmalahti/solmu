@@ -65,6 +65,13 @@ systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervis
 
 Networking stays allowed. This uses the host kernel.
 
+On Linux, restrict destinations with `--isolated --network proxy`. Add exact
+hosts with `--allow-host api.openai.com`, forward an existing backend with
+`--allow-local 127.0.0.1:3000`, or expose a boxed backend with `--publish 3000`.
+See [network routes and Solmu examples](../docs/boxer.md#choose-allowed-network-destinations-on-linux).
+This routes traffic through a private network and preserves streaming and
+WebSocket support. Provider keys remain visible to the agent.
+
 Running `boxer` by itself starts the Solmu terminal client (`solmu`).
 It is equivalent to `boxer -- solmu`. To launch the backend or another
 program, name it after `--`, for example `boxer -- solmu-backend`.

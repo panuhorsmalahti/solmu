@@ -6,6 +6,7 @@ mod network;
 mod permissions;
 mod policies;
 mod readiness;
+mod routes;
 
 #[cfg(target_os = "linux")]
 mod isolation;

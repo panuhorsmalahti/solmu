@@ -18,7 +18,7 @@ pub fn run(policy: &Policy, workspace: &Path) -> io::Result<i32> {
     }
     // Validate inherited socket I/O in the caller too: the worker uses pipes.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if policy.network == Network::Deny {
+    if policy.network != Network::Allow {
         crate::unix::prepare_network_denial()?;
     }
     let mut command = Command::new(std::env::current_exe()?);

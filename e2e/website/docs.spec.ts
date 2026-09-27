@@ -11,6 +11,18 @@ const buildSite = () => execute(process.execPath, [join(repository, 'website/bui
 
 const home = 'http://127.0.0.1:4174/solmu/'
 
+test('Boxer guide uses default backend settings and describes explicit Linux network routes', async ({ page }) => {
+  await page.goto(`${home}docs/boxer/`)
+  const example = page.locator('article pre').filter({ hasText: 'boxer --profile solmu --cwd /path/to/project -- solmu-backend' })
+  await expect(example).toBeVisible()
+  await expect(example).not.toContainText('SOLMU_BIND_ADDR=')
+  await expect(example).not.toContainText('SOLMU_BACKEND_URL=')
+  await expect(example).toContainText('solmu')
+  await expect(page.locator('article')).toContainText('--allow-host api.openai.com --publish 3000')
+  await expect(page.locator('article')).toContainText('--allow-local 127.0.0.1:3000')
+  await expect(page.locator('article')).toContainText('Network routing does not yet provide credential injection')
+})
+
 test('Docs is linked from the website and every Markdown guide is published', async ({ page }) => {
   await page.goto(home)
   await page.getByRole('link', { name: 'Docs', exact: true }).click()

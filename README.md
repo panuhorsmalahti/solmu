@@ -140,6 +140,8 @@ to a writable project and read-only runtime files. Add explicit read/write grant
 or reuse a JSON policy; preview permissions with `--print-policy` or check that
 your OS can enforce them with `--check` before launching your agent.
 Use `--network deny` for offline commands, including their subprocesses.
+On Linux, `--isolated --network proxy` permits only explicit remote and local
+routes; publish the boxed backend on port 3000 to use normal client settings.
 Launch the backend inside Boxer to protect its tool calls.
 On Linux, `--isolated --cwd /path/to/project` also gives it
 private processes and a filesystem view with only the workspace writable,
