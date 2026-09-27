@@ -30,6 +30,32 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
         let mut profile = String::from(
             "(version 1)(deny default)(allow process*)(allow signal)(allow sysctl-read)(allow mach-lookup)(allow network*)(allow file-read-metadata)",
         );
+        for directory in policy::runtime_list() {
+            profile.push_str(&format!(
+                "(allow file-read* (literal {}))",
+                quote(directory.to_str().unwrap())
+            ));
+        }
+        profile.push_str("(allow file-read-data (literal \"/dev/stdin\")(literal \"/dev/fd/0\"))(allow file-write-data (literal \"/dev/stdout\")(literal \"/dev/stderr\")(literal \"/dev/fd/1\")(literal \"/dev/fd/2\"))");
+        // Terminal I/O is explicitly inherited. Grant ioctl only for the actual
+        // terminal device attached to a standard descriptor, not every host TTY.
+        for descriptor in 0..=2 {
+            let mut buffer = [0u8; libc::PATH_MAX as usize];
+            // SAFETY: F_GETPATH writes at most PATH_MAX bytes to this buffer.
+            if unsafe { libc::fcntl(descriptor, libc::F_GETPATH, buffer.as_mut_ptr()) } == 0 {
+                let length = buffer
+                    .iter()
+                    .position(|byte| *byte == 0)
+                    .unwrap_or(buffer.len());
+                let path = std::str::from_utf8(&buffer[..length]).map_err(io::Error::other)?;
+                if path.starts_with("/dev/") {
+                    profile.push_str(&format!(
+                        "(allow file-read* file-write* file-ioctl (literal {}))",
+                        quote(path)
+                    ));
+                }
+            }
+        }
         for (operation, paths) in [
             ("file-read* file-map-executable", read),
             ("file-write*", write),

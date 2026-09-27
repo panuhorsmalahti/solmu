@@ -144,10 +144,10 @@ private processes and a filesystem view with only the workspace writable,
 filtered system calls, dropped capabilities, and CPU/memory/task limits.
 [Permissions and setup](docs/boxer.md).
 
-Example (Linux/macOS workspace permissions):
+Example (Linux/macOS backend workspace permissions):
 
 ```sh
-boxer --profile solmu --cwd /path/to/project -- solmu
+SOLMU_BIND_ADDR=127.0.0.1:3001 boxer --profile solmu --cwd /path/to/project -- solmu-backend
 ```
 
 ## Docker

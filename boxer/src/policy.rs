@@ -332,6 +332,16 @@ pub const ISOLATED_RUNTIME: &[&str] = &[
     "/etc/localtime",
 ];
 
+pub fn runtime_list() -> Vec<PathBuf> {
+    if cfg!(target_os = "macos") {
+        // The macOS loader opens the root directory before locating its cache.
+        // This is a literal directory grant, never a recursive filesystem grant.
+        vec![PathBuf::from("/")]
+    } else {
+        Vec::new()
+    }
+}
+
 pub fn device_paths() -> Vec<PathBuf> {
     [
         "/dev/null",

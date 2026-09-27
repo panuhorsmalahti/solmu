@@ -23,6 +23,13 @@ impl Terminal {
         Self::start_with_options(backend, false, Some(thread))
     }
     fn start_with_options(backend: &Backend, isolated: bool, thread: Option<&str>) -> Self {
+        Self::start_with_policy(backend, isolated.then_some("--isolated"), thread)
+    }
+    #[cfg(unix)]
+    fn start_boxed(backend: &Backend) -> Self {
+        Self::start_with_policy(backend, Some("--profile"), None)
+    }
+    fn start_with_policy(backend: &Backend, policy: Option<&str>, thread: Option<&str>) -> Self {
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: 32,
@@ -31,17 +38,21 @@ impl Terminal {
                 pixel_height: 0,
             })
             .unwrap();
-        let mut command = CommandBuilder::new(binary(if isolated { "boxer" } else { "solmu" }));
-        if let Some(thread) = thread {
-            command.arg("--thread");
-            command.arg(thread);
-        }
-        if isolated {
-            command.arg("--isolated");
+        let mut command =
+            CommandBuilder::new(binary(if policy.is_some() { "boxer" } else { "solmu" }));
+        if let Some(policy) = policy {
+            command.arg(policy);
+            if policy == "--profile" {
+                command.arg("solmu");
+            }
             command.arg("--cwd");
             command.arg(backend.directory.path());
             command.arg("--");
             command.arg(binary("solmu"));
+        }
+        if let Some(thread) = thread {
+            command.arg("--thread");
+            command.arg(thread);
         }
         command.cwd(backend.directory.path());
         command.env("SOLMU_BACKEND_URL", &backend.url);
@@ -150,6 +161,8 @@ mod conversations;
 
 mod responses;
 
+#[cfg(unix)]
+mod boxer;
 mod input;
 mod models;
 mod profile;

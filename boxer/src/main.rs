@@ -191,6 +191,7 @@ fn run() -> io::Result<i32> {
                 Mode::Isolated => policy::ISOLATED_RUNTIME.iter().map(std::path::PathBuf::from).collect(),
             },
             "device_io": if resolved.mode == Mode::Workspace { policy::device_paths() } else { Vec::new() },
+            "runtime_list": if resolved.mode == Mode::Workspace { policy::runtime_list() } else { Vec::new() },
             "private_mounts": if resolved.isolated { vec!["/proc", "/dev", "/tmp"] } else { Vec::new() },
             "environment": {"inherit": !resolved.clean_env && !resolved.isolated, "forwarded_names": forwarded},
             "program": command.get_program().to_string_lossy(), "arguments": command.get_args().map(|argument| argument.to_string_lossy()).collect::<Vec<_>>(),

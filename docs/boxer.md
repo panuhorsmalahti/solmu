@@ -30,7 +30,7 @@ The project is writable. System executables, libraries, DNS settings, and
 certificates are readable, along with the launched executable. Executable
 mapping is allowed within the readable paths so programs and libraries can load. File contents
 outside these paths are denied. Restrictions are inherited by subprocesses;
-links inside the project do not grant access to files outside it.
+symbolic links inside the project do not grant access to files outside it.
 
 The profile clears unrelated environment variables and sets `SOLMU_WORKSPACE`
 to the selected project. Provider keys, `LLM_*`, `SOLMU_*`, terminal settings,
@@ -70,7 +70,9 @@ temporary files under a clean environment.
 
 Networking remains unrestricted, including local services. This mode restricts
 filesystem operations; it does not create private processes or resource limits.
-macOS also permits file metadata lookups and system IPC used by native services.
+macOS also permits file metadata lookups, listing the root directory for system
+library startup, terminal I/O, and system IPC used by native services. The root
+directory grant is not recursive and does not allow reading files below it.
 Already open handles retain their access. Files inside the project, including
 `.env` and `.git`, remain accessible under the project's grant.
 

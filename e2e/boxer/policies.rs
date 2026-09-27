@@ -52,6 +52,14 @@ fn resolved_policies_show_permissions_and_never_launch_or_disclose_environment_v
             .contains(&json!("BOXER_TEST_SECRET"))
     );
     assert_eq!(value["platform_supported"], !cfg!(windows));
+    assert_eq!(
+        value["runtime_list"],
+        if cfg!(target_os = "macos") {
+            json!(["/"])
+        } else {
+            json!([])
+        }
+    );
     let value = plan(workspace.path(), &["--isolated", "--cpus", "1"]);
     assert_eq!(value["policy"]["cpus"], 1);
     assert_eq!(value["policy"]["memory_mib"], 2048);
