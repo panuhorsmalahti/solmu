@@ -343,33 +343,31 @@ async fn stopping_cancels_active_and_queued_turns_without_saving_unsubmitted_pro
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn timed_out_and_disconnected_waits_never_duplicate_accepted_prompts() {
     let backend = Backend::start().await;
+    backend.hold_next_reply();
     let session = Session {
         backend: &backend,
         name: "timeout",
     };
     assert!(session.command(&["server", "start"]).status.success());
     let info = ready(&session, "1").await;
+    // Confirm acceptance before testing a short wait. A timeout during submission
+    // cannot promise an acknowledgement, especially on a busy CI runner.
+    let accepted = command(&session, &["agent", "prompt", "1", "Only submit this once"]);
+    assert_eq!(accepted["accepted"], true);
+    let id = accepted["turn"]["id"].as_str().unwrap();
     let error = Pending::new(
         &session,
-        &[
-            "agent",
-            "prompt",
-            "1",
-            "Only submit this once",
-            "--wait",
-            "--timeout",
-            "150",
-        ],
+        &["agent", "wait", "1", "--turn", id, "--timeout", "150"],
     )
     .finish(false)
     .await;
     assert_eq!(error["code"], "timeout");
-    assert_eq!(error["accepted"], true);
-    let id = error["turn"].as_str().unwrap();
+    assert_eq!(error["turn"], id);
     let waiter = Pending::new(&session, &["agent", "wait", "1", "--turn", id]);
     active(&session, true).await;
     waiter.cancel();
     active(&session, false).await;
+    backend.release_reply();
     let result = command(
         &session,
         &["agent", "wait", "1", "--turn", id, "--timeout", "10000"],
