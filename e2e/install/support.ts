@@ -63,9 +63,14 @@ export async function releaseFixture(options: { corrupt?: boolean; webFiles?: Re
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`
   return {
     directory, destination, native, web, requests,
-    async run(component: string, options: { pinned?: boolean; useDefaultDestination?: boolean; service?: boolean } = {}) {
-      const env = { ...process.env, SOLMU_NO_SERVICE: options.service ? '0' : '1', SOLMU_NO_PATH: '1', SOLMU_SERVICE_DIR: path.join(directory, 'state'), SOLMU_WEB_INSTALL_DIR: path.join(directory, 'state', 'web'), SOLMU_COMPONENT: 'all', SOLMU_VERSION: options.pinned ? '0.1.0' : '', SOLMU_INSTALLER_BASE_URL: `${base}/scripts`, SOLMU_RELEASE_API: `${base}/api`, SOLMU_RELEASE_BASE_URL: `${base}/download`, SOLMU_INSTALL_DIR: options.useDefaultDestination ? '' : destination }
+    async run(component: string, options: { pinned?: boolean; useDefaultDestination?: boolean; service?: boolean; persistPath?: boolean } = {}) {
+      const env = { ...process.env, SOLMU_NO_SERVICE: options.service ? '0' : '1', SOLMU_NO_PATH: options.persistPath ? '0' : '1', SOLMU_SERVICE_DIR: path.join(directory, 'state'), SOLMU_WEB_INSTALL_DIR: path.join(directory, 'state', 'web'), SOLMU_COMPONENT: 'all', SOLMU_VERSION: options.pinned ? '0.1.0' : '', SOLMU_INSTALLER_BASE_URL: `${base}/scripts`, SOLMU_RELEASE_API: `${base}/api`, SOLMU_RELEASE_BASE_URL: `${base}/download`, SOLMU_INSTALL_DIR: options.useDefaultDestination ? '' : destination }
       delete env.PSModulePath
+      if (options.persistPath) {
+        env.HOME = path.join(directory, 'home')
+        env.SHELL = '/bin/bash'
+        await mkdir(env.HOME, { recursive: true })
+      }
       const script = path.resolve(`scripts/install-${component}.${windows ? 'ps1' : 'sh'}`)
       if (options.service) {
         env.HOME = path.join(directory, 'home')

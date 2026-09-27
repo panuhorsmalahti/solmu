@@ -129,7 +129,14 @@ case "$component" in backend|all)
 esac
 if [ "${SOLMU_NO_PATH:-0}" != 1 ]; then
   case ":$PATH:" in *":$destination:"*) ;; *)
-    case "${SHELL:-}" in */zsh) profile="$HOME/.zprofile" ;; */bash) profile="$HOME/.bash_profile" ;; *) profile="$HOME/.profile" ;; esac
+    case "${SHELL:-}" in
+      */zsh) profile="$HOME/.zprofile" ;;
+      */bash)
+        if [ -f "$HOME/.bash_profile" ]; then profile="$HOME/.bash_profile";
+        elif [ -f "$HOME/.bash_login" ]; then profile="$HOME/.bash_login";
+        else profile="$HOME/.profile"; fi ;;
+      *) profile="$HOME/.profile" ;;
+    esac
     escaped=$(printf '%s' "$destination" | sed "s/'/'\\''/g")
     line="export PATH='$escaped':\"\$PATH\""
     touch "$profile"

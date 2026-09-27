@@ -15,7 +15,8 @@ Installers need a published release and verify every archive against `SHA256SUMS
 
 Native programs go to `~/.local/bin` on Linux/macOS, or
 `%LOCALAPPDATA%\Solmu\bin` on Windows. Installers add this directory to your
-login shell/user PATH; open a new terminal afterward. Set `SOLMU_VERSION=0.1.0`
+login shell/user PATH; open a new terminal afterward. Unix installers preserve
+the existing login profile and avoid adding duplicate PATH entries. Set `SOLMU_VERSION=0.1.0`
 to pin a version, or `SOLMU_INSTALL_DIR` for another destination. PowerShell also
 accepts `-Version`, `-InstallDir`, and `-NoPath`. Unix accepts `SOLMU_NO_PATH=1`.
 
