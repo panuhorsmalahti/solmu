@@ -55,6 +55,13 @@ jobs:
       - run: cargo build --workspace --locked
       - if: runner.os != 'Linux'
         run: cargo test --workspace --all-targets --locked
+      - name: macOS sandbox failure diagnostics
+        if: failure() && runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          sudo /usr/bin/log show --last 5m --style compact \
+            --predicate 'eventMessage CONTAINS "deny(" AND (eventMessage CONTAINS "sandbox-probe" OR eventMessage CONTAINS "solmu-backend" OR eventMessage CONTAINS "boxer")'
+          python3 e2e/support/macos_diagnostics.py
       - if: runner.os == 'Linux'
         run: |
           # Delegate a private hierarchy; test processes live in its supervisor leaf.
