@@ -1,4 +1,7 @@
-use crate::Policy;
+use crate::{
+    Policy,
+    policy::{self, Mode},
+};
 use landlock::{
     ABI, Access, AccessFs, CompatLevel, Compatible, PathBeneath, PathFd, Ruleset, RulesetAttr,
     RulesetCreatedAttr,
@@ -32,19 +35,67 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     } else {
         handled
     };
-    Ruleset::default()
+    let mut rules = Ruleset::default()
         .set_compatibility(CompatLevel::HardRequirement)
         .handle_access(handled)
         .map_err(io::Error::other)?
         .create()
-        .map_err(io::Error::other)?
-        .add_rule(PathBeneath::new(
-            PathFd::new("/").map_err(io::Error::other)?,
-            allowed,
-        ))
-        .map_err(io::Error::other)?
-        .restrict_self()
         .map_err(io::Error::other)?;
+    if policy.mode == Mode::Workspace {
+        let executable = policy::executable(&command)?;
+        let mut read = policy::runtime_paths();
+        read.extend(policy.read.clone());
+        read.push(executable);
+        for path in read {
+            let access = if path.is_file() {
+                AccessFs::from_read(ABI::V3) & AccessFs::from_file(ABI::V3)
+            } else {
+                AccessFs::from_read(ABI::V3)
+            };
+            rules = rules
+                .add_rule(PathBeneath::new(
+                    PathFd::new(path).map_err(io::Error::other)?,
+                    access,
+                ))
+                .map_err(io::Error::other)?;
+        }
+        let workspace = command.get_current_dir().expect("resolved workspace");
+        rules = rules
+            .add_rule(PathBeneath::new(
+                PathFd::new(workspace).map_err(io::Error::other)?,
+                allowed,
+            ))
+            .map_err(io::Error::other)?;
+        for path in &policy.write {
+            let access = if path.is_file() {
+                handled & AccessFs::from_file(ABI::V3)
+            } else {
+                handled
+            };
+            rules = rules
+                .add_rule(PathBeneath::new(
+                    PathFd::new(path).map_err(io::Error::other)?,
+                    access,
+                ))
+                .map_err(io::Error::other)?;
+        }
+        for path in policy::device_paths() {
+            rules = rules
+                .add_rule(PathBeneath::new(
+                    PathFd::new(path).map_err(io::Error::other)?,
+                    AccessFs::from_file(ABI::V3),
+                ))
+                .map_err(io::Error::other)?;
+        }
+    } else {
+        rules = rules
+            .add_rule(PathBeneath::new(
+                PathFd::new("/").map_err(io::Error::other)?,
+                allowed,
+            ))
+            .map_err(io::Error::other)?;
+    }
+    rules.restrict_self().map_err(io::Error::other)?;
     // Network access is deliberately not handled by the ruleset: all requests
     // are allowed. Existing caller permissions still apply.
     Err(command.exec())
@@ -83,24 +134,16 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         "--clearenv",
     ]);
     // Share only runtime files, not the host's home, /run, or arbitrary mounts.
-    for path in [
-        "/usr",
-        "/bin",
-        "/sbin",
-        "/lib",
-        "/lib64",
-        "/etc/resolv.conf",
-        "/etc/hosts",
-        "/etc/nsswitch.conf",
-        "/etc/gai.conf",
-        "/etc/ssl",
-        "/etc/pki",
-        "/etc/fonts",
-        "/etc/localtime",
-    ] {
+    for &path in policy::ISOLATED_RUNTIME {
         sandbox.args(["--ro-bind-try", path, path]);
     }
     sandbox.args(["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]);
+    // Grants are additive, as in the native allowlists. Mount read-only grants
+    // first so a read grant inside a writable tree cannot remove its writes,
+    // and a read grant containing the workspace cannot hide the workspace.
+    for path in &policy.read {
+        sandbox.arg("--ro-bind").arg(path).arg(path);
+    }
     sandbox
         .arg(if policy.read_only {
             "--ro-bind"
@@ -116,51 +159,18 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         "HOME",
         "/tmp/solmu-home",
     ]);
-    let requested = std::path::Path::new(command.get_program());
-    let executable = if requested.is_absolute() {
-        requested.to_owned()
-    } else if requested.components().count() > 1 {
-        directory.join(requested)
-    } else {
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-            .map(|path| path.join(requested))
-            .find(|path| path.is_file())
-            .ok_or_else(|| io::Error::other("Agent executable was not found on PATH"))?
+    for path in &policy.write {
+        sandbox.arg("--bind").arg(path).arg(path);
     }
-    .canonicalize()?;
+    let executable = policy::executable(&command)?;
     sandbox
         .arg("--ro-bind")
         .arg(executable)
         .arg("/opt/solmu/agent");
     // Explicit environment only: provider credentials remain available, while
     // SSH agents and other host service handles are not forwarded.
-    for (key, value) in std::env::vars_os() {
-        let name = key.to_string_lossy();
-        if matches!(
-            name.as_ref(),
-            "PATH"
-                | "TERM"
-                | "LANG"
-                | "LC_ALL"
-                | "COLORTERM"
-                | "VERTEX_PROJECT_ID"
-                | "VERTEX_LOCATION"
-                | "AWS_REGION"
-                | "AWS_DEFAULT_REGION"
-                | "GITHUB_TOKEN"
-                | "HTTP_PROXY"
-                | "HTTPS_PROXY"
-                | "ALL_PROXY"
-                | "NO_PROXY"
-                | "http_proxy"
-                | "https_proxy"
-                | "all_proxy"
-                | "no_proxy"
-        ) || name.starts_with("LLM_")
-            || name.starts_with("SOLMU_")
-            || name.ends_with("_API_KEY")
-            || name.ends_with("_AUTH_TOKEN")
-        {
+    for (key, value) in command.get_envs() {
+        if let Some(value) = value {
             sandbox.arg("--setenv").arg(key).arg(value);
         }
     }
@@ -173,6 +183,18 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
     // No network namespace is created: host networking stays available.
     let group = cgroup::Group::create(&policy)?;
     group.validate_workspace(&directory)?;
+    for path in policy.read.iter().chain(&policy.write) {
+        if path == std::path::Path::new("/")
+            || ["/sys", "/proc", "/dev"]
+                .iter()
+                .any(|root| path.starts_with(root))
+        {
+            return Err(io::Error::other(
+                "Isolated grants cannot expose filesystem roots or kernel control directories",
+            ));
+        }
+        group.validate_workspace(path)?;
+    }
     let filter = seccomp::filter()?;
     let filter_fd = filter.as_raw_fd();
     let group_fd = group.as_raw_fd();

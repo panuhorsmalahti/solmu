@@ -5,6 +5,19 @@ use std::{
 
 fn main() {
     let path = std::env::args().nth(1).expect("probe output path");
+    if path == "--access-check" || path == "--access-check-descendant" {
+        access_check();
+        if path == "--access-check-descendant" {
+            assert!(
+                std::process::Command::new(std::env::current_exe().unwrap())
+                    .arg("--access-check")
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        return;
+    }
     #[cfg(target_os = "linux")]
     if path == "--limits" {
         linux_limits();
@@ -109,6 +122,35 @@ fn main() {
     }
     println!("Solmu sandbox probe complete");
     std::process::exit(7);
+}
+
+fn access_check() {
+    let cases: serde_json::Value =
+        serde_json::from_str(&std::env::var("SOLMU_TEST_ACCESS").unwrap()).unwrap();
+    for case in cases.as_array().unwrap() {
+        let path = case["path"].as_str().unwrap();
+        if let Some(readable) = case["read"].as_bool() {
+            assert_eq!(std::fs::read(path).is_ok(), readable, "read policy: {path}");
+        }
+        if let Some(writable) = case["write"].as_bool() {
+            assert_eq!(
+                std::fs::write(path, "sandbox change").is_ok(),
+                writable,
+                "write policy: {path}"
+            );
+        }
+    }
+    if let Ok(expectations) = std::env::var("SOLMU_TEST_POLICY_ENV") {
+        let expectations: serde_json::Value = serde_json::from_str(&expectations).unwrap();
+        for (name, expected) in expectations.as_object().unwrap() {
+            assert_eq!(
+                std::env::var(name).ok().as_deref(),
+                expected.as_str(),
+                "environment policy: {name}"
+            );
+        }
+    }
+    println!("access policy enforced");
 }
 
 #[cfg(target_os = "linux")]

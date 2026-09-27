@@ -27,6 +27,21 @@ boxer -- solmu
 boxer --cwd /path/to/project -- another-agent
 ```
 
+On Linux/macOS, restrict filesystem access to your project and the system runtime:
+
+```sh
+boxer --profile solmu --cwd /path/to/project -- solmu
+boxer --profile solmu --cwd /path/to/project -- solmu-backend
+boxer --workspace --cwd /path/to/project --read /path/to/reference -- another-agent
+```
+
+The Solmu profile also filters the environment and sets the backend's default
+workspace. Tools run in the backend, so launch the backend inside Boxer to protect
+their file access. A boxed client uses its existing backend's permissions.
+Keep reusable grants in an explicit JSON policy and inspect them with
+`boxer --policy /path/to/boxer.json --cwd /path/to/project --print-policy -- solmu`.
+Native Windows currently rejects filesystem restrictions.
+
 On Linux, choose container-style isolation with a private process tree and
 filesystem view, a writable workspace, read-only system files, filtered system
 calls, and CPU/memory/task limits:

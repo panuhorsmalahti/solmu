@@ -96,6 +96,7 @@ pub struct Backend {
     dotenv: bool,
     title_model: Option<String>,
     reply_control: Arc<ReplyControl>,
+    boxed: bool,
 }
 
 impl Backend {
@@ -104,6 +105,19 @@ impl Backend {
     }
 
     pub async fn configured(provider: Option<&str>, credentials: bool, dotenv: bool) -> Self {
+        Self::configured_with_boxer(provider, credentials, dotenv, false).await
+    }
+
+    pub async fn boxed() -> Self {
+        Self::configured_with_boxer(None, true, false, true).await
+    }
+
+    async fn configured_with_boxer(
+        provider: Option<&str>,
+        credentials: bool,
+        dotenv: bool,
+        boxed: bool,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}/v1/", listener.local_addr().unwrap());
         let requests = Requests::default();
@@ -128,6 +142,7 @@ impl Backend {
             dotenv,
             title_model: None,
             reply_control,
+            boxed,
         };
         if dotenv {
             std::fs::write(backend.directory.path().join(".env"), format!("LLM_PROVIDER=openai\nLLM_MODEL=test-model\nLLM_ENDPOINT={}\nOPENAI_API_KEY=fixture-key\nANTHROPIC_API_KEY=fixture-key\nSOLMU_BIND_ADDR=invalid-dotenv-value\n", backend.endpoint)).unwrap();
@@ -158,7 +173,17 @@ impl Backend {
         // Bound simultaneous native launches (not test execution), avoiding
         // startup resource contention on Windows runners.
         let _startup = STARTUP_LIMIT.acquire().await.unwrap();
-        let mut command = Command::new(binary("solmu-backend"));
+        let mut command = if self.boxed {
+            let mut command = Command::new(binary("boxer"));
+            command
+                .args(["--profile", "solmu", "--cwd"])
+                .arg(self.directory.path())
+                .arg("--")
+                .arg(binary("solmu-backend"));
+            command
+        } else {
+            Command::new(binary("solmu-backend"))
+        };
         command
             .current_dir(self.directory.path())
             .env(

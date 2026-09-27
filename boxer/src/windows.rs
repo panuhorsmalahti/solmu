@@ -30,9 +30,9 @@ impl Drop for Handle {
 }
 
 pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
-    if policy.read_only {
+    if policy.read_only || policy.mode != crate::policy::Mode::Unrestricted {
         return Err(io::Error::other(
-            "--read-only is not supported by the Windows Job Object backend; use Linux/WSL or macOS for a filesystem policy",
+            "Filesystem restrictions are not supported by the Windows Job Object backend; use Linux/WSL or macOS for a filesystem policy",
         ));
     }
     // Job membership is enforced by the Windows kernel. No breakaway flag is

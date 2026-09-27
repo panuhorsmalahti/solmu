@@ -135,15 +135,19 @@ opens one existing pane, with one controller and multiple observers.
 ## Boxer
 
 The Rust `boxer` launcher starts Solmu or another program. All network
-requests are allowed. On Linux, `--isolated --cwd /path/to/project` gives it
+requests are allowed. On Linux/macOS, `--profile solmu` restricts file access
+to a writable project and read-only runtime files. Add explicit read/write grants
+or reuse a JSON policy; preview permissions before launch with `--print-policy`.
+Launch the backend inside Boxer to protect its tool calls.
+On Linux, `--isolated --cwd /path/to/project` also gives it
 private processes and a filesystem view with only the workspace writable,
 filtered system calls, dropped capabilities, and CPU/memory/task limits.
 [Permissions and setup](docs/boxer.md).
 
-Example (uses default permissions):
+Example (Linux/macOS workspace permissions):
 
 ```sh
-boxer --cwd /path/to/project -- solmu
+boxer --profile solmu --cwd /path/to/project -- solmu
 ```
 
 ## Docker

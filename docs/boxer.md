@@ -17,6 +17,124 @@ contains the process tree and terminates remaining descendants on exit.
 `--read-only` denies new filesystem writes on Linux/macOS. Inherited open
 handles retain their access. Windows rejects filesystem restrictions.
 
+## Limit access to a project
+
+On Linux and macOS, use the built-in Solmu profile for a lightweight workspace
+sandbox. It requires no Bubblewrap or delegated cgroup:
+
+```sh
+boxer --profile solmu --cwd /path/to/project -- solmu
+```
+
+The project is writable. System executables, libraries, DNS settings, and
+certificates are readable, along with the launched executable. File contents
+outside these paths are denied. Restrictions are inherited by subprocesses;
+links inside the project do not grant access to files outside it.
+
+The profile clears unrelated environment variables and sets `SOLMU_WORKSPACE`
+to the selected project. Provider keys, `LLM_*`, `SOLMU_*`, terminal settings,
+and proxy settings remain available. `SSH_AUTH_SOCK` and unrelated secrets are
+not forwarded. Provider keys are still visible to the launched program; this
+is environment filtering, not credential brokering.
+
+Use `--workspace` for the same filesystem permissions without the Solmu-specific
+environment defaults. Add `--clean-env` to filter its environment, or
+`--pass-env NAME` to forward an additional variable. These options work with
+permissive mode too. Existing OS permissions still apply.
+
+Add explicit access to dependencies, linked skills, or result directories:
+
+```sh
+boxer --profile solmu --cwd /path/to/project \
+  --read /path/to/reference-project \
+  --read /path/to/installed-skills \
+  --write /path/to/results -- solmu
+```
+
+`--read` and `--write` can be repeated and require existing files or directories.
+Relative command-line paths are resolved against the workspace; symbolic links
+are resolved before launch. A directory grant covers its descendants, and a
+file grant covers that existing file. Create result directories before granting
+them. Writable access includes reading. Grants are additive: `--read` within a
+writable project does not make that subtree read-only.
+Tools that replace a file by renaming a temporary file need a writable directory
+grant. Solmu's file tools also retain their own workspace boundaries; a Boxer
+grant does not remove those application checks.
+
+Add `--read-only` to prevent project writes. It cannot be combined with writable
+grants. Terminal I/O and basic device access remain available. Workspace mode
+does not grant a shared temporary directory; point `TMPDIR` at an existing
+directory inside your project and add `--pass-env TMPDIR` if a tool needs
+temporary files under a clean environment.
+
+Networking remains unrestricted, including local services. This mode restricts
+filesystem operations; it does not create private processes or resource limits.
+macOS also permits file metadata lookups and system IPC used by native services.
+Already open handles retain their access. Files inside the project, including
+`.env` and `.git`, remain accessible under the project's grant.
+
+### Protect the backend's tools
+
+Solmu's tools execute in the **backend** process. Sandboxing a client does not
+sandbox an already running backend. To apply kernel restrictions to Bash and
+other tool calls, launch a separate backend inside Boxer:
+
+```sh
+SOLMU_BIND_ADDR=127.0.0.1:3001 \
+  boxer --profile solmu --cwd /path/to/project -- solmu-backend
+
+# In another terminal, connect a client to that backend.
+SOLMU_BACKEND_URL=http://127.0.0.1:3001 solmu
+```
+
+The Solmu profile sets the default thread workspace to that project. The default
+SQLite database lives there too. If your backend uses a database or published
+web files elsewhere, grant their directory explicitly with `--write` or `--read`
+and keep the corresponding `SOLMU_*` settings. File operations outside the
+declared paths fail, including Bash commands reaching outside the project.
+
+Native Windows currently contains process trees with a Job Object; it rejects
+workspace policies rather than launching without filesystem protection.
+
+## Reuse and inspect policies
+
+Policy files are explicit, versioned JSON. Boxer never loads a policy merely
+because it is present in a project. Save a file such as `boxer.json`:
+
+```json
+{
+  "version": 1,
+  "mode": "workspace",
+  "clean_env": true,
+  "read": ["../reference-project", "$HOME/.cargo"],
+  "write": ["$WORKSPACE/results"],
+  "pass_env": ["CARGO_HOME"]
+}
+```
+
+```sh
+boxer --policy /path/to/boxer.json --cwd /path/to/project -- solmu
+boxer --policy /path/to/boxer.json --cwd /path/to/project --print-policy -- solmu
+```
+
+`--print-policy` prints the resolved policy, runtime paths, program arguments,
+and forwarded environment **names** as JSON. It does not start a program,
+apply restrictions, or print environment values. `platform_supported` describes
+OS support, not a kernel or resource-delegation readiness check. Starting a
+program still fails if required kernel controls cannot be applied.
+
+Relative paths in a policy are resolved against its containing directory.
+`$HOME` and `$WORKSPACE` can prefix a path using `/`; other variables, shell
+commands, and wildcards are not expanded. Command-line grants extend the policy;
+mode and resource options override file values, and `--read-only` and
+`--clean-env` can tighten them. Choose either `--policy` or `--profile`.
+
+The required fields are `version: 1` and `mode`, which is `unrestricted`,
+`workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
+`clean_env`, `pass_env`, `cpus`, `memory_mib`, `pids`, and `cgroup_root`.
+Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
+rejected before launch. Resource controls require `isolated` mode.
+
 ## Linux isolation
 
 Install Bubblewrap (`sudo apt install bubblewrap` on Debian/Ubuntu). Run with
@@ -36,9 +154,13 @@ and IPC and cgroup namespaces. It drops kernel capabilities, prevents gaining ne
 and creating more user namespaces, and provides private temporary files.
 System executables, libraries, certificates, and DNS settings are read only.
 Your chosen workspace is shared writable; `--read-only` makes it read only.
+`--read` and `--write` also expose explicitly granted existing paths in this mode.
 The executable is shared read only, including when installed in your home.
 
 Your home, SSH agent, host process list, and host runtime sockets are not exposed.
+Explicit grants can expose those paths again; only grant the directories a task
+needs. Granting a parent of a private temporary mount also replaces that mount
+with the explicitly shared path.
 Provider credentials (`*_API_KEY`, `*_AUTH_TOKEN`), `LLM_*`, `SOLMU_*`, and basic
 terminal settings are forwarded. A `.env` inside the workspace is available.
 Provider project/region settings, GitHub Models tokens, and network proxy

@@ -3,6 +3,7 @@ use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod permissions;
+mod policies;
 
 #[cfg(target_os = "linux")]
 mod isolation;
