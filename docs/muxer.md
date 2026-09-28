@@ -231,3 +231,9 @@ input and size, with explicit takeover and draft-preserving detach.
 [Shell and command panes](muxer-commands.md) run local terminals and project commands beside
 Solmu. New-pane defaults apply automatically; saved commands wait for explicit
 restart after the server restarts.
+
+## MCP
+
+Use `/mcp` inside a Solmu pane to inspect live workspace server status and available tools. See [MCP setup](mcp.md).
+
+![MCP in a Muxer pane](screenshots/muxer-mcp.png)

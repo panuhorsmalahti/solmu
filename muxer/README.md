@@ -95,3 +95,9 @@ For source builds, see [development](../docs/development.md).
 Solmu can read, edit, and search files and run Bash commands in the thread's
 workspace. Tool activity and results appear live and stay in conversation history.
 Stop cancels pending work. See [tools](../docs/tools.md) for usage and limits.
+
+## MCP tools
+
+Use `/mcp` in a Solmu pane to see its servers and tools. [Connect a server](../docs/mcp.md).
+
+![MCP in Muxer](../docs/screenshots/muxer-mcp.png)

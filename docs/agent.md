@@ -24,3 +24,7 @@ You can stop a reply while waiting for it. The user message remains saved;
 an interrupted assistant reply is discarded. Automatic title generation can
 still finish after stopping a reply. Completed tool changes and their saved
 results remain available; Stop cancels pending tool calls.
+
+## MCP tools
+
+Solmu connects to trusted workspace MCP servers automatically. Connected tools become available to the agent on each reply and their results appear in the conversation. Inspect status with `/mcp` or the **MCP** panel. See [MCP setup](mcp.md).

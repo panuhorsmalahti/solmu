@@ -17,6 +17,12 @@ pub struct Change {
     thread_id: Option<String>,
 }
 impl Change {
+    pub fn mcp(id: &str) -> Self {
+        Self {
+            kind: "mcp_changed",
+            thread_id: Some(id.to_owned()),
+        }
+    }
     pub fn skills(id: &str) -> Self {
         Self {
             kind: "skills_changed",
@@ -36,6 +42,7 @@ pub struct AppState {
     pub llm: Llm,
     pub tools: crate::tools::Registry,
     pub skills: crate::skills::Manager,
+    pub mcp: crate::mcp::Manager,
     locks: ThreadLocks,
     pub events: broadcast::Sender<Change>,
     responses: Arc<Mutex<HashMap<String, CancellationToken>>>,
@@ -50,6 +57,7 @@ impl AppState {
             tools: crate::tools::Registry::new(),
             locks: Arc::default(),
             skills: crate::skills::Manager::new(events.clone()),
+            mcp: crate::mcp::Manager::new(events.clone()),
             events,
             responses: Arc::default(),
         }

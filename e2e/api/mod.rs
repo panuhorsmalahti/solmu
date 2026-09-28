@@ -39,6 +39,8 @@ mod responses;
 mod events;
 
 mod configuration;
+mod mcp;
+mod mcp_transports;
 mod skills;
 mod tools;
 mod web;

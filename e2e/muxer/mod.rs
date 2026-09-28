@@ -321,5 +321,6 @@ mod tabs;
 mod tools;
 
 mod commands;
+mod mcp;
 mod skills;
 mod terminals;

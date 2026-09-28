@@ -66,3 +66,9 @@ Stop cancels pending work. See [tools](tools.md) for usage and limits.
 
 Choose **Skills** in the conversation controls to see the workspace's installed
 [skills](skills.md). The list updates automatically and preserves your draft.
+
+## MCP
+
+Open **MCP** in a conversation to see live server status and tools while keeping your unsent draft. See [MCP setup](mcp.md).
+
+![Web MCP status](screenshots/web-mcp.png)

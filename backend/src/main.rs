@@ -6,6 +6,7 @@ mod api;
 mod config;
 mod db;
 mod llm;
+mod mcp;
 mod prompt;
 mod skills;
 mod storage;

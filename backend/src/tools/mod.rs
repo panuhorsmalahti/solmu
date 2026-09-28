@@ -152,7 +152,8 @@ impl Registry {
                 success: output
                     .get("exit_code")
                     .and_then(Value::as_i64)
-                    .is_none_or(|code| code == 0),
+                    .is_none_or(|code| code == 0)
+                    && output.get("isError").and_then(Value::as_bool) != Some(true),
                 output,
             },
             Err(error) => ResultData::error(error),

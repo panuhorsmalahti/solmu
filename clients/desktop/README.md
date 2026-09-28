@@ -63,3 +63,9 @@ They are discovered automatically from `.agents/skills/`.
 Solmu can read, edit, and search files and run Bash commands in the thread's
 workspace. Tool activity and results appear live and stay in conversation history.
 Stop cancels pending work. See [tools](../../docs/tools.md) for usage and limits.
+
+## MCP tools
+
+Choose **MCP** in a conversation to see connected servers and their tools. [Connect a server](../../docs/mcp.md).
+
+![Desktop MCP status](../../docs/screenshots/desktop-mcp.png)

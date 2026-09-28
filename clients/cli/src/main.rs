@@ -15,8 +15,8 @@ use tokio::sync::mpsc;
 mod settings;
 
 const COMMANDS: &[&str] = &[
-    "/new", "/threads", "/open", "/model", "/profile", "/skills", "/rename", "/delete", "/help",
-    "/stop", "/exit",
+    "/new", "/threads", "/open", "/model", "/profile", "/skills", "/mcp", "/rename", "/delete",
+    "/help", "/stop", "/exit",
 ];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -173,7 +173,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                     reported_metadata = metadata;
                 }
             }
-            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame, &session.skills); } else { draw(frame, &session, &input, show_threads, scroll, spinner, connected); draw_commands(frame, &input, command_selection); })?;
+            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame, &session.skills, &session.mcp); } else { draw(frame, &session, &input, show_threads, scroll, spinner, connected); draw_commands(frame, &input, command_selection); })?;
             let can_submit = !session.busy;
             tokio::select! {
                 Some(command) = bridge.receiver.recv() => {
@@ -264,6 +264,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             let (command, argument) = text.split_once(' ').unwrap_or((&text, ""));
                             let action = match command {
                                 "/skills" if argument.is_empty() => { page = Some(settings::Page::Skills { scroll: 0 }); continue; },
+                                "/mcp" if argument.is_empty() => { page = Some(settings::Page::Mcp { scroll: 0 }); continue; },
                                 "/profile" => { page = Some(settings::Page::profile()); settings::load(session.api.clone(), settings_sender.clone()); continue; },
                                 "/model" if argument.is_empty() => { page = Some(settings::Page::models(session.current.as_ref().and_then(|thread| thread.model.clone()))); settings::models(session.api.clone(), settings_sender.clone()); continue; },
                                 "/model" => Action::Model(if argument == "default" { None } else { Some(argument.into()) }),
@@ -272,7 +273,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 "/open" if !argument.is_empty() => { show_threads = false; Action::Open(argument.into()) },
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /skills · /delete · /stop · /exit".into()); continue; },
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /skills · /mcp · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -468,6 +469,7 @@ fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
         "/model" => "Choose the model for this thread",
         "/profile" => "Edit Solmu's system prompt",
         "/skills" => "List workspace skills",
+        "/mcp" => "Show MCP servers and tools",
         "/rename" => "Rename this conversation",
         "/delete" => "Delete this conversation",
         "/help" => "Show available commands",

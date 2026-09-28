@@ -174,6 +174,7 @@ mod responses;
 #[cfg(unix)]
 mod boxer;
 mod input;
+mod mcp;
 mod models;
 mod profile;
 mod skills;

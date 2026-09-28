@@ -26,6 +26,7 @@ pub struct Desktop {
     settings_notice: String,
     model_open: bool,
     skills_open: bool,
+    mcp_open: bool,
     catalog: Option<ModelCatalog>,
     custom_model: String,
 }
@@ -49,6 +50,7 @@ pub enum Event {
     ReloadProfile,
     OpenModels,
     OpenSkills,
+    OpenMcp,
     ModelsLoaded(Result<ModelCatalog, String>),
     CustomModel(String),
     ProfileModel(String),
@@ -92,6 +94,7 @@ impl Desktop {
             settings_notice: String::new(),
             model_open: false,
             skills_open: false,
+            mcp_open: false,
             catalog: None,
             custom_model: String::new(),
         };
@@ -117,7 +120,25 @@ impl Desktop {
     pub fn update(&mut self, event: Event) -> Task<Event> {
         let saved_profile = matches!(&event, Event::ProfileSaved(_));
         let opened_profile = matches!(&event, Event::OpenProfile);
+        if matches!(
+            &event,
+            Event::OpenProfile
+                | Event::ReloadProfile
+                | Event::OpenSkills
+                | Event::CloseSettings
+                | Event::OpenModels
+        ) || matches!(&event, Event::Action(action) if !matches!(action, Action::Refresh))
+        {
+            self.mcp_open = false;
+        }
         match event {
+            Event::OpenMcp => {
+                self.mcp_open = true;
+                self.skills_open = false;
+                self.profile_open = false;
+                self.model_open = false;
+                Task::none()
+            }
             Event::OpenSkills => {
                 self.skills_open = true;
                 self.profile_open = false;
@@ -391,6 +412,84 @@ impl Desktop {
         .height(Length::Fill)
         .style(appearance::sidebar);
 
+        if self.mcp_open {
+            let mcp = &self.session.mcp;
+            let mut content = column![
+                text("MCP servers").size(36),
+                text("Workspace tools · connected automatically")
+                    .size(14)
+                    .color(appearance::MUTED),
+                text(&mcp.workspace).size(11).color(appearance::MUTED)
+            ]
+            .spacing(18);
+            if mcp.servers.is_empty() {
+                content =
+                    content.push(text("No MCP servers configured in this workspace.").size(16));
+            }
+            for server in &mcp.servers {
+                let mut details = column![
+                    text(&server.name).size(22),
+                    text(format!(
+                        "{} · {} · {} tools",
+                        server.status,
+                        server.transport,
+                        server.tools.len()
+                    ))
+                    .size(14),
+                    text(format!(
+                        "{} · protocol {}",
+                        server.source,
+                        server
+                            .protocol_version
+                            .as_deref()
+                            .unwrap_or("not connected")
+                    ))
+                    .size(12)
+                    .color(appearance::MUTED)
+                ]
+                .spacing(10);
+                if let Some(error) = &server.error {
+                    details = details.push(text(error).size(14));
+                }
+                for tool in &server.tools {
+                    details = details.push(text(&tool.name).size(14));
+                    details =
+                        details.push(text(&tool.description).size(13).color(appearance::MUTED));
+                }
+                content = content.push(
+                    container(details)
+                        .padding(20)
+                        .width(Length::Fill)
+                        .style(|theme| appearance::message(theme, false)),
+                );
+            }
+            for issue in &mcp.issues {
+                content = content.push(text(format!("Not loaded: {}", issue.path)).size(14));
+                content = content.push(text(&issue.message).size(14));
+            }
+            content = content.push(
+                text("Configure servers in .mcp.json or mcp.json. Changes apply automatically.")
+                    .size(13)
+                    .color(appearance::MUTED),
+            );
+            let content = column![
+                button("Back to conversation")
+                    .padding(14)
+                    .style(appearance::ghost)
+                    .on_press(Event::CloseSettings),
+                scrollable(content).height(Length::Fill),
+            ]
+            .spacing(14);
+            return row![
+                sidebar,
+                container(content)
+                    .padding(40)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+            ]
+            .height(Length::Fill)
+            .into();
+        }
         if self.profile_open {
             let editor = text_editor(&self.profile)
                 .placeholder("Edit system prompt")
@@ -679,6 +778,11 @@ impl Desktop {
             .and_then(|thread| thread.model.as_deref())
             .unwrap_or("Default model");
         let model = row![
+            button(text("MCP").size(12))
+                .style(appearance::ghost)
+                .on_press_maybe(
+                    (enabled && self.session.current.is_some()).then_some(Event::OpenMcp)
+                ),
             button(text("Skills").size(12))
                 .style(appearance::ghost)
                 .on_press_maybe(

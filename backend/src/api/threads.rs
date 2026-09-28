@@ -97,6 +97,7 @@ pub async fn delete(
     let _guard = state.lock_thread(&id)?;
     threads::delete(&state.pool, &id).await?;
     state.skills.forget(&id).await;
+    state.mcp.forget(&id).await;
     state.changed(&id);
     Ok(StatusCode::NO_CONTENT)
 }

@@ -46,3 +46,5 @@ See [model settings](configuration.md) and [client screenshots](clients.md).
 ![Solmu desktop Profile](screenshots/desktop-profile.png)
 
 ![Solmu web Profile](screenshots/web-profile.png)
+
+Workspace MCP tools load automatically alongside the built-in prompt. Editing Profile does not remove the agent's MCP instructions. See [MCP setup](mcp.md).

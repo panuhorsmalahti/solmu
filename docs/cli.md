@@ -53,3 +53,9 @@ Stop cancels pending work. See [tools](tools.md) for usage and limits.
 
 `/skills` lists the current workspace's automatically discovered
 [skills](skills.md). Esc returns to your conversation.
+
+## MCP
+
+`/mcp` lists each configured workspace server, connection status, and available tools. The list updates automatically. See [MCP setup](mcp.md).
+
+![CLI MCP status](screenshots/cli-mcp.png)

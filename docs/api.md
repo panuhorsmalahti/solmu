@@ -21,6 +21,7 @@ authentication is not implemented.
 | GET | `/api/v1/models` | Provider, effective `default_model`, and named `models` (`id`, `name`). |
 | GET | `/api/v1/tools` | Available tool definitions and their input schemas in `items`. |
 | GET | `/api/v1/threads/{id}/skills` | Workspace skill catalog: `directory`, `items`, and validation `issues`. See [skills](skills.md). |
+| GET | `/api/v1/threads/{id}/mcp` | Workspace MCP servers, protocol versions, connection status, tools, and issues. See [MCP](mcp.md). |
 | GET | `/api/v1/threads/{id}/tools` | Saved tool activity in execution order; supports pagination. |
 
 List endpoints accept `limit` (1–100, default 50) and `offset` (default 0).
@@ -65,6 +66,9 @@ future model requests and deleted with their thread. See [tools](tools.md).
 
 `{ "type": "skills_changed", "thread_id": "..." }` means fetch that thread's
 workspace skill catalog again. Catalogs update when skill files change.
+
+`{ "type": "mcp_changed", "thread_id": "..." }` means fetch that thread's
+[MCP server status](mcp.md) again. Tool lists and connections update automatically.
 
 Connect to `ws://127.0.0.1:3000/api/v1/events` (use `wss` behind HTTPS).
 The server sends `{ "type": "ready" }`, then

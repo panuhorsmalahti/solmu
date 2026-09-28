@@ -11,6 +11,15 @@ const buildSite = () => execute(process.execPath, [join(repository, 'website/bui
 
 const home = 'http://127.0.0.1:4174/solmu/'
 
+test('MCP guide is published from the root docs and shows live status in every client', async ({ page }) => {
+  await page.goto(`${home}docs/mcp/`)
+  await expect(page.getByRole('heading', { name: 'MCP tools' })).toBeVisible()
+  await expect(page.locator('article')).toContainText('.mcp.json')
+  await expect(page.locator('article')).toContainText('Streamable HTTP')
+  await expect(page.locator('article')).toContainText('/mcp')
+  await expect(page.locator('article img[alt="Desktop MCP status"]')).toBeVisible()
+})
+
 test('Boxer guide uses default backend settings and describes explicit Linux network routes', async ({ page }) => {
   await page.goto(`${home}docs/boxer/`)
   const example = page.locator('article pre').filter({ hasText: 'boxer --profile solmu --cwd /path/to/project -- solmu-backend' })
@@ -45,7 +54,7 @@ test('Docs is linked from the website and every Markdown guide is published', as
   expect(source).toContain('# Terminal client')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Terminal client')
   await expect(page.locator('article')).toContainText('solmu --thread')
-  const image = page.locator('article img')
+  const image = page.locator('article img[alt="Solmu client screenshot"]')
   await expect(image).toHaveAttribute('src', '../../screenshots/cli.png')
   await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)
   await expect(page.getByRole('link', { name: 'View this page on GitHub' })).toHaveAttribute('href', 'https://github.com/panuhorsmalahti/solmu/blob/main/docs/cli.md')
@@ -102,7 +111,7 @@ test('documentation works on mobile and without JavaScript, with keyboard naviga
     await expect(plain.getByRole('heading', { level: 1 })).toBeVisible()
     await plain.getByRole('navigation', { name: 'Documentation guides' }).getByRole('link', { name: 'Web client', exact: true }).click()
     await expect(plain).toHaveURL(`${home}docs/web/`)
-    await expect(plain.locator('article img')).toBeVisible()
+    await expect(plain.locator('article img[alt="Solmu client screenshot"]')).toBeVisible()
   } finally { await noScript.close() }
 })
 

@@ -5,10 +5,13 @@ use ratatui::{
     style::{Color, Stylize},
     widgets::{Block, Paragraph, Wrap},
 };
-use solmu_client::{Api, ModelCatalog, Profile, SkillCatalog};
+use solmu_client::{Api, McpCatalog, ModelCatalog, Profile, SkillCatalog};
 use tokio::sync::mpsc;
 
 pub enum Page {
+    Mcp {
+        scroll: u16,
+    },
     Skills {
         scroll: u16,
     },
@@ -199,7 +202,7 @@ impl Page {
             return Action::Close;
         }
         match self {
-            Self::Skills { scroll } => match key.code {
+            Self::Skills { scroll } | Self::Mcp { scroll } => match key.code {
                 KeyCode::Up => *scroll = scroll.saturating_sub(1),
                 KeyCode::Down => *scroll = scroll.saturating_add(1),
                 KeyCode::PageUp => *scroll = scroll.saturating_sub(8),
@@ -331,7 +334,7 @@ impl Page {
         }
         Action::None
     }
-    pub fn draw(&self, frame: &mut Frame<'_>, skills: &SkillCatalog) {
+    pub fn draw(&self, frame: &mut Frame<'_>, skills: &SkillCatalog, mcp: &McpCatalog) {
         let [header, body, notice, footer] = Layout::vertical([
             Constraint::Length(4),
             Constraint::Min(3),
@@ -340,6 +343,26 @@ impl Page {
         ])
         .areas(frame.area());
         match self {
+            Self::Mcp { scroll } => {
+                frame.render_widget(
+                    Paragraph::new(" SOLMU / MCP\n\nWorkspace tools · connected automatically")
+                        .green(),
+                    header,
+                );
+                frame.render_widget(
+                    Paragraph::new(mcp.text())
+                        .wrap(Wrap { trim: false })
+                        .scroll((*scroll, 0)),
+                    body,
+                );
+                frame.render_widget(
+                    Paragraph::new(mcp.workspace.as_str())
+                        .wrap(Wrap { trim: false })
+                        .dark_gray(),
+                    notice,
+                );
+                frame.render_widget(Paragraph::new("Esc back").dark_gray(), footer);
+            }
             Self::Skills { scroll } => {
                 frame.render_widget(
                     Paragraph::new(

@@ -50,6 +50,72 @@ pub struct SkillCatalog {
     pub items: Vec<Skill>,
     pub issues: Vec<SkillIssue>,
 }
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct McpCatalog {
+    pub workspace: String,
+    pub files: Vec<String>,
+    pub servers: Vec<McpServer>,
+    pub issues: Vec<SkillIssue>,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct McpServer {
+    pub name: String,
+    pub source: String,
+    pub transport: String,
+    pub status: String,
+    pub protocol_version: Option<String>,
+    pub tools: Vec<McpTool>,
+    pub error: Option<String>,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct McpTool {
+    pub name: String,
+    pub agent_name: String,
+    pub description: String,
+}
+impl McpCatalog {
+    pub fn text(&self) -> String {
+        let mut lines = vec![
+            format!("{} MCP servers configured", self.servers.len()),
+            String::new(),
+        ];
+        if self.servers.is_empty() {
+            lines.push("No MCP servers configured in this workspace.".into());
+        }
+        for server in &self.servers {
+            lines.push(format!(
+                "{} · {} · {}",
+                server.name, server.status, server.transport
+            ));
+            lines.push(format!(
+                "{} · {} tools · protocol {}",
+                server.source,
+                server.tools.len(),
+                server
+                    .protocol_version
+                    .as_deref()
+                    .unwrap_or("not connected")
+            ));
+            if let Some(error) = &server.error {
+                lines.push(error.clone());
+            }
+            for tool in &server.tools {
+                lines.push(format!(
+                    "  {} — {}\n  {}",
+                    tool.name, tool.description, tool.agent_name
+                ));
+            }
+            lines.push(String::new());
+        }
+        for issue in &self.issues {
+            lines.push(format!("Not loaded: {}\n{}", issue.path, issue.message));
+        }
+        lines.push(
+            "Configure servers in .mcp.json or mcp.json. Changes apply automatically.".into(),
+        );
+        lines.join("\n")
+    }
+}
 impl SkillCatalog {
     pub fn text(&self) -> String {
         let mut lines = vec![
@@ -138,7 +204,7 @@ impl Api {
                         if message.is_close() { break; }
                         if let Ok(text) = message.to_text() && let Ok(event) = serde_json::from_str::<Value>(text) {
                             match event["type"].as_str() {
-                                Some("conversation_changed" | "skills_changed") => {
+                                Some("conversation_changed" | "skills_changed" | "mcp_changed") => {
                                     yield Connection::Changed;
                                     if event["thread_id"].is_null() { yield Connection::ProfileChanged; }
                                 },
@@ -192,6 +258,10 @@ impl Api {
     }
     pub async fn skills(&self, thread: &str) -> Result<SkillCatalog, String> {
         self.json(Method::GET, &format!("/threads/{thread}/skills"), None)
+            .await
+    }
+    pub async fn mcp(&self, thread: &str) -> Result<McpCatalog, String> {
+        self.json(Method::GET, &format!("/threads/{thread}/mcp"), None)
             .await
     }
     pub async fn stop(&self, id: &str) -> Result<(), String> {
@@ -362,9 +432,16 @@ impl Api {
                             Err(error) => SkillCatalog { directory: String::new(), items: Vec::new(), issues: vec![SkillIssue { path: ".agents/skills/".into(), message: error }] },
                         }
                     } else { SkillCatalog::default() };
+                    let mcp = if let Some(thread) = &thread {
+                        match api.mcp(&thread.id).await {
+                            Ok(mcp) => mcp,
+                            Err(error) => McpCatalog { issues: vec![SkillIssue { path: "MCP".into(), message: error }], ..McpCatalog::default() },
+                        }
+                    } else { McpCatalog::default() };
                     yield Update::Opened(thread, messages);
                     yield Update::Tools(tools);
                     yield Update::Skills(skills);
+                    yield Update::Mcp(mcp);
                     match api.list("/threads").await { Ok(threads) => yield Update::Threads(threads), Err(error) => { yield Update::Failed(error); return; } }
                 },
             }
@@ -405,6 +482,7 @@ pub enum Update {
     Tool(ToolRun),
     Tools(Vec<ToolRun>),
     Skills(SkillCatalog),
+    Mcp(McpCatalog),
 }
 
 pub struct Session {
@@ -414,6 +492,7 @@ pub struct Session {
     pub messages: Vec<Message>,
     pub tools: Vec<ToolRun>,
     pub skills: SkillCatalog,
+    pub mcp: McpCatalog,
     pub partial: String,
     pub error: Option<String>,
     pub busy: bool,
@@ -428,6 +507,7 @@ impl Session {
             messages: Vec::new(),
             tools: Vec::new(),
             skills: SkillCatalog::default(),
+            mcp: McpCatalog::default(),
             partial: String::new(),
             error: None,
             busy: false,
@@ -464,6 +544,7 @@ impl Session {
             Update::Reset => self.partial.clear(),
             Update::Tools(tools) => self.tools = tools,
             Update::Skills(skills) => self.skills = skills,
+            Update::Mcp(mcp) => self.mcp = mcp,
             Update::Tool(run) => {
                 if let Some(existing) = self.tools.iter_mut().find(|tool| tool.id == run.id) {
                     *existing = run;

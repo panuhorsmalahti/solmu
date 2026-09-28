@@ -76,6 +76,7 @@ jobs:
           path: |
             target/debug/solmu-backend
             target/debug/fixture
+            target/debug/mcp-fixture
           retention-days: 2
 
   browser:
@@ -95,7 +96,7 @@ jobs:
         with:
           name: browser-test-backend
           path: target/debug
-      - run: chmod +x target/debug/solmu-backend target/debug/fixture
+      - run: chmod +x target/debug/solmu-backend target/debug/fixture target/debug/mcp-fixture
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - if: failure()

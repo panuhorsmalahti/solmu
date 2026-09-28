@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+pub mod mcp;
 mod screenshot;
 pub mod skills;
 mod tools;

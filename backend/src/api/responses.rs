@@ -87,8 +87,16 @@ pub async fn create(
         .load(&thread_id, workspace.clone().into())
         .await;
     history.insert(0, ChatMessage::user(skills.context()));
+    let mcp = tokio::select! {
+        snapshot = state.mcp.load(&thread_id, workspace.clone().into()) => snapshot,
+        _ = token.cancelled() => return Err(stopped()),
+    };
+    let mut registry = state.tools.clone();
+    for tool in mcp.tools {
+        registry.register(tool);
+    }
     let mut reply = tokio::select! {
-        result=state.llm.stream(&history,&profile.system_prompt,model.as_deref(),state.tools.definitions())=>result?,
+        result=state.llm.stream(&history,&profile.system_prompt,model.as_deref(),registry.definitions())=>result?,
         _=token.cancelled()=>return Err(stopped()),
     };
     // Fail before sending HTTP 200 when the provider cannot begin a response.
@@ -163,7 +171,7 @@ pub async fn create(
                     };
                     state.changed(&thread_id);
                     yield Ok(event("tool_start",started));
-                    state.tools.execute(&run.name,run.arguments.clone(),context.clone()).await
+                    registry.execute(&run.name,run.arguments.clone(),context.clone()).await
                 };
                 let status=if result.output["error"].as_str().is_some_and(|error|error.starts_with("Tool cancelled")) {"cancelled"} else if result.success {"completed"} else {"failed"};
                 match tools::finish(&state.pool,&run.id,status,&result).await {
@@ -176,7 +184,7 @@ pub async fn create(
             if round==15 {yield Ok(failed("The response reached the 16-round tool limit"));return;}
             reply=tokio::select! {
                 _=token.cancelled()=>{yield Ok(event("stopped",json!({"message_id":input.message_id})));return;},
-                result=state.llm.stream(&history,&profile.system_prompt,model.as_deref(),state.tools.definitions())=>match result {
+                result=state.llm.stream(&history,&profile.system_prompt,model.as_deref(),registry.definitions())=>match result {
                     Ok(reply)=>reply,
                     Err(_)=>{yield Ok(failed("The provider failed after the tool results"));return;},
                 },
