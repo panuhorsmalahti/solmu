@@ -73,6 +73,71 @@ pub struct McpTool {
     pub agent_name: String,
     pub description: String,
 }
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PluginCatalog {
+    pub directory: String,
+    pub items: Vec<Plugin>,
+    pub issues: Vec<SkillIssue>,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct Plugin {
+    pub name: String,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub path: String,
+    pub skills: Vec<String>,
+    pub mcp_servers: Vec<String>,
+    pub issues: Vec<SkillIssue>,
+}
+impl PluginCatalog {
+    pub fn text(&self) -> String {
+        let mut lines = vec![
+            format!("{} plugins installed", self.items.len()),
+            String::new(),
+        ];
+        if self.items.is_empty() {
+            lines.push("No plugins installed in this workspace.".into());
+        }
+        for plugin in &self.items {
+            lines.push(format!(
+                "{}{}",
+                plugin.name,
+                plugin
+                    .version
+                    .as_ref()
+                    .map_or(String::new(), |v| format!(" · {v}"))
+            ));
+            if let Some(description) = &plugin.description {
+                lines.push(description.clone());
+            }
+            lines.push(format!(
+                "{} · {} {} · {} MCP {}",
+                plugin.path,
+                plugin.skills.len(),
+                if plugin.skills.len() == 1 {
+                    "skill"
+                } else {
+                    "skills"
+                },
+                plugin.mcp_servers.len(),
+                if plugin.mcp_servers.len() == 1 {
+                    "server"
+                } else {
+                    "servers"
+                }
+            ));
+            for issue in &plugin.issues {
+                lines.push(format!("Not loaded: {}\n{}", issue.path, issue.message));
+            }
+            lines.push(String::new());
+        }
+        for issue in &self.issues {
+            lines.push(format!("Not loaded: {}\n{}", issue.path, issue.message));
+        }
+        lines.push("Install plugin folders in .agents/plugins/; each needs plugin.json.".into());
+        lines.join("\n")
+    }
+}
 impl McpCatalog {
     pub fn text(&self) -> String {
         let mut lines = vec![
@@ -204,7 +269,7 @@ impl Api {
                         if message.is_close() { break; }
                         if let Ok(text) = message.to_text() && let Ok(event) = serde_json::from_str::<Value>(text) {
                             match event["type"].as_str() {
-                                Some("conversation_changed" | "skills_changed" | "mcp_changed") => {
+                                Some("conversation_changed" | "skills_changed" | "mcp_changed" | "plugins_changed") => {
                                     yield Connection::Changed;
                                     if event["thread_id"].is_null() { yield Connection::ProfileChanged; }
                                 },
@@ -262,6 +327,10 @@ impl Api {
     }
     pub async fn mcp(&self, thread: &str) -> Result<McpCatalog, String> {
         self.json(Method::GET, &format!("/threads/{thread}/mcp"), None)
+            .await
+    }
+    pub async fn plugins(&self, thread: &str) -> Result<PluginCatalog, String> {
+        self.json(Method::GET, &format!("/threads/{thread}/plugins"), None)
             .await
     }
     pub async fn stop(&self, id: &str) -> Result<(), String> {
@@ -438,10 +507,14 @@ impl Api {
                             Err(error) => McpCatalog { issues: vec![SkillIssue { path: "MCP".into(), message: error }], ..McpCatalog::default() },
                         }
                     } else { McpCatalog::default() };
+                    let plugins = if let Some(thread) = &thread {
+                        api.plugins(&thread.id).await.unwrap_or_default()
+                    } else { PluginCatalog::default() };
                     yield Update::Opened(thread, messages);
                     yield Update::Tools(tools);
                     yield Update::Skills(skills);
                     yield Update::Mcp(mcp);
+                    yield Update::Plugins(plugins);
                     match api.list("/threads").await { Ok(threads) => yield Update::Threads(threads), Err(error) => { yield Update::Failed(error); return; } }
                 },
             }
@@ -483,6 +556,7 @@ pub enum Update {
     Tools(Vec<ToolRun>),
     Skills(SkillCatalog),
     Mcp(McpCatalog),
+    Plugins(PluginCatalog),
 }
 
 pub struct Session {
@@ -493,6 +567,7 @@ pub struct Session {
     pub tools: Vec<ToolRun>,
     pub skills: SkillCatalog,
     pub mcp: McpCatalog,
+    pub plugins: PluginCatalog,
     pub partial: String,
     pub error: Option<String>,
     pub busy: bool,
@@ -508,6 +583,7 @@ impl Session {
             tools: Vec::new(),
             skills: SkillCatalog::default(),
             mcp: McpCatalog::default(),
+            plugins: PluginCatalog::default(),
             partial: String::new(),
             error: None,
             busy: false,
@@ -545,6 +621,7 @@ impl Session {
             Update::Tools(tools) => self.tools = tools,
             Update::Skills(skills) => self.skills = skills,
             Update::Mcp(mcp) => self.mcp = mcp,
+            Update::Plugins(plugins) => self.plugins = plugins,
             Update::Tool(run) => {
                 if let Some(existing) = self.tools.iter_mut().find(|tool| tool.id == run.id) {
                     *existing = run;

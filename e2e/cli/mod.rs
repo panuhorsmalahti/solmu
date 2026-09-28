@@ -176,6 +176,7 @@ mod boxer;
 mod input;
 mod mcp;
 mod models;
+mod plugins;
 mod profile;
 mod skills;
 mod startup;

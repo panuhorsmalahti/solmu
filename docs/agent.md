@@ -28,3 +28,7 @@ results remain available; Stop cancels pending tool calls.
 ## MCP tools
 
 Solmu connects to trusted workspace MCP servers automatically. Connected tools become available to the agent on each reply and their results appear in the conversation. Inspect status with `/mcp` or the **MCP** panel. See [MCP setup](mcp.md).
+
+Solmu also discovers [Agent Plugins](plugins.md) in `.agents/plugins/`. A plugin can
+provide skills and MCP tools. Inspect installed packages with `/plugins` or the
+**Plugins** panel.

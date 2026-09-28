@@ -69,3 +69,10 @@ Stop cancels pending work. See [tools](../../docs/tools.md) for usage and limits
 Choose **MCP** in a conversation to see connected servers and their tools. [Connect a server](../../docs/mcp.md).
 
 ![Desktop MCP status](../../docs/screenshots/desktop-mcp.png)
+
+## Plugins
+
+Choose **Plugins** to inspect installed [Agent Plugins](../../docs/plugins.md)
+and loading errors. The list updates automatically.
+
+![Desktop plugins](../../docs/screenshots/desktop-plugins.png)

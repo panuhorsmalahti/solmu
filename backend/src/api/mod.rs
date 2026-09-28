@@ -3,6 +3,7 @@ mod events;
 mod mcp;
 mod messages;
 mod models;
+mod plugins;
 mod profile;
 mod responses;
 mod skills;
@@ -48,6 +49,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/tools", get(tools::definitions))
         .route("/api/v1/threads/{thread_id}/skills", get(skills::list))
         .route("/api/v1/threads/{thread_id}/mcp", get(mcp::list))
+        .route("/api/v1/threads/{thread_id}/plugins", get(plugins::list))
         .route("/api/v1/threads/{thread_id}/tools", get(tools::list))
         .route("/api/v1/profile", get(profile::get).put(profile::save))
         .route("/api/v1/models", get(models::list))

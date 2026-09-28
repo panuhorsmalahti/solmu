@@ -28,6 +28,7 @@ See the [client overview](clients.md) for screenshots and shared features.
 - [Tools](tools.md): read, search, edit, and write files or run commands.
 - [Skills](skills.md): install reusable project instructions in `.agents/skills/`.
 - [MCP](mcp.md): connect workspace tools and inspect server status in every client.
+- [Plugins](plugins.md): install portable packages with skills and MCP tools.
 - [Boxer](boxer.md): launch a program with optional OS sandbox controls.
 
 ## Make room with Muxer

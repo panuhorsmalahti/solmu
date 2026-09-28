@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import ProfilePage from './Profile'
 import Skills from './Skills'
 import Mcp from './Mcp'
+import Plugins from './Plugins'
 import { ArrowUp, MessageSquare, Plus, Square, Trash2, Check, Sprout } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +13,7 @@ import { list, reply, request, type Thread, type Message, type ModelCatalog, typ
 export default function App() {
   const [skillsOpen, setSkillsOpen] = useState(false), [skillsRevision, setSkillsRevision] = useState(0)
   const [mcpOpen, setMcpOpen] = useState(false), [mcpRevision, setMcpRevision] = useState(0)
+  const [pluginsOpen, setPluginsOpen] = useState(false), [pluginsRevision, setPluginsRevision] = useState(0)
   const { threadId } = useParams()
   const navigate = useNavigate()
   const isProfile = useLocation().pathname === '/profile'
@@ -91,8 +93,8 @@ export default function App() {
     let socket: WebSocket | undefined, timer: ReturnType<typeof setTimeout> | undefined, disposed = false
     function connect() {
       socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/v1/events`)
-      socket.onopen = () => { setConnected(true); setProfileRevision(value => value + 1); setSkillsRevision(value => value + 1); setMcpRevision(value => value + 1); liveChange() }
-      socket.onmessage = event => { const type = JSON.parse(event.data).type; if (type === 'conversation_changed') liveChange(); if (type === 'profile_changed') setProfileRevision(value => value + 1); if (type === 'skills_changed') setSkillsRevision(value => value + 1); if (type === 'mcp_changed') setMcpRevision(value => value + 1) }
+      socket.onopen = () => { setConnected(true); setProfileRevision(value => value + 1); setSkillsRevision(value => value + 1); setMcpRevision(value => value + 1); setPluginsRevision(value => value + 1); liveChange() }
+      socket.onmessage = event => { const type = JSON.parse(event.data).type; if (type === 'conversation_changed') liveChange(); if (type === 'profile_changed') setProfileRevision(value => value + 1); if (type === 'skills_changed') setSkillsRevision(value => value + 1); if (type === 'mcp_changed') setMcpRevision(value => value + 1); if (type === 'plugins_changed') setPluginsRevision(value => value + 1) }
       socket.onclose = () => { if (!disposed) { setConnected(false); timer = setTimeout(connect, 2000) } }
       socket.onerror = () => socket?.close()
     }
@@ -174,15 +176,16 @@ export default function App() {
       <header className="topbar">
         <Input className="title-input" aria-label="Conversation title" placeholder="Select a conversation" value={title} disabled={busy || !current} onChange={event => setTitle(event.target.value)} />
         <div className="topbar-actions">
-          <Button variant="ghost" disabled={!current} onClick={() => { setMcpOpen(value => !value); setSkillsOpen(false) }}>MCP</Button>
-          <Button variant="ghost" disabled={!current} onClick={() => { setSkillsOpen(value => !value); setMcpOpen(false) }}>Skills</Button>
+          <Button variant="ghost" disabled={!current} onClick={() => { setPluginsOpen(value => !value); setMcpOpen(false); setSkillsOpen(false) }}>Plugins</Button>
+          <Button variant="ghost" disabled={!current} onClick={() => { setMcpOpen(value => !value); setSkillsOpen(false); setPluginsOpen(false) }}>MCP</Button>
+          <Button variant="ghost" disabled={!current} onClick={() => { setSkillsOpen(value => !value); setMcpOpen(false); setPluginsOpen(false) }}>Skills</Button>
           <Button variant="ghost" aria-label="Select model" disabled={busy || !current} onClick={() => { setCustomModel(current?.model ?? ''); setModelPicker(true) }}>{catalog?.models.find(model => model.id === current?.model)?.name ?? current?.model ?? 'Default model'}</Button>
           <Button size="icon" variant="ghost" aria-label="Rename thread" title="Save title" disabled={busy || !current || !title.trim()} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { title }); setCurrent(thread); setTitle(thread.title); setThreads(await list('/threads')) })}><Check size={16} /></Button>
           <Button size="icon" variant="ghost" aria-label="Delete thread" title="Delete thread" disabled={busy || !current} onClick={() => void act(async () => { await request(`/threads/${current!.id}`, 'DELETE'); setCurrent(null); setTitle(''); setMessages([]); setDraft(''); setThreads(await list('/threads')); navigate('/') })}><Trash2 size={15} /></Button>
         </div>
       </header>
       {current?.workspace && <p className="workspace-path" aria-label="Workspace" title={current.workspace}>{current.workspace}</p>}
-      {mcpOpen && current ? <Mcp key={current.id} threadId={current.id} revision={mcpRevision} onClose={() => setMcpOpen(false)}/> : skillsOpen && current ? <Skills key={current.id} threadId={current.id} revision={skillsRevision} onClose={() => setSkillsOpen(false)}/> : <>
+      {pluginsOpen && current ? <Plugins key={current.id} threadId={current.id} revision={pluginsRevision} onClose={() => setPluginsOpen(false)}/> : mcpOpen && current ? <Mcp key={current.id} threadId={current.id} revision={mcpRevision} onClose={() => setMcpOpen(false)}/> : skillsOpen && current ? <Skills key={current.id} threadId={current.id} revision={skillsRevision} onClose={() => setSkillsOpen(false)}/> : <>
       {modelPicker && <section className="model-picker" role="dialog" aria-label="Select model"><h2>Model for this thread</h2><p>{catalog?.provider ?? 'Configure a provider first'} · Changes apply to the next reply.</p><div className="model-options">{[{ id: '', name: `Default${catalog?.default_model ? ` · ${catalog.default_model}` : ''}` }, ...(catalog?.models ?? [])].map(model => <Button key={model.id} variant={model.id === (current?.model ?? '') ? 'default' : 'outline'} disabled={busy} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: model.id || null }); setCurrent(thread); setModelPicker(false); await refresh() })}>{model.name}</Button>)}</div><div className="model-custom"><Input aria-label="Custom model ID" placeholder="Custom model ID" value={customModel} disabled={busy} onChange={event => setCustomModel(event.target.value)}/><Button disabled={busy || !customModel.trim()} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: customModel.trim() }); setCurrent(thread); setModelPicker(false); await refresh() })}>Apply model</Button><Button variant="ghost" onClick={() => setModelPicker(false)}>Cancel</Button></div></section>}
       <section className="history" aria-label="Conversation" aria-busy={busy}>
         {messages.length === 0 && <div className="empty"><span className="eyebrow">Room for possibility</span><h1>A little space for your<br/>next big idea.</h1><p>Ask a question. Untangle a thought. Follow an idea somewhere new — one conversation at a time.</p><div className="suggestions">{['Help me plan a project', 'Explore an idea', 'Explain something new'].map(text => <Button key={text} variant="outline" disabled={!current || busy} onClick={() => setDraft(text)}>{text}</Button>)}</div></div>}

@@ -1,4 +1,4 @@
-mod config;
+pub(crate) mod config;
 mod connection;
 
 use crate::{
@@ -50,6 +50,7 @@ pub struct Catalog {
 pub struct Snapshot {
     pub catalog: Catalog,
     pub tools: Vec<Arc<dyn AgentTool>>,
+    pub plugins: crate::plugins::Catalog,
 }
 struct Connected {
     config: config::Config,
@@ -317,9 +318,18 @@ impl Manager {
 }
 async fn refresh(workspace: PathBuf, watched: &mut Watched, changes: &broadcast::Sender<Change>) {
     let path = workspace.clone();
-    let found = tokio::task::spawn_blocking(move || config::discover(&path))
-        .await
-        .expect("MCP discovery task");
+    let (found, plugins) = tokio::task::spawn_blocking(move || {
+        let mut found = config::discover(&path);
+        let plugins = crate::plugins::discover(&path);
+        for (name, config, source) in &plugins.servers {
+            found
+                .servers
+                .insert(name.clone(), (config.clone(), source.clone()));
+        }
+        (found, plugins)
+    })
+    .await
+    .expect("MCP discovery task");
     watched.servers.retain(|name, entry| {
         found
             .servers
@@ -375,7 +385,13 @@ async fn refresh(workspace: PathBuf, watched: &mut Watched, changes: &broadcast:
             .values()
             .flat_map(|entry| entry.tools.clone())
             .collect(),
+        plugins: plugins.catalog,
     };
+    if snapshot.plugins != watched.snapshot.plugins {
+        for thread in &watched.threads {
+            let _ = changes.send(Change::plugins(thread));
+        }
+    }
     if snapshot.catalog != watched.snapshot.catalog {
         for thread in &watched.threads {
             let _ = changes.send(Change::mcp(thread));

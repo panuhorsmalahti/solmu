@@ -55,6 +55,7 @@ Typing `/` shows the command list. Use Up/Down to choose and Enter to select.
 | `/help` | Show commands. |
 | `/stop` | Cancel the current response. Esc also stops it. |
 | `/exit` | Exit. Ctrl+C also exits. |
+| `/plugins` | List installed Agent Plugins and loading errors. |
 
 Wait for a reply to finish before sending again or changing conversations.
 `/exit` still works during streaming. Errors are shown above the input; user
@@ -87,5 +88,12 @@ Stop cancels pending work. See [tools](../../docs/tools.md) for usage and limits
 ## MCP tools
 
 Run `/mcp` to see connected MCP servers, their tools, and any setup errors. [Connect a server](../../docs/mcp.md).
+
+## Plugins
+
+Run `/plugins` to see installed [Agent Plugins](../../docs/plugins.md). They can
+provide both skills and MCP tools.
+
+![CLI plugins](../../docs/screenshots/cli-plugins.png)
 
 ![CLI MCP status](../../docs/screenshots/cli-mcp.png)

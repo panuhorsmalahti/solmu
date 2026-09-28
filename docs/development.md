@@ -63,6 +63,10 @@ render them with `node scripts/capture-cli.mjs cli-skills` and
 MCP tests capture `artifacts/cli-mcp.html` and `artifacts/muxer-mcp.html`;
 render them with `node scripts/capture-cli.mjs cli-mcp` and
 `node scripts/capture-cli.mjs muxer-mcp`.
+Plugin tests capture `artifacts/cli-plugins.html` and
+`artifacts/muxer-plugins.html`; render them with
+`node scripts/capture-cli.mjs cli-plugins` and
+`node scripts/capture-cli.mjs muxer-plugins`.
 Installer tests under `e2e/install` use local release archives and temporary
 directories; they do not change your PATH or installed applications. Background
 service tests replace OS service commands with recorders, so no real service is

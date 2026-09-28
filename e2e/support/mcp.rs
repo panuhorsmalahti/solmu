@@ -52,7 +52,7 @@ pub fn respond(request: &Value, workspace: &Path, legacy: bool) -> Option<Value>
             if request["params"]["name"] == "fail" {
                 json!({"content":[{"type":"text","text":"Fixture tool failure"}],"isError":true})
             } else {
-                json!({"content":[{"type":"text","text":"Found MCP project notes"}],"structuredContent":{"query":request["params"]["arguments"]["query"],"env":std::env::var("SOLMU_MCP_TEST").unwrap_or_default()},"isError":false,"_meta":{"private":"do not send to model"}})
+                json!({"content":[{"type":"text","text":"Found MCP project notes"}],"structuredContent":{"query":request["params"]["arguments"]["query"],"env":std::env::var("SOLMU_MCP_TEST").unwrap_or_default(),"pluginRoot":std::env::var("PLUGIN_ROOT").unwrap_or_default(),"pluginData":std::env::var("PLUGIN_DATA").unwrap_or_default(),"pluginExtra":std::env::var("PLUGIN_EXTRA").unwrap_or_default()},"isError":false,"_meta":{"private":"do not send to model"}})
             }
         }
         _ => {

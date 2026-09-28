@@ -117,6 +117,7 @@ impl<P: Program> Drop for Ui<P> {
 mod conversations;
 mod mcp;
 mod models;
+mod plugins;
 mod profile;
 mod skills;
 mod tools;

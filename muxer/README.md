@@ -101,3 +101,10 @@ Stop cancels pending work. See [tools](../docs/tools.md) for usage and limits.
 Use `/mcp` in a Solmu pane to see its servers and tools. [Connect a server](../docs/mcp.md).
 
 ![MCP in Muxer](../docs/screenshots/muxer-mcp.png)
+
+## Plugins
+
+Use `/plugins` in a Solmu pane to inspect installed
+[Agent Plugins](../docs/plugins.md).
+
+![Plugins in Muxer](../docs/screenshots/muxer-plugins.png)

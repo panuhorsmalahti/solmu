@@ -76,7 +76,7 @@ fn optional(value: &Value, field: &str) -> Result<Option<String>, String> {
         Ok(None)
     }
 }
-fn parse(source: &str, directory: &str, path: String) -> Result<Skill, String> {
+pub(crate) fn parse(source: &str, directory: &str, path: String) -> Result<Skill, String> {
     let mut lines = source.trim_start_matches('\u{feff}').split_inclusive('\n');
     if lines.next().map(str::trim_end) != Some("---") {
         return Err("SKILL.md must start with YAML frontmatter (---)".into());
@@ -249,9 +249,24 @@ fn discover(workspace: &Path) -> Snapshot {
 }
 
 async fn scan(workspace: PathBuf) -> Snapshot {
-    tokio::task::spawn_blocking(move || discover(&workspace))
-        .await
-        .expect("skills discovery task")
+    tokio::task::spawn_blocking(move || {
+        let mut snapshot = discover(&workspace);
+        let plugins = crate::plugins::discover(&workspace);
+        for (skill, root) in plugins.skills {
+            if snapshot.catalog.items.len() >= MAX_SKILLS {
+                break;
+            }
+            snapshot.catalog.items.push(skill);
+            snapshot.roots.push(root);
+        }
+        let mut hash = DefaultHasher::new();
+        snapshot.fingerprint.hash(&mut hash);
+        plugins.fingerprint.hash(&mut hash);
+        snapshot.fingerprint = hash.finish();
+        snapshot
+    })
+    .await
+    .expect("skills discovery task")
 }
 struct Watched {
     threads: BTreeSet<String>,

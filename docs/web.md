@@ -72,3 +72,10 @@ Choose **Skills** in the conversation controls to see the workspace's installed
 Open **MCP** in a conversation to see live server status and tools while keeping your unsent draft. See [MCP setup](mcp.md).
 
 ![Web MCP status](screenshots/web-mcp.png)
+
+## Plugins
+
+Open **Plugins** to inspect installed [Agent Plugins](plugins.md) and loading
+errors. Your unsent draft is preserved and the list updates automatically.
+
+![Web plugins](screenshots/web-plugins.png)

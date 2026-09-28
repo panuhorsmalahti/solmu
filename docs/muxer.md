@@ -237,3 +237,7 @@ restart after the server restarts.
 Use `/mcp` inside a Solmu pane to inspect live workspace server status and available tools. See [MCP setup](mcp.md).
 
 ![MCP in a Muxer pane](screenshots/muxer-mcp.png)
+
+Use `/plugins` in a Solmu pane to see installed [Agent Plugins](plugins.md).
+
+![Plugins in a Muxer pane](screenshots/muxer-plugins.png)

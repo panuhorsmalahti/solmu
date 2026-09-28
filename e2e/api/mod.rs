@@ -41,6 +41,8 @@ mod events;
 mod configuration;
 mod mcp;
 mod mcp_transports;
+mod plugin_validation;
+mod plugins;
 mod skills;
 mod tools;
 mod web;

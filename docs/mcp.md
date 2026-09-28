@@ -93,6 +93,8 @@ server/tool identifier, so servers can expose identically named tools without
 replacing each other or Solmu's built-in tools.
 
 The model receives connected tool definitions automatically with each reply.
+MCP servers bundled in [Agent Plugins](plugins.md) load alongside workspace MCP
+servers. Plugin packages use their own `mcp.json` format and location.
 Calls appear in the existing tool activity view and are saved with their
 arguments, results, and status. Text, structured data, and other MCP content
 blocks are preserved in the result JSON; private result `_meta` is omitted.

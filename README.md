@@ -15,6 +15,7 @@ Licensed under [MIT](LICENSE).
 - Customize the shared system prompt and default model in Profile.
 - Use project skills discovered automatically from `.agents/skills/`.
 - Connect workspace MCP servers to use additional tools and inspect their live status in every client. See [MCP setup](docs/mcp.md).
+- Install Agent Plugins to bring skills and MCP tools into a workspace together. See [plugins](docs/plugins.md).
 - Choose a model per thread and work from your CLI's current folder.
 - Run locally, in Docker, or in a Linux sandbox workspace.
 - Group Solmu terminal tabs into project spaces with nested panes and mouse controls.

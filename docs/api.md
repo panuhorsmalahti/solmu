@@ -22,6 +22,7 @@ authentication is not implemented.
 | GET | `/api/v1/tools` | Available tool definitions and their input schemas in `items`. |
 | GET | `/api/v1/threads/{id}/skills` | Workspace skill catalog: `directory`, `items`, and validation `issues`. See [skills](skills.md). |
 | GET | `/api/v1/threads/{id}/mcp` | Workspace MCP servers, protocol versions, connection status, tools, and issues. See [MCP](mcp.md). |
+| GET | `/api/v1/threads/{id}/plugins` | Installed Agent Plugins, their components, and loading issues. See [plugins](plugins.md). |
 | GET | `/api/v1/threads/{id}/tools` | Saved tool activity in execution order; supports pagination. |
 
 List endpoints accept `limit` (1–100, default 50) and `offset` (default 0).
@@ -69,6 +70,9 @@ workspace skill catalog again. Catalogs update when skill files change.
 
 `{ "type": "mcp_changed", "thread_id": "..." }` means fetch that thread's
 [MCP server status](mcp.md) again. Tool lists and connections update automatically.
+
+`{ "type": "plugins_changed", "thread_id": "..." }` means fetch that thread's
+[plugin catalog](plugins.md) again.
 
 Connect to `ws://127.0.0.1:3000/api/v1/events` (use `wss` behind HTTPS).
 The server sends `{ "type": "ready" }`, then

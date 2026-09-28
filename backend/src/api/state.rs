@@ -17,6 +17,12 @@ pub struct Change {
     thread_id: Option<String>,
 }
 impl Change {
+    pub fn plugins(id: &str) -> Self {
+        Self {
+            kind: "plugins_changed",
+            thread_id: Some(id.to_owned()),
+        }
+    }
     pub fn mcp(id: &str) -> Self {
         Self {
             kind: "mcp_changed",

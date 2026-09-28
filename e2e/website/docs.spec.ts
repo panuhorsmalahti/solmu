@@ -20,6 +20,14 @@ test('MCP guide is published from the root docs and shows live status in every c
   await expect(page.locator('article img[alt="Desktop MCP status"]')).toBeVisible()
 })
 
+test('plugins guide is published from root docs', async ({ page }) => {
+  await page.goto(`${home}docs/plugins/`)
+  await expect(page.getByRole('heading', { name: 'Agent Plugins' })).toBeVisible()
+  await expect(page.locator('article')).toContainText('.agents/plugins/')
+  await expect(page.locator('article')).toContainText('/plugins')
+  await expect(page.locator('article img[alt="Desktop plugins"]')).toBeVisible()
+})
+
 test('Boxer guide uses default backend settings and describes explicit Linux network routes', async ({ page }) => {
   await page.goto(`${home}docs/boxer/`)
   const example = page.locator('article pre').filter({ hasText: 'boxer --profile solmu --cwd /path/to/project -- solmu-backend' })

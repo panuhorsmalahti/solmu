@@ -49,8 +49,11 @@ pub async fn connect(config: &Config, workspace: &Path) -> Result<Arc<Client>, S
         command
             .args(&config.args)
             .envs(&config.env)
-            .current_dir(workspace)
+            .current_dir(config.cwd.as_deref().unwrap_or(workspace))
             .kill_on_drop(true);
+        if let (Some(root), Some(data)) = (&config.plugin_root, &config.plugin_data) {
+            command.env("PLUGIN_ROOT", root).env("PLUGIN_DATA", data);
+        }
         #[cfg(windows)]
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
         let transport = TokioChildProcess::builder(command)

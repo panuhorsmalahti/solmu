@@ -8,6 +8,7 @@ use std::{
 };
 
 pub mod mcp;
+pub mod plugins;
 mod screenshot;
 pub mod skills;
 mod tools;

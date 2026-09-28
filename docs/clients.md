@@ -2,6 +2,8 @@
 
 Use `/skills` in the CLI or **Skills** in desktop and web to see the current
 workspace's installed skills. Lists update automatically. See [skills](skills.md).
+Use `/plugins` in CLI or Muxer, or **Plugins** in desktop and web, to see
+installed [Agent Plugins](plugins.md) and any loading errors.
 
 All clients connect to the same backend and share saved conversations.
 Open [Profile](profile.md) to edit the shared system prompt and optional default

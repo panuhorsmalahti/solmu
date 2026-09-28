@@ -8,7 +8,8 @@ The page shows your current editable system prompt. Edit it and save to change h
 Solmu responds. Your profile is saved on the backend and shared across all
 clients and threads. The initial prompt introduces Solmu as an autonomous
 agent. A separate internal prompt always supplies workspace tool instructions
-and explains installing and using skills in `.agents/skills/`; editing Profile
+and explains installing skills in `.agents/skills/`, [plugins](plugins.md) in
+`.agents/plugins/`, and using MCP tools; editing Profile
 does not remove it. Existing saved prompts and their version history are preserved.
 Changes apply to subsequent replies; a reply already running keeps its original
 settings. Saved messages remain unchanged.

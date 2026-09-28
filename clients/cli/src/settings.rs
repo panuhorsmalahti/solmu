@@ -5,11 +5,14 @@ use ratatui::{
     style::{Color, Stylize},
     widgets::{Block, Paragraph, Wrap},
 };
-use solmu_client::{Api, McpCatalog, ModelCatalog, Profile, SkillCatalog};
+use solmu_client::{Api, McpCatalog, ModelCatalog, PluginCatalog, Profile, SkillCatalog};
 use tokio::sync::mpsc;
 
 pub enum Page {
     Mcp {
+        scroll: u16,
+    },
+    Plugins {
         scroll: u16,
     },
     Skills {
@@ -202,13 +205,15 @@ impl Page {
             return Action::Close;
         }
         match self {
-            Self::Skills { scroll } | Self::Mcp { scroll } => match key.code {
-                KeyCode::Up => *scroll = scroll.saturating_sub(1),
-                KeyCode::Down => *scroll = scroll.saturating_add(1),
-                KeyCode::PageUp => *scroll = scroll.saturating_sub(8),
-                KeyCode::PageDown => *scroll = scroll.saturating_add(8),
-                _ => {}
-            },
+            Self::Skills { scroll } | Self::Mcp { scroll } | Self::Plugins { scroll } => {
+                match key.code {
+                    KeyCode::Up => *scroll = scroll.saturating_sub(1),
+                    KeyCode::Down => *scroll = scroll.saturating_add(1),
+                    KeyCode::PageUp => *scroll = scroll.saturating_sub(8),
+                    KeyCode::PageDown => *scroll = scroll.saturating_add(8),
+                    _ => {}
+                }
+            }
             Self::Profile {
                 draft,
                 cursor,
@@ -334,7 +339,13 @@ impl Page {
         }
         Action::None
     }
-    pub fn draw(&self, frame: &mut Frame<'_>, skills: &SkillCatalog, mcp: &McpCatalog) {
+    pub fn draw(
+        &self,
+        frame: &mut Frame<'_>,
+        skills: &SkillCatalog,
+        mcp: &McpCatalog,
+        plugins: &PluginCatalog,
+    ) {
         let [header, body, notice, footer] = Layout::vertical([
             Constraint::Length(4),
             Constraint::Min(3),
@@ -343,6 +354,26 @@ impl Page {
         ])
         .areas(frame.area());
         match self {
+            Self::Plugins { scroll } => {
+                frame.render_widget(
+                    Paragraph::new(
+                        " SOLMU / PLUGINS\n\nWorkspace plugins · discovered automatically",
+                    )
+                    .green(),
+                    header,
+                );
+                frame.render_widget(
+                    Paragraph::new(plugins.text())
+                        .wrap(Wrap { trim: false })
+                        .scroll((*scroll, 0)),
+                    body,
+                );
+                frame.render_widget(
+                    Paragraph::new(plugins.directory.as_str()).dark_gray(),
+                    notice,
+                );
+                frame.render_widget(Paragraph::new("Esc back").dark_gray(), footer);
+            }
             Self::Mcp { scroll } => {
                 frame.render_widget(
                     Paragraph::new(" SOLMU / MCP\n\nWorkspace tools · connected automatically")

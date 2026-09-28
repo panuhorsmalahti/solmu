@@ -27,6 +27,7 @@ pub struct Desktop {
     model_open: bool,
     skills_open: bool,
     mcp_open: bool,
+    plugins_open: bool,
     catalog: Option<ModelCatalog>,
     custom_model: String,
 }
@@ -51,6 +52,7 @@ pub enum Event {
     OpenModels,
     OpenSkills,
     OpenMcp,
+    OpenPlugins,
     ModelsLoaded(Result<ModelCatalog, String>),
     CustomModel(String),
     ProfileModel(String),
@@ -95,6 +97,7 @@ impl Desktop {
             model_open: false,
             skills_open: false,
             mcp_open: false,
+            plugins_open: false,
             catalog: None,
             custom_model: String::new(),
         };
@@ -130,10 +133,20 @@ impl Desktop {
         ) || matches!(&event, Event::Action(action) if !matches!(action, Action::Refresh))
         {
             self.mcp_open = false;
+            self.plugins_open = false;
         }
         match event {
+            Event::OpenPlugins => {
+                self.plugins_open = true;
+                self.mcp_open = false;
+                self.skills_open = false;
+                self.profile_open = false;
+                self.model_open = false;
+                Task::none()
+            }
             Event::OpenMcp => {
                 self.mcp_open = true;
+                self.plugins_open = false;
                 self.skills_open = false;
                 self.profile_open = false;
                 self.model_open = false;
@@ -141,6 +154,7 @@ impl Desktop {
             }
             Event::OpenSkills => {
                 self.skills_open = true;
+                self.plugins_open = false;
                 self.profile_open = false;
                 self.model_open = false;
                 Task::none()
@@ -412,6 +426,82 @@ impl Desktop {
         .height(Length::Fill)
         .style(appearance::sidebar);
 
+        if self.plugins_open {
+            let plugins = &self.session.plugins;
+            let mut content = column![
+                text("Plugins").size(36),
+                text("Workspace plugins · discovered automatically")
+                    .size(14)
+                    .color(appearance::MUTED),
+                text(&plugins.directory).size(11).color(appearance::MUTED)
+            ]
+            .spacing(18);
+            if plugins.items.is_empty() {
+                content = content.push(text("No plugins installed in this workspace.").size(16));
+            }
+            for plugin in &plugins.items {
+                let mut details = column![
+                    text(&plugin.name).size(22),
+                    text(plugin.description.as_deref().unwrap_or("")).size(14),
+                    text(format!(
+                        "{} · {} {} · {} MCP {}",
+                        plugin.path,
+                        plugin.skills.len(),
+                        if plugin.skills.len() == 1 {
+                            "skill"
+                        } else {
+                            "skills"
+                        },
+                        plugin.mcp_servers.len(),
+                        if plugin.mcp_servers.len() == 1 {
+                            "server"
+                        } else {
+                            "servers"
+                        }
+                    ))
+                    .size(12)
+                    .color(appearance::MUTED)
+                ]
+                .spacing(10);
+                for issue in &plugin.issues {
+                    details = details.push(
+                        text(format!("Not loaded: {} · {}", issue.path, issue.message)).size(13),
+                    );
+                }
+                content = content.push(
+                    container(details)
+                        .padding(20)
+                        .width(Length::Fill)
+                        .style(|theme| appearance::message(theme, false)),
+                );
+            }
+            for issue in &plugins.issues {
+                content = content.push(text(format!("Not loaded: {}", issue.path)).size(14));
+                content = content.push(text(&issue.message).size(14));
+            }
+            content = content.push(
+                text("Install plugin folders in .agents/plugins/; each needs plugin.json.")
+                    .size(13)
+                    .color(appearance::MUTED),
+            );
+            let content = column![
+                button("Back to conversation")
+                    .padding(14)
+                    .style(appearance::ghost)
+                    .on_press(Event::CloseSettings),
+                scrollable(content).height(Length::Fill)
+            ]
+            .spacing(14);
+            return row![
+                sidebar,
+                container(content)
+                    .padding(40)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+            ]
+            .height(Length::Fill)
+            .into();
+        }
         if self.mcp_open {
             let mcp = &self.session.mcp;
             let mut content = column![
@@ -778,6 +868,11 @@ impl Desktop {
             .and_then(|thread| thread.model.as_deref())
             .unwrap_or("Default model");
         let model = row![
+            button(text("Plugins").size(12))
+                .style(appearance::ghost)
+                .on_press_maybe(
+                    (enabled && self.session.current.is_some()).then_some(Event::OpenPlugins)
+                ),
             button(text("MCP").size(12))
                 .style(appearance::ghost)
                 .on_press_maybe(

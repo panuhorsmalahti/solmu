@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::path::PathBuf;
 use std::{collections::BTreeMap, io::Read, path::Path};
 
 use super::Issue;
@@ -25,6 +26,12 @@ pub struct Config {
     pub headers: BTreeMap<String, String>,
     #[serde(default)]
     pub disabled: bool,
+    #[serde(skip)]
+    pub plugin_root: Option<PathBuf>,
+    #[serde(skip)]
+    pub plugin_data: Option<PathBuf>,
+    #[serde(skip)]
+    pub cwd: Option<PathBuf>,
 }
 impl Config {
     pub fn kind(&self) -> &'static str {

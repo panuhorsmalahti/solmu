@@ -50,6 +50,8 @@ The CLI uses its thread's working folder, usually the folder where you ran
 `solmu`. Desktop and web use the thread's configured [workspace](workspaces.md).
 Skills from another project are not included. Files in a plain `skills/` folder
 or another repository are not scanned.
+Skills bundled in [Agent Plugins](plugins.md) under `.agents/plugins/` are also
+listed here and enter the agent context automatically.
 
 Installed skill directory links are supported. Read, Glob, and Grep can access
 resources inside those installed skill directories, including directories linked
