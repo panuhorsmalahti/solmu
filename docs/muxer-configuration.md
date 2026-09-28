@@ -108,7 +108,8 @@ sidebar_visible = true
 sidebar_width = 30
 ```
 
-Themes are `solmu` (dark), `light`, and `terminal` (your terminal's ANSI palette).
+Themes are `solmu` (a deep green dark palette), `light`, and `terminal`
+(your terminal's ANSI palette).
 Override `background`, `panel`, `selected`, `text`, `muted`, or `accent`.
 Colors accept `#RRGGBB`, named ANSI colors (`black`, `white`, `red`, `green`,
 `blue`, `yellow`, `cyan`, `magenta`, `gray`, `darkgray`), or `reset`, `default`,

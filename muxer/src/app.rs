@@ -11,11 +11,14 @@ use ratatui::{
     Frame,
     layout::Rect,
     style::{Style, Stylize},
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, Clear, Paragraph, Wrap},
 };
 use serde::{Deserialize, Serialize};
-use std::{error::Error, path::PathBuf};
+use std::{
+    error::Error,
+    path::{Path, PathBuf},
+};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
@@ -1590,12 +1593,25 @@ impl App {
         let sidebar = Rect::new(0, 0, self.sidebar_width(area), area.height);
         frame.render_widget(Block::new().bg(colors.panel), sidebar);
         frame.render_widget(
-            Paragraph::new(" solmu / muxer").fg(colors.accent).bold(),
+            Paragraph::new(" solmu / muxer")
+                .fg(colors.accent)
+                .bg(colors.panel)
+                .bold(),
             Rect::new(0, 0, sidebar.width, 1),
         );
         frame.render_widget(
-            Paragraph::new(" + New space").fg(colors.muted),
+            Paragraph::new(" + New space")
+                .fg(colors.accent)
+                .bg(colors.selected)
+                .bold(),
             Rect::new(0, 1, sidebar.width, 1),
+        );
+        frame.render_widget(
+            Paragraph::new(format!(" WORKSPACES  {:02}", self.spaces.len()))
+                .fg(colors.muted)
+                .bg(colors.panel)
+                .bold(),
+            Rect::new(0, 2, sidebar.width, 1),
         );
         let start = self.space_start(area);
         for (index, space) in self.spaces.iter().enumerate().skip(start) {
@@ -1632,6 +1648,7 @@ impl App {
             } else {
                 "ready".into()
             };
+            let card = Rect::new(0, y, sidebar.width, 3.min(area.height.saturating_sub(y)));
             frame.render_widget(
                 Paragraph::new(vec![
                     Line::styled(
@@ -1656,14 +1673,32 @@ impl App {
                 } else {
                     colors.panel
                 }),
-                Rect::new(0, y, sidebar.width, 3.min(area.height.saturating_sub(y))),
+                card,
             );
+            if selected {
+                frame.render_widget(
+                    Paragraph::new("▌").fg(colors.accent).bg(colors.selected),
+                    Rect::new(0, y, 1.min(card.width), card.height),
+                );
+            }
         }
         let content = self.content(area);
         frame.render_widget(
-            Paragraph::new(format!(" {}", self.spaces[self.space].directory.display()))
-                .fg(colors.muted)
-                .bg(colors.panel),
+            Paragraph::new(Line::from(vec![
+                Span::styled("  WORKSPACE  ", Style::new().fg(colors.accent).bold()),
+                Span::styled(
+                    space_title(&self.spaces[self.space]),
+                    Style::new().fg(colors.text).bold(),
+                ),
+                Span::styled(
+                    format!(
+                        "   /   {}",
+                        display_directory(&self.spaces[self.space].directory)
+                    ),
+                    Style::new().fg(colors.muted),
+                ),
+            ]))
+            .bg(colors.panel),
             Rect::new(content.x, 0, content.width, 1),
         );
         frame.render_widget(
@@ -1671,10 +1706,25 @@ impl App {
             Rect::new(content.x, 1, content.width, 1),
         );
         for (label, rect) in self.toolbar(area) {
+            let highlighted =
+                matches!(label, "+ Space" | "+ Tab") || (label == "Navigate" && self.navigation);
             frame.render_widget(
                 Paragraph::new(format!(" {label} "))
-                    .fg(colors.accent)
-                    .bg(colors.panel),
+                    .fg(if highlighted {
+                        colors.accent
+                    } else {
+                        colors.muted
+                    })
+                    .bg(if highlighted {
+                        colors.selected
+                    } else {
+                        colors.panel
+                    })
+                    .style(if highlighted {
+                        Style::new().bold()
+                    } else {
+                        Style::new()
+                    }),
                 rect,
             );
         }
@@ -1746,6 +1796,14 @@ impl App {
                 }),
                 rect,
             );
+            if selected && rect.height > 1 {
+                frame.render_widget(
+                    Paragraph::new("━".repeat(usize::from(rect.width)))
+                        .fg(colors.accent)
+                        .bg(colors.selected),
+                    Rect::new(rect.x, rect.y + 1, rect.width, 1),
+                );
+            }
             if rect.width >= 3 {
                 frame.render_widget(
                     Paragraph::new("×").fg(colors.muted),
@@ -1791,6 +1849,14 @@ impl App {
             }
             let pane = &self.panes[index];
             frame.render_widget(
+                Block::new().bg(if index == self.active {
+                    colors.selected
+                } else {
+                    colors.panel
+                }),
+                Rect::new(rect.x, rect.y, rect.width, 1),
+            );
+            frame.render_widget(
                 Paragraph::new(format!(
                     "{}{} · {}{}",
                     if index == self.active { "› " } else { "  " },
@@ -1802,7 +1868,8 @@ impl App {
                     colors.accent
                 } else {
                     colors.muted
-                }),
+                })
+                .bold(),
                 Rect::new(rect.x, rect.y, rect.width, 1),
             );
             if rect.width >= 3 {
@@ -1820,6 +1887,12 @@ impl App {
                 TerminalScreen(parser.screen(), colors.text, colors.background),
                 inner,
             );
+            if index == self.active && rect.height > 1 {
+                frame.render_widget(
+                    Paragraph::new("│\n".repeat(usize::from(rect.height - 1))).fg(colors.muted),
+                    Rect::new(rect.x, rect.y + 1, 1, rect.height - 1),
+                );
+            }
             if index == self.active
                 && self.workspace.is_none()
                 && self.command.is_none()
@@ -1855,12 +1928,46 @@ impl App {
                 self.config.current.keys.prefix_text
             )
         };
+        let footer = Rect::new(content.x, area.bottom().saturating_sub(2), content.width, 2);
+        frame.render_widget(Block::new().bg(colors.panel), footer);
+        let expanded_footer = self.prefix
+            || self.navigation
+            || self.resizing
+            || !self.notice.is_empty()
+            || self.config.error.is_some()
+            || footer.width < 85;
         frame.render_widget(
-            Paragraph::new(text)
-                .fg(colors.muted)
+            Paragraph::new(format!("  {text}"))
+                .fg(if self.prefix || self.navigation || self.resizing {
+                    colors.accent
+                } else {
+                    colors.muted
+                })
                 .wrap(Wrap { trim: false }),
-            Rect::new(content.x, area.bottom().saturating_sub(2), content.width, 2),
+            Rect::new(
+                footer.x,
+                footer.y,
+                footer.width,
+                if expanded_footer { 2 } else { 1 },
+            ),
         );
+        if !expanded_footer {
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("  SOLMU MUXER", Style::new().fg(colors.accent).bold()),
+                    Span::styled(
+                        format!(
+                            "   ·   {} spaces   /   {} tabs   /   {} panes",
+                            self.spaces.len(),
+                            self.spaces[self.space].tabs.len(),
+                            self.tab().layout.ids().len()
+                        ),
+                        Style::new().fg(colors.muted),
+                    ),
+                ])),
+                Rect::new(footer.x, footer.y + 1, footer.width, 1),
+            );
+        }
         if let Some(path) = &self.workspace {
             self.draw_editor(
                 frame,
@@ -2135,6 +2242,19 @@ fn space_title(space: &Space) -> String {
             .to_string_lossy()
             .into_owned()
     })
+}
+fn display_directory(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        if let Some(rest) = value.strip_prefix("\\\\?\\UNC\\") {
+            return format!("\\\\{rest}");
+        }
+        if let Some(rest) = value.strip_prefix("\\\\?\\") {
+            return rest.to_owned();
+        }
+    }
+    value.into_owned()
 }
 fn pane_title(pane: &Pane) -> String {
     pane.name.as_ref().map_or_else(

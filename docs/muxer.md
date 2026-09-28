@@ -10,6 +10,11 @@ in a nested layout. Every pane starts its own conversation and keeps running
 while you switch tabs or spaces. The sidebar shows spaces and their tab counts;
 tabs show activity, and each terminal shows its status.
 
+The workspace rail highlights the selected project, the tab strip marks the
+active tab, and the focused pane has a distinct header. The bottom bar shows
+shortcuts and the current space, tab, and pane counts. These colors follow the
+selected Muxer theme, including a custom palette.
+
 With the backend already running, launch the installed Muxer from your project
 folder. See [installation](../muxer/README.md#install):
 

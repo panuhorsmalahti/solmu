@@ -342,12 +342,12 @@ impl Config {
                 accent: Color::Green,
             },
             _ => Palette {
-                background: Color::Rgb(21, 26, 35),
-                panel: Color::Rgb(30, 37, 48),
-                selected: Color::Rgb(45, 60, 65),
-                text: Color::Rgb(224, 222, 244),
-                muted: Color::Rgb(136, 149, 166),
-                accent: Color::Rgb(156, 207, 176),
+                background: Color::Rgb(17, 27, 29),
+                panel: Color::Rgb(29, 48, 49),
+                selected: Color::Rgb(48, 84, 73),
+                text: Color::Rgb(231, 238, 232),
+                muted: Color::Rgb(159, 180, 170),
+                accent: Color::Rgb(169, 223, 185),
             },
         };
         for (name, text) in &self.colors {

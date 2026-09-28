@@ -8,6 +8,8 @@ Use `/skills` in a Solmu pane to see automatically discovered
 A Rust TUI with project spaces and multiple Solmu tabs in each space.
 Each tab holds a layout of real terminal panes. Each pane starts its own Solmu
 conversation and keeps running while you switch tabs or spaces.
+The selected workspace, tab, and pane are highlighted, and the bottom bar
+shows shortcuts and layout counts.
 
 ## Install
 

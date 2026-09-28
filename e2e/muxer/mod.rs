@@ -308,6 +308,7 @@ mod panes;
 mod workspaces;
 
 mod agents;
+mod appearance;
 mod audit;
 mod configuration;
 mod control;

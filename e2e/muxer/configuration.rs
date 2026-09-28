@@ -122,11 +122,11 @@ sidebar_width = 34
     tui.wait_absent("Configuration error:").await;
     tui.wait("solmu / muxer").await;
     palette(&tui, 0, 2, true, vt100::Color::Rgb(36, 104, 19)).await;
-    palette(&tui, 0, 30, false, vt100::Color::Rgb(30, 37, 48)).await;
+    palette(&tui, 0, 30, false, vt100::Color::Rgb(29, 48, 49)).await;
     tui.wait("Draft stays").await;
     std::fs::remove_file(&path).unwrap();
     tui.wait("ctrl+b shortcuts").await;
-    palette(&tui, 0, 2, true, vt100::Color::Rgb(156, 207, 176)).await;
+    palette(&tui, 0, 2, true, vt100::Color::Rgb(169, 223, 185)).await;
     for thread in backend.threads().await["items"].as_array().unwrap() {
         assert!(
             backend.messages(thread["id"].as_str().unwrap()).await["items"]
@@ -190,7 +190,7 @@ async fn settings_preserve_comments_merge_unrelated_edits_and_protect_conflictin
     palette(&first, 0, 2, true, vt100::Color::Rgb(170, 187, 204)).await;
     edit(&second, "theme.colors.accent").await;
     save(&second, "").await;
-    palette(&first, 0, 2, true, vt100::Color::Rgb(156, 207, 176)).await;
+    palette(&first, 0, 2, true, vt100::Color::Rgb(169, 223, 185)).await;
     assert!(!std::fs::read_to_string(&path).unwrap().contains("#aabbcc"));
     close_settings(&first).await;
     close_settings(&second).await;
