@@ -8,6 +8,8 @@ export interface Message { id: string; role: 'user' | 'assistant'; content: stri
 export interface ToolRun { id: string; message_id: string; name: string; arguments: unknown; status: string; result: unknown | null }
 export interface AuditRun extends ToolRun { sequence: number; thread_id: string; thread_title: string; call_id: string; created_at: string; started_at: string | null; finished_at: string | null }
 export interface AuditPage { items: AuditRun[]; next_cursor: number | null }
+export interface ScheduledTask { id: string; name: string; prompt: string; schedule_kind: 'once' | 'cron'; schedule: string; thread_id: string; enabled: boolean; running: boolean; next_run_at: string | null; last_run_at: string | null; last_status: string | null }
+export interface TaskRun { id: string; scheduled_for: string; started_at: string; finished_at: string | null; status: string; error: string | null }
 export type ReplyEvent = { event: 'delta'; data: { text: string } } | { event: 'done'; data: Message } | { event: 'reset'; data: object } | { event: 'tool_start' | 'tool_result'; data: ToolRun }
 
 export async function request<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {

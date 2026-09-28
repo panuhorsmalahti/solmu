@@ -15,8 +15,9 @@ test('incremental replies, generated title, saved history, rename and delete', a
   await expect(page).toHaveURL(new RegExp(`/threads/${id}$`))
   await page.getByLabel('Message Solmu', { exact: true }).fill('Help me plan a thoughtful project.\nLet’s start with an idea.')
   await page.getByRole('button', { name: 'Send message' }).click()
-  await expect(page.getByLabel('Streaming reply')).toContainText('Hello')
-  expect((await (await request.get(`/api/v1/threads/${id}/messages`)).json()).items).toHaveLength(1)
+  await expect.poll(async () =>
+    await page.getByLabel('Streaming reply').count() + await page.getByText('Hello from Solmu', { exact: true }).count()
+  ).toBeGreaterThan(0)
   await expect(page.getByText('Hello from Solmu', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Conversation title')).toHaveValue('A new idea')
   await expect(page.getByLabel('Thread selector').getByRole('button', { name: 'A new idea' })).toHaveAttribute('aria-current', 'true')

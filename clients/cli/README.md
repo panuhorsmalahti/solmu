@@ -57,6 +57,8 @@ Typing `/` shows the command list. Use Up/Down to choose and Enter to select.
 | `/exit` | Exit. Ctrl+C also exits. |
 | `/plugins` | List installed Agent Plugins and loading errors. |
 | `/audit` | Browse saved tool calls across conversations. |
+| `/tasks` | Browse scheduled tasks. |
+| `/task` | Create and manage scheduled tasks; see [task commands](../../docs/tasks.md). |
 
 Wait for a reply to finish before sending again or changing conversations.
 `/exit` still works during streaming. Errors are shown above the input; user
@@ -79,6 +81,14 @@ Run `/audit` to inspect the [tool call timeline](../../docs/audit.md). Enter
 expands a call; PageUp and PageDown browse older pages.
 
 ![CLI Audit](../../docs/screenshots/cli-audit.png)
+
+## Scheduled tasks
+
+Use `/tasks` to browse work scheduled for later. `/task once` and `/task cron`
+create tasks; `/task run|pause|resume|edit|delete|runs` manages them. See
+[scheduled tasks](../../docs/tasks.md) for examples.
+
+![CLI tasks](../../docs/screenshots/cli-tasks.png)
 
 ## Skills
 

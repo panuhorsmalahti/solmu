@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 base64 = "0.22.1"
+chrono = "0.4.45"
 portable-pty = "0.9"
 iced_test = "0.14.0"
 iced = { version = "0.14.0", default-features = false, features = ["tiny-skia", "tokio", "fira-sans"] }

@@ -261,6 +261,29 @@ pub struct AuditPage {
     pub items: Vec<AuditRun>,
     pub next_cursor: Option<i64>,
 }
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScheduledTask {
+    pub id: String,
+    pub name: String,
+    pub prompt: String,
+    pub schedule_kind: String,
+    pub schedule: String,
+    pub thread_id: String,
+    pub enabled: bool,
+    pub running: bool,
+    pub next_run_at: Option<String>,
+    pub last_run_at: Option<String>,
+    pub last_status: Option<String>,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct TaskRun {
+    pub id: String,
+    pub scheduled_for: String,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub error: Option<String>,
+}
 impl ToolRun {
     pub fn details(&self) -> String {
         let arguments = format!("Arguments: {}", self.arguments);
@@ -303,6 +326,7 @@ impl Api {
                                     if event["thread_id"].is_null() { yield Connection::ProfileChanged; }
                                 },
                                 Some("profile_changed") => yield Connection::ProfileChanged,
+                                Some("tasks_changed") => yield Connection::TasksChanged,
                                 _ => {},
                             }
                         }
@@ -368,6 +392,46 @@ impl Api {
             None => format!("/audit?limit={limit}"),
         };
         self.json(Method::GET, &path, None).await
+    }
+    pub async fn tasks(&self) -> Result<Vec<ScheduledTask>, String> {
+        #[derive(Deserialize)]
+        struct Page {
+            items: Vec<ScheduledTask>,
+        }
+        self.json::<Page>(Method::GET, "/tasks", None)
+            .await
+            .map(|page| page.items)
+    }
+    pub async fn create_task(
+        &self,
+        name: &str,
+        prompt: &str,
+        kind: &str,
+        schedule: &str,
+    ) -> Result<ScheduledTask, String> {
+        self.json(Method::POST, "/tasks", Some(json!({"name":name,"prompt":prompt,"schedule_kind":kind,"schedule":schedule,"workspace":self.workspace}))).await
+    }
+    pub async fn update_task(&self, id: &str, changes: Value) -> Result<ScheduledTask, String> {
+        self.json(Method::PATCH, &format!("/tasks/{id}"), Some(changes))
+            .await
+    }
+    pub async fn delete_task(&self, id: &str) -> Result<(), String> {
+        self.request(Method::DELETE, &format!("/tasks/{id}"), None, false)
+            .await
+            .map(|_| ())
+    }
+    pub async fn run_task(&self, id: &str) -> Result<TaskRun, String> {
+        self.json(Method::POST, &format!("/tasks/{id}/run"), None)
+            .await
+    }
+    pub async fn task_runs(&self, id: &str) -> Result<Vec<TaskRun>, String> {
+        #[derive(Deserialize)]
+        struct Page {
+            items: Vec<TaskRun>,
+        }
+        self.json::<Page>(Method::GET, &format!("/tasks/{id}/runs"), None)
+            .await
+            .map(|page| page.items)
     }
     pub async fn stop(&self, id: &str) -> Result<(), String> {
         self.request(Method::POST, &format!("/threads/{id}/stop"), None, false)
@@ -565,6 +629,7 @@ pub enum Connection {
     Connected,
     Changed,
     ProfileChanged,
+    TasksChanged,
     Disconnected,
 }
 #[derive(Clone, Debug)]

@@ -9,6 +9,7 @@ mod llm;
 mod mcp;
 mod plugins;
 mod prompt;
+mod scheduler;
 mod skills;
 mod storage;
 mod tools;
@@ -30,10 +31,9 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let llm = llm::Llm::from_env()?;
     let pool = db::connect(&config.database_url).await?;
     let listener = TcpListener::bind(config.bind_addr).await?;
-    let app = web::router(
-        api::router(api::state::AppState::new(pool.clone(), llm)),
-        &config.web_dir,
-    );
+    let state = api::state::AppState::new(pool.clone(), llm);
+    let scheduler = tokio::spawn(scheduler::run(state.clone()));
+    let app = web::router(api::router(state), &config.web_dir);
 
     println!("Solmu listening on http://{}", listener.local_addr()?);
 
@@ -41,6 +41,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
+    scheduler.abort();
     pool.close().await;
 
     Ok(())

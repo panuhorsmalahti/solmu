@@ -6,11 +6,19 @@ use ratatui::{
     widgets::{Block, Paragraph, Wrap},
 };
 use solmu_client::{
-    Api, AuditPage, AuditRun, McpCatalog, ModelCatalog, PluginCatalog, Profile, SkillCatalog,
+    Api, AuditPage, AuditRun, McpCatalog, ModelCatalog, PluginCatalog, Profile, ScheduledTask,
+    SkillCatalog,
 };
 use tokio::sync::mpsc;
 
 pub enum Page {
+    Tasks {
+        items: Vec<ScheduledTask>,
+        selected: usize,
+        expanded: bool,
+        busy: bool,
+        error: String,
+    },
     Audit {
         items: Vec<AuditRun>,
         starts: Vec<Option<i64>>,
@@ -52,6 +60,8 @@ pub enum Page {
     },
 }
 pub enum Event {
+    TasksLoaded(Result<Vec<ScheduledTask>, String>),
+    TaskChanged(Result<String, String>),
     AuditLoaded(Result<AuditPage, String>),
     Loaded(Result<Profile, String>),
     Saved(Result<Profile, String>),
@@ -68,6 +78,11 @@ pub enum Action {
 pub fn audit(api: Api, before: Option<i64>, sender: mpsc::UnboundedSender<Event>) {
     tokio::spawn(async move {
         let _ = sender.send(Event::AuditLoaded(api.audit(before, 20).await));
+    });
+}
+pub fn tasks(api: Api, sender: mpsc::UnboundedSender<Event>) {
+    tokio::spawn(async move {
+        let _ = sender.send(Event::TasksLoaded(api.tasks().await));
     });
 }
 
@@ -90,6 +105,18 @@ pub fn models(api: Api, sender: mpsc::UnboundedSender<Event>) {
 }
 
 impl Page {
+    pub fn tasks() -> Self {
+        Self::Tasks {
+            items: Vec::new(),
+            selected: 0,
+            expanded: false,
+            busy: true,
+            error: String::new(),
+        }
+    }
+    pub fn is_tasks(&self) -> bool {
+        matches!(self, Self::Tasks { .. })
+    }
     pub fn audit() -> Self {
         Self::Audit {
             items: Vec::new(),
@@ -171,6 +198,28 @@ impl Page {
         false
     }
     pub fn update(&mut self, event: Event) {
+        if let (
+            Self::Tasks {
+                items,
+                selected,
+                busy,
+                error,
+                ..
+            },
+            Event::TasksLoaded(result),
+        ) = (&mut *self, &event)
+        {
+            *busy = false;
+            match result {
+                Ok(value) => {
+                    *items = value.clone();
+                    *selected = (*selected).min(items.len().saturating_sub(1));
+                    error.clear();
+                }
+                Err(message) => *error = message.clone(),
+            }
+            return;
+        }
         if let (
             Self::Audit {
                 items,
@@ -270,6 +319,17 @@ impl Page {
             return Action::Close;
         }
         match self {
+            Self::Tasks {
+                items,
+                selected,
+                expanded,
+                ..
+            } => match key.code {
+                KeyCode::Up => *selected = selected.saturating_sub(1),
+                KeyCode::Down => *selected = (*selected + 1).min(items.len().saturating_sub(1)),
+                KeyCode::Enter => *expanded = !*expanded,
+                _ => {}
+            },
             Self::Audit {
                 items,
                 starts,
@@ -456,6 +516,89 @@ impl Page {
         mcp: &McpCatalog,
         plugins: &PluginCatalog,
     ) {
+        if let Self::Tasks {
+            items,
+            selected,
+            expanded,
+            busy,
+            error,
+        } = self
+        {
+            let [header, list, detail, footer] = Layout::vertical([
+                Constraint::Length(4),
+                Constraint::Min(5),
+                Constraint::Length(11),
+                Constraint::Length(2),
+            ])
+            .areas(frame.area());
+            frame.render_widget(
+                Paragraph::new(
+                    " SOLMU / TASKS\n\nOne-time and recurring work · UTC cron schedules",
+                )
+                .green(),
+                header,
+            );
+            let lines = if items.is_empty() {
+                vec![if *busy {
+                    "Loading tasks…".into()
+                } else {
+                    "No tasks yet. Ask Solmu to schedule work, or use /task.".into()
+                }]
+            } else {
+                items
+                    .iter()
+                    .enumerate()
+                    .map(|(index, task)| {
+                        format!(
+                            "{} {} · {} · {}",
+                            if index == *selected { "›" } else { " " },
+                            task.name,
+                            task.schedule,
+                            if task.running {
+                                "Running"
+                            } else if task.enabled {
+                                "Scheduled"
+                            } else {
+                                "Paused"
+                            }
+                        )
+                    })
+                    .collect()
+            };
+            frame.render_widget(Paragraph::new(lines.join("\n")), list);
+            if !error.is_empty() {
+                frame.render_widget(Paragraph::new(error.as_str()).red(), detail);
+            } else if *expanded && let Some(task) = items.get(*selected) {
+                frame.render_widget(
+                    Paragraph::new(format!(
+                        "{}\n\n{}\nNext: {}\nLast: {} · {}\nConversation: {}\nTask ID: {}",
+                        task.name,
+                        task.prompt,
+                        task.next_run_at.as_deref().unwrap_or("—"),
+                        task.last_run_at.as_deref().unwrap_or("Never"),
+                        task.last_status.as_deref().unwrap_or("—"),
+                        task.thread_id,
+                        task.id
+                    ))
+                    .block(Block::bordered().title(" Details "))
+                    .wrap(Wrap { trim: false }),
+                    detail,
+                );
+            } else {
+                frame.render_widget(
+                    Paragraph::new(
+                        "Enter details · Use /task run|pause|resume|delete <id> outside this page",
+                    )
+                    .dark_gray(),
+                    detail,
+                );
+            }
+            frame.render_widget(
+                Paragraph::new("↑↓ select · Enter details · Esc back").dark_gray(),
+                footer,
+            );
+            return;
+        }
         if let Self::Audit {
             items,
             page,
@@ -539,6 +682,7 @@ impl Page {
         ])
         .areas(frame.area());
         match self {
+            Self::Tasks { .. } => unreachable!("tasks rendered above"),
             Self::Audit { .. } => unreachable!("audit was rendered above"),
             Self::Plugins { scroll } => {
                 frame.render_widget(

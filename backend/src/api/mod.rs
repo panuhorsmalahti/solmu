@@ -5,7 +5,8 @@ mod messages;
 mod models;
 mod plugins;
 mod profile;
-mod responses;
+pub(crate) mod responses;
+mod scheduled_tasks;
 mod skills;
 pub mod state;
 mod threads;
@@ -48,6 +49,18 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/tools", get(tools::definitions))
         .route("/api/v1/audit", get(tools::audit))
+        .route(
+            "/api/v1/tasks",
+            get(scheduled_tasks::list).post(scheduled_tasks::create),
+        )
+        .route(
+            "/api/v1/tasks/{id}",
+            get(scheduled_tasks::get)
+                .patch(scheduled_tasks::update)
+                .delete(scheduled_tasks::delete),
+        )
+        .route("/api/v1/tasks/{id}/runs", get(scheduled_tasks::runs))
+        .route("/api/v1/tasks/{id}/run", post(scheduled_tasks::run_now))
         .route("/api/v1/threads/{thread_id}/skills", get(skills::list))
         .route("/api/v1/threads/{thread_id}/mcp", get(mcp::list))
         .route("/api/v1/threads/{thread_id}/plugins", get(plugins::list))

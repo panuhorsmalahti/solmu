@@ -1,4 +1,5 @@
 mod files;
+mod scheduled;
 mod shell;
 
 use futures_util::future::BoxFuture;
@@ -17,6 +18,7 @@ pub const FILE_LIMIT: u64 = 1_000_000;
 
 #[derive(Clone)]
 pub struct Context {
+    pub state: crate::api::state::AppState,
     pub workspace: PathBuf,
     pub skill_roots: Vec<PathBuf>,
     pub cancellation: CancellationToken,
@@ -122,6 +124,7 @@ impl Registry {
             registry.register(tool);
         }
         registry.register(Arc::new(shell::Bash));
+        registry.register(Arc::new(scheduled::Tasks));
         registry
     }
     pub fn register(&mut self, tool: Arc<dyn AgentTool>) {

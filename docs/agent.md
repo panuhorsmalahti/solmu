@@ -17,6 +17,9 @@ manage conversations, stream replies, and use [tools](tools.md) to work in a
 [workspace](workspaces.md). Edit your preferences in [Profile](profile.md); upgrades
 preserve your saved prompt.
 
+When you ask Solmu to schedule work, it can create or manage
+[scheduled tasks](tasks.md). Each run works in a saved conversation.
+
 Installed [workspace skills](skills.md) enter the runtime context automatically.
 Solmu reads relevant instructions and supporting resources as needed.
 

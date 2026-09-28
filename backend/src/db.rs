@@ -25,5 +25,8 @@ pub async fn connect(url: &str) -> Result<SqlitePool, Box<dyn Error>> {
     crate::storage::tools::recover(&pool, None)
         .await
         .map_err(|error| format!("Could not recover interrupted tools: {error:?}"))?;
+    crate::storage::scheduled_tasks::recover(&pool)
+        .await
+        .map_err(|error| format!("Could not recover scheduled tasks: {error:?}"))?;
     Ok(pool)
 }

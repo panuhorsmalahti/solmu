@@ -38,6 +38,14 @@ The list updates automatically. See [Audit](audit.md).
 
 ![Desktop Audit](screenshots/desktop-audit.png)
 
+## Scheduled tasks
+
+Choose **Tasks** in the sidebar to create one-time or recurring work, edit or
+pause it, run it now, view run history, and open its conversation. Task changes
+appear automatically. See [scheduled tasks](tasks.md).
+
+![Desktop tasks](screenshots/desktop-tasks.png)
+
 ## Workspace tools
 
 Solmu can read, edit, and search files and run Bash commands in the thread's

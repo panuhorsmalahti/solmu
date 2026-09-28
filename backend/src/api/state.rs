@@ -83,6 +83,13 @@ impl AppState {
         });
     }
 
+    pub fn tasks_changed(&self) {
+        let _ = self.events.send(Change {
+            kind: "tasks_changed",
+            thread_id: None,
+        });
+    }
+
     pub fn resync() -> Change {
         Change {
             kind: "conversation_changed",

@@ -320,6 +320,7 @@ mod restoration;
 mod sessions;
 mod startup;
 mod tabs;
+mod tasks;
 mod tools;
 
 mod commands;

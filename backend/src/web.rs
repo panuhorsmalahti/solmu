@@ -14,6 +14,7 @@ pub fn router(api: Router, directory: &Path) -> Router {
         .route_service("/", index.clone())
         .route_service("/profile", index.clone())
         .route_service("/audit", index.clone())
+        .route_service("/tasks", index.clone())
         .route_service("/threads/{thread_id}", index)
         .layer(middleware::from_fn(no_cache));
     api.merge(pages)

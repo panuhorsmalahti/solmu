@@ -9,6 +9,8 @@ All clients connect to the same backend and share saved conversations.
 Open [Profile](profile.md) to edit the shared system prompt and optional default
 model. Every client also supports per-thread model selection.
 Open [Audit](audit.md) to inspect saved tool calls across conversations.
+Use [scheduled tasks](tasks.md) to run Solmu later or on a recurring schedule;
+every client can show and manage them.
 Provider credentials and SQLite data stay on the backend.
 
 All clients display live and saved [tool activity](tools.md), including

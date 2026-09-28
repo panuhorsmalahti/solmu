@@ -5,6 +5,7 @@ import Skills from './Skills'
 import Mcp from './Mcp'
 import Plugins from './Plugins'
 import Audit from './Audit'
+import Tasks from './Tasks'
 import { ArrowUp, MessageSquare, Plus, Square, Trash2, Check, Sprout } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +20,9 @@ export default function App() {
   const navigate = useNavigate()
   const isProfile = useLocation().pathname === '/profile'
   const isAudit = useLocation().pathname === '/audit'
+  const isTasks = useLocation().pathname === '/tasks'
   const [auditRevision, setAuditRevision] = useState(0)
+  const [tasksRevision, setTasksRevision] = useState(0)
   const [profileRevision, setProfileRevision] = useState(0)
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null)
   const [modelPicker, setModelPicker] = useState(false), [customModel, setCustomModel] = useState('')
@@ -49,13 +52,13 @@ export default function App() {
         setTitle(value => value === current.title ? thread.title : value); setCurrent(thread)
         setMessages(history)
         setTools(activity)
-      } else { loadedThread.current = null; setCurrent(null); setTitle(''); setMessages([]); if (!isProfile && !isAudit) navigate('/', { replace: true }) }
+      } else { loadedThread.current = null; setCurrent(null); setTitle(''); setMessages([]); if (!isProfile && !isAudit && !isTasks) navigate('/', { replace: true }) }
     }
     setThreads(next)
   }
 
   useEffect(() => {
-    if (isProfile || isAudit) {
+    if (isProfile || isAudit || isTasks) {
       void list<Thread>('/threads').then(setThreads).catch(error => setError(describe(error))).finally(() => setBusy(false))
       return
     }
@@ -84,7 +87,7 @@ export default function App() {
       disposed = true
       if (controller.current) { controller.current.abort(); if (threadId) void request(`/threads/${threadId}/stop`, 'POST').catch(() => {}) }
     }
-  }, [threadId, navigate, isProfile, isAudit])
+  }, [threadId, navigate, isProfile, isAudit, isTasks])
 
   useEffect(() => { void request<ModelCatalog>('/models').then(setCatalog).catch(error => setError(describe(error))) }, [profileRevision])
 
@@ -96,8 +99,8 @@ export default function App() {
     let socket: WebSocket | undefined, timer: ReturnType<typeof setTimeout> | undefined, disposed = false
     function connect() {
       socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/v1/events`)
-      socket.onopen = () => { setConnected(true); setProfileRevision(value => value + 1); setSkillsRevision(value => value + 1); setMcpRevision(value => value + 1); setPluginsRevision(value => value + 1); setAuditRevision(value => value + 1); liveChange() }
-      socket.onmessage = event => { const type = JSON.parse(event.data).type; if (type === 'conversation_changed') { liveChange(); setAuditRevision(value => value + 1) } if (type === 'profile_changed') setProfileRevision(value => value + 1); if (type === 'skills_changed') setSkillsRevision(value => value + 1); if (type === 'mcp_changed') setMcpRevision(value => value + 1); if (type === 'plugins_changed') setPluginsRevision(value => value + 1) }
+      socket.onopen = () => { setConnected(true); setProfileRevision(value => value + 1); setSkillsRevision(value => value + 1); setMcpRevision(value => value + 1); setPluginsRevision(value => value + 1); setAuditRevision(value => value + 1); setTasksRevision(value => value + 1); liveChange() }
+      socket.onmessage = event => { const type = JSON.parse(event.data).type; if (type === 'conversation_changed') { liveChange(); setAuditRevision(value => value + 1) } if (type === 'tasks_changed') setTasksRevision(value => value + 1); if (type === 'profile_changed') setProfileRevision(value => value + 1); if (type === 'skills_changed') setSkillsRevision(value => value + 1); if (type === 'mcp_changed') setMcpRevision(value => value + 1); if (type === 'plugins_changed') setPluginsRevision(value => value + 1) }
       socket.onclose = () => { if (!disposed) { setConnected(false); timer = setTimeout(connect, 2000) } }
       socket.onerror = () => socket?.close()
     }
@@ -169,6 +172,7 @@ export default function App() {
       <button className="brand" aria-label="Solmu · Profile" disabled={busy} onClick={() => navigate('/profile')}><Sprout className="brand-mark" strokeWidth={1.5} />solmu</button>
       <Button variant="ghost" className="profile-link" aria-current={isProfile ? 'page' : undefined} disabled={busy} onClick={() => navigate('/profile')}>Profile</Button>
       <Button variant="ghost" className="audit-link" aria-current={isAudit ? 'page' : undefined} onClick={() => navigate('/audit')}>Audit</Button>
+      <Button variant="ghost" className="audit-link" aria-current={isTasks ? 'page' : undefined} onClick={() => navigate('/tasks')}>Tasks</Button>
       <div className="sidebar-label">Conversations<Button variant="ghost" size="icon" aria-label="New thread" title="New thread" disabled={busy} onClick={newThread}><Plus size={17} /></Button></div>
       <nav className="threads" aria-label="Thread selector">
         {threads.map(thread => <button key={thread.id} className="thread" aria-current={thread.id === current?.id} disabled={busy} onClick={() => openThread(thread)}><MessageSquare size={14} /><span>{thread.title}</span></button>)}
@@ -176,7 +180,7 @@ export default function App() {
       <div className="sidebar-footer">YOUR IDEAS, CONNECTED</div>
     </aside>
     <main className="workspace">
-      {isProfile ? <ProfilePage revision={profileRevision}/> : isAudit ? <Audit revision={auditRevision}/> : <>
+      {isProfile ? <ProfilePage revision={profileRevision}/> : isAudit ? <Audit revision={auditRevision}/> : isTasks ? <Tasks revision={tasksRevision}/> : <>
       <header className="topbar">
         <Input className="title-input" aria-label="Conversation title" placeholder="Select a conversation" value={title} disabled={busy || !current} onChange={event => setTitle(event.target.value)} />
         <div className="topbar-actions">

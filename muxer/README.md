@@ -117,3 +117,10 @@ Use `/plugins` in a Solmu pane to inspect installed
 [Agent Plugins](../docs/plugins.md).
 
 ![Plugins in Muxer](../docs/screenshots/muxer-plugins.png)
+
+## Scheduled tasks
+
+Use `/tasks` in a Solmu pane to browse scheduled work, and `/task` to manage it.
+See [scheduled tasks](../docs/tasks.md).
+
+![Tasks in Muxer](../docs/screenshots/muxer-tasks.png)

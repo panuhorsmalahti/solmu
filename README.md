@@ -14,6 +14,7 @@ Licensed under [MIT](LICENSE).
 - Link directly to conversations in the web client.
 - Customize the shared system prompt and default model in Profile.
 - Inspect every saved tool call in Audit, with arguments, results, and older pages. See [Audit](docs/audit.md).
+- Schedule Solmu to run once later or on a recurring cron schedule, with a saved conversation and run history for each task. See [Tasks](docs/tasks.md).
 - Use project skills discovered automatically from `.agents/skills/`.
 - Connect workspace MCP servers to use additional tools and inspect their live status in every client. See [MCP setup](docs/mcp.md).
 - Install Agent Plugins to bring skills and MCP tools into a workspace together. See [plugins](docs/plugins.md).

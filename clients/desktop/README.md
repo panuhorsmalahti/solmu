@@ -58,6 +58,13 @@ across conversations. Expand a call for details and page through older calls.
 
 ![Desktop Audit](../../docs/screenshots/desktop-audit.png)
 
+## Scheduled tasks
+
+Choose **Tasks** in the sidebar to schedule work once or repeatedly, manage it,
+and inspect its run history. See [scheduled tasks](../../docs/tasks.md).
+
+![Desktop tasks](../../docs/screenshots/desktop-tasks.png)
+
 ## Skills
 
 Choose **Skills** to see installed [workspace skills](../../docs/skills.md).

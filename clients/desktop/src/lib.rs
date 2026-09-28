@@ -4,7 +4,8 @@ use iced::{
     widget::{button, column, container, row, scrollable, text, text_editor, text_input, tooltip},
 };
 use solmu_client::{
-    Action, Api, AuditPage, AuditRun, Connection, ModelCatalog, Profile, Session, Update,
+    Action, Api, AuditPage, AuditRun, Connection, ModelCatalog, Profile, ScheduledTask, Session,
+    TaskRun, Update,
 };
 
 mod appearance;
@@ -39,6 +40,18 @@ pub struct Desktop {
     audit_busy: bool,
     audit_dirty: bool,
     audit_error: String,
+    tasks_open: bool,
+    task_items: Vec<ScheduledTask>,
+    task_runs: Vec<TaskRun>,
+    task_selected: Option<String>,
+    task_name: String,
+    task_prompt: String,
+    task_schedule: String,
+    task_kind: String,
+    task_editing: Option<String>,
+    task_busy: bool,
+    task_save_pending: bool,
+    task_error: String,
     catalog: Option<ModelCatalog>,
     custom_model: String,
 }
@@ -70,6 +83,21 @@ pub enum Event {
     AuditPrevious,
     CloseAudit,
     AuditToggle(String),
+    OpenTasks,
+    TasksLoaded(Result<Vec<ScheduledTask>, String>),
+    TaskRunsLoaded(Result<Vec<TaskRun>, String>),
+    TaskMutated(Result<(), String>),
+    TaskName(String),
+    TaskPrompt(String),
+    TaskSchedule(String),
+    TaskKind(String),
+    TaskSave,
+    TaskEdit(String),
+    TaskCancelEdit,
+    TaskSelect(String),
+    TaskRun(String),
+    TaskToggle(String, bool),
+    TaskDelete(String),
     ModelsLoaded(Result<ModelCatalog, String>),
     CustomModel(String),
     ProfileModel(String),
@@ -124,6 +152,18 @@ impl Desktop {
             audit_busy: false,
             audit_dirty: false,
             audit_error: String::new(),
+            tasks_open: false,
+            task_items: Vec::new(),
+            task_runs: Vec::new(),
+            task_selected: None,
+            task_name: String::new(),
+            task_prompt: String::new(),
+            task_schedule: String::new(),
+            task_kind: "once".into(),
+            task_editing: None,
+            task_busy: false,
+            task_save_pending: false,
+            task_error: String::new(),
             catalog: None,
             custom_model: String::new(),
         };
@@ -156,6 +196,19 @@ impl Desktop {
         )
     }
 
+    fn load_tasks(&self) -> Task<Event> {
+        let api = self.session.api.clone();
+        Task::perform(async move { api.tasks().await }, Event::TasksLoaded)
+    }
+
+    fn load_task_runs(&self, id: String) -> Task<Event> {
+        let api = self.session.api.clone();
+        Task::perform(
+            async move { api.task_runs(&id).await },
+            Event::TaskRunsLoaded,
+        )
+    }
+
     pub fn update(&mut self, event: Event) -> Task<Event> {
         let saved_profile = matches!(&event, Event::ProfileSaved(_));
         let opened_profile = matches!(&event, Event::OpenProfile);
@@ -171,8 +224,171 @@ impl Desktop {
             self.mcp_open = false;
             self.plugins_open = false;
             self.audit_open = false;
+            self.tasks_open = false;
         }
         match event {
+            Event::OpenTasks => {
+                self.tasks_open = true;
+                self.audit_open = false;
+                self.profile_open = false;
+                self.model_open = false;
+                self.skills_open = false;
+                self.mcp_open = false;
+                self.plugins_open = false;
+                self.load_tasks()
+            }
+            Event::TasksLoaded(result) => {
+                match result {
+                    Ok(items) => {
+                        self.task_items = items;
+                        self.task_error.clear();
+                    }
+                    Err(error) => self.task_error = error,
+                }
+                Task::none()
+            }
+            Event::TaskRunsLoaded(result) => {
+                match result {
+                    Ok(runs) => self.task_runs = runs,
+                    Err(error) => self.task_error = error,
+                }
+                Task::none()
+            }
+            Event::TaskMutated(result) => {
+                self.task_busy = false;
+                match result {
+                    Ok(()) => {
+                        if self.task_save_pending {
+                            self.task_editing = None;
+                            self.task_name.clear();
+                            self.task_prompt.clear();
+                            self.task_schedule.clear();
+                        }
+                        self.task_save_pending = false;
+                        self.task_error.clear();
+                        let mut tasks = vec![self.load_tasks()];
+                        if let Some(id) = self.task_selected.clone() {
+                            tasks.push(self.load_task_runs(id));
+                        }
+                        Task::batch(tasks)
+                    }
+                    Err(error) => {
+                        self.task_save_pending = false;
+                        self.task_error = error;
+                        Task::none()
+                    }
+                }
+            }
+            Event::TaskName(value) => {
+                self.task_name = value;
+                Task::none()
+            }
+            Event::TaskPrompt(value) => {
+                self.task_prompt = value;
+                Task::none()
+            }
+            Event::TaskSchedule(value) => {
+                self.task_schedule = value;
+                Task::none()
+            }
+            Event::TaskKind(value) => {
+                self.task_kind = value;
+                Task::none()
+            }
+            Event::TaskCancelEdit => {
+                self.task_editing = None;
+                self.task_name.clear();
+                self.task_prompt.clear();
+                self.task_schedule.clear();
+                Task::none()
+            }
+            Event::TaskEdit(id) => {
+                if let Some(task) = self.task_items.iter().find(|task| task.id == id) {
+                    self.task_name = task.name.clone();
+                    self.task_prompt = task.prompt.clone();
+                    self.task_schedule = task.schedule.clone();
+                    self.task_kind = task.schedule_kind.clone();
+                    self.task_editing = Some(id);
+                }
+                Task::none()
+            }
+            Event::TaskSelect(id) => {
+                if self.task_selected.as_deref() == Some(&id) {
+                    self.task_selected = None;
+                    self.task_runs.clear();
+                    Task::none()
+                } else {
+                    self.task_selected = Some(id.clone());
+                    self.task_runs.clear();
+                    self.load_task_runs(id)
+                }
+            }
+            Event::TaskSave => {
+                if self.task_busy {
+                    return Task::none();
+                }
+                self.task_busy = true;
+                self.task_save_pending = true;
+                let api = self.session.api.clone();
+                let name = self.task_name.clone();
+                let prompt = self.task_prompt.clone();
+                let schedule = self.task_schedule.clone();
+                let kind = self.task_kind.clone();
+                let editing = self.task_editing.clone();
+                Task::perform(
+                    async move {
+                        if let Some(id) = editing {
+                            api.update_task(&id, serde_json::json!({"name":name,"prompt":prompt,"schedule_kind":kind,"schedule":schedule})).await.map(|_| ())
+                        } else {
+                            api.create_task(&name, &prompt, &kind, &schedule)
+                                .await
+                                .map(|_| ())
+                        }
+                    },
+                    Event::TaskMutated,
+                )
+            }
+            Event::TaskRun(id) => {
+                if self.task_busy {
+                    return Task::none();
+                }
+                self.task_busy = true;
+                let api = self.session.api.clone();
+                Task::perform(
+                    async move { api.run_task(&id).await.map(|_| ()) },
+                    Event::TaskMutated,
+                )
+            }
+            Event::TaskToggle(id, enabled) => {
+                if self.task_busy {
+                    return Task::none();
+                }
+                self.task_busy = true;
+                let api = self.session.api.clone();
+                Task::perform(
+                    async move {
+                        api.update_task(&id, serde_json::json!({"enabled":enabled}))
+                            .await
+                            .map(|_| ())
+                    },
+                    Event::TaskMutated,
+                )
+            }
+            Event::TaskDelete(id) => {
+                if self.task_busy {
+                    return Task::none();
+                }
+                self.task_busy = true;
+                let api = self.session.api.clone();
+                if self.task_selected.as_deref() == Some(&id) {
+                    self.task_selected = None;
+                    self.task_runs.clear();
+                }
+                Task::perform(
+                    async move { api.delete_task(&id).await },
+                    Event::TaskMutated,
+                )
+            }
             Event::OpenAudit => {
                 self.audit_open = true;
                 self.profile_open = false;
@@ -187,6 +403,7 @@ impl Desktop {
             }
             Event::CloseAudit => {
                 self.audit_open = false;
+                self.tasks_open = false;
                 Task::none()
             }
             Event::AuditLoaded(result) => {
@@ -395,8 +612,24 @@ impl Desktop {
                         }
                     }
                     Connection::Disconnected => self.connected = false,
+                    Connection::TasksChanged => {
+                        if self.tasks_open {
+                            let mut tasks = vec![self.load_tasks()];
+                            if let Some(id) = self.task_selected.clone() {
+                                tasks.push(self.load_task_runs(id));
+                            }
+                            return Task::batch(tasks);
+                        }
+                    }
                     Connection::Connected | Connection::Changed => {
                         self.connected = true;
+                        if self.tasks_open {
+                            let mut tasks = vec![self.load_tasks(), self.act(Action::Refresh)];
+                            if let Some(id) = self.task_selected.clone() {
+                                tasks.push(self.load_task_runs(id));
+                            }
+                            return Task::batch(tasks);
+                        }
                         if self.audit_open {
                             if self.audit_busy {
                                 self.audit_dirty = true;
@@ -419,6 +652,7 @@ impl Desktop {
                     self.profile_open = false;
                     self.model_open = false;
                     self.audit_open = false;
+                    self.tasks_open = false;
                 }
                 self.act(action)
             }
@@ -525,6 +759,11 @@ impl Desktop {
                     .padding(12)
                     .style(appearance::ghost)
                     .on_press(Event::OpenAudit),
+                button("Tasks")
+                    .width(Length::Fill)
+                    .padding(12)
+                    .style(appearance::ghost)
+                    .on_press(Event::OpenTasks),
                 scrollable(list).height(Length::Fill),
                 text("YOUR IDEAS, CONNECTED")
                     .size(10)
@@ -536,6 +775,159 @@ impl Desktop {
         .width(270)
         .height(Length::Fill)
         .style(appearance::sidebar);
+
+        if self.tasks_open {
+            let mut task_controls = row![
+                button(if self.task_editing.is_some() {
+                    "Save task"
+                } else {
+                    "Create task"
+                })
+                .on_press_maybe(
+                    (!self.task_busy
+                        && !self.task_name.trim().is_empty()
+                        && !self.task_prompt.trim().is_empty()
+                        && !self.task_schedule.trim().is_empty())
+                    .then_some(Event::TaskSave)
+                )
+            ]
+            .spacing(12);
+            if self.task_editing.is_some() {
+                task_controls = task_controls.push(
+                    button("Cancel edit")
+                        .style(appearance::ghost)
+                        .on_press(Event::TaskCancelEdit),
+                );
+            }
+            let mut content = column![
+                button("Back to conversation").style(appearance::ghost).on_press(Event::CloseAudit),
+                text("Tasks").size(36),
+                text("Run Solmu later or on a recurring UTC schedule. Each task keeps its own conversation.").size(14).color(appearance::MUTED),
+                text(if self.task_editing.is_some() { "Edit task" } else { "New task" }).size(22),
+                text_input("Name", &self.task_name).on_input(Event::TaskName).style(appearance::input),
+                text_input("What should Solmu do?", &self.task_prompt).on_input(Event::TaskPrompt).style(appearance::input),
+                row![
+                    button("One time").style(appearance::ghost).on_press(Event::TaskKind("once".into())),
+                    button("Cron").style(appearance::ghost).on_press(Event::TaskKind("cron".into())),
+                    text(format!("Selected: {}", self.task_kind)).size(12).color(appearance::MUTED),
+                ].spacing(12),
+                text_input(if self.task_kind == "cron" { "0 9 * * * (UTC)" } else { "2026-10-01T09:00:00Z" }, &self.task_schedule).on_input(Event::TaskSchedule).style(appearance::input),
+                task_controls,
+                text(&self.task_error).size(13),
+                text("Scheduled tasks").size(22),
+            ].spacing(12);
+            if self.task_items.is_empty() {
+                content = content.push(text("No tasks yet.").size(14));
+            }
+            for task in &self.task_items {
+                let id = task.id.clone();
+                let mut card = column![
+                    text(&task.name).size(20),
+                    text(&task.prompt).size(14),
+                    text(format!(
+                        "{} · {} · {}",
+                        task.schedule_kind,
+                        task.schedule,
+                        if task.running {
+                            "Running"
+                        } else if task.enabled {
+                            "Scheduled"
+                        } else if task.schedule_kind == "once"
+                            && task.last_status.as_deref() == Some("completed")
+                        {
+                            "Completed"
+                        } else {
+                            "Paused"
+                        }
+                    ))
+                    .size(12)
+                    .color(appearance::MUTED),
+                    text(format!(
+                        "Next: {} · Last: {}",
+                        task.next_run_at.as_deref().unwrap_or("—"),
+                        task.last_status.as_deref().unwrap_or("Never")
+                    ))
+                    .size(12)
+                    .color(appearance::MUTED),
+                    row![
+                        button("Conversation")
+                            .style(appearance::ghost)
+                            .on_press(Event::Action(Action::Open(task.thread_id.clone()))),
+                        button("Run now").style(appearance::ghost).on_press_maybe(
+                            (!self.task_busy && !task.running)
+                                .then_some(Event::TaskRun(id.clone()))
+                        ),
+                        button(if task.enabled {
+                            "Pause"
+                        } else if task.schedule_kind == "once"
+                            && task.last_status.as_deref() == Some("completed")
+                        {
+                            "Completed"
+                        } else {
+                            "Resume"
+                        })
+                        .style(appearance::ghost)
+                        .on_press_maybe(
+                            (!self.task_busy
+                                && !task.running
+                                && !(task.schedule_kind == "once"
+                                    && task.last_status.as_deref() == Some("completed")))
+                            .then_some(Event::TaskToggle(id.clone(), !task.enabled))
+                        ),
+                        button("Edit")
+                            .style(appearance::ghost)
+                            .on_press(Event::TaskEdit(id.clone())),
+                        button("Delete").style(appearance::danger).on_press_maybe(
+                            (!self.task_busy && !task.running)
+                                .then_some(Event::TaskDelete(id.clone()))
+                        ),
+                        button(if self.task_selected.as_deref() == Some(&id) {
+                            "Hide runs"
+                        } else {
+                            "Run history"
+                        })
+                        .style(appearance::ghost)
+                        .on_press(Event::TaskSelect(id.clone())),
+                    ]
+                    .spacing(8),
+                ]
+                .spacing(8);
+                if self.task_selected.as_deref() == Some(&id) {
+                    if self.task_runs.is_empty() {
+                        card = card.push(text("No runs yet.").size(12));
+                    }
+                    for run in &self.task_runs {
+                        card = card.push(
+                            text(format!(
+                                "{} · {}{}",
+                                run.status,
+                                run.started_at,
+                                run.error
+                                    .as_ref()
+                                    .map(|e| format!(" · {e}"))
+                                    .unwrap_or_default()
+                            ))
+                            .size(12),
+                        );
+                    }
+                }
+                content = content.push(
+                    container(card)
+                        .padding(18)
+                        .width(Length::Fill)
+                        .style(|theme| appearance::message(theme, false)),
+                );
+            }
+            return row![
+                sidebar,
+                container(scrollable(content).height(Length::Fill))
+                    .padding(40)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+            ]
+            .height(Length::Fill)
+            .into();
+        }
 
         if self.audit_open {
             let mut entries = column![

@@ -62,6 +62,13 @@ load older calls.
 
 ![Web Audit](../../docs/screenshots/web-audit.png)
 
+## Scheduled tasks
+
+Choose **Tasks** in the sidebar or open `/tasks` to schedule work, manage tasks,
+and inspect run history. See [scheduled tasks](../../docs/tasks.md).
+
+![Web tasks](../../docs/screenshots/web-tasks.png)
+
 ## Skills
 
 Choose **Skills** to see installed [workspace skills](../../docs/skills.md).

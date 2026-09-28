@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
+use serde_json::json;
 use solmu_client::{Action, Api, Connection, Session, Update};
 use std::io::Write as _;
 use std::{error::Error, io};
@@ -15,8 +16,8 @@ use tokio::sync::mpsc;
 mod settings;
 
 const COMMANDS: &[&str] = &[
-    "/new", "/threads", "/open", "/model", "/profile", "/audit", "/skills", "/mcp", "/plugins",
-    "/rename", "/delete", "/help", "/stop", "/exit",
+    "/new", "/threads", "/open", "/model", "/profile", "/audit", "/tasks", "/task", "/skills",
+    "/mcp", "/plugins", "/rename", "/delete", "/help", "/stop", "/exit",
 ];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -146,6 +147,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
         animation.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut changes = session.api.changes();
         let mut connected = false;
+        let mut task_notice: Option<String> = None;
         let mut pending_refresh = false;
         let mut reported_title = String::new();
         let mut pending_enter = None;
@@ -173,7 +175,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                     reported_metadata = metadata;
                 }
             }
-            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame, &session.skills, &session.mcp, &session.plugins); } else { draw(frame, &session, &input, show_threads, scroll, spinner, connected); draw_commands(frame, &input, command_selection); })?;
+            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame, &session.skills, &session.mcp, &session.plugins); } else { draw(frame, &session, &input, show_threads, scroll, spinner, (connected, task_notice.as_deref())); draw_commands(frame, &input, command_selection); })?;
             let can_submit = !session.busy;
             tokio::select! {
                 Some(command) = bridge.receiver.recv() => {
@@ -184,8 +186,10 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                     match change {
                         Connection::ProfileChanged => { if let Some(page) = &mut page && page.refresh() { settings::load(session.api.clone(), settings_sender.clone()); } },
                         Connection::Disconnected => connected = false,
+                        Connection::TasksChanged => { if page.as_ref().is_some_and(settings::Page::is_tasks) { settings::tasks(session.api.clone(), settings_sender.clone()); } },
                         Connection::Connected | Connection::Changed => {
                             connected = true;
+                            if page.as_ref().is_some_and(settings::Page::is_tasks) { settings::tasks(session.api.clone(), settings_sender.clone()); }
                             if let Some(cursor) = page.as_ref().and_then(settings::Page::audit_cursor) {
                                 settings::audit(session.api.clone(), cursor, settings_sender.clone());
                             }
@@ -194,6 +198,14 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                     }
                 },
                 Some(event) = settings_receiver.recv() => {
+                    if let settings::Event::TaskChanged(result) = &event {
+                        match result {
+                            Ok(message) => { task_notice = Some(message.clone()); session.error = None; }
+                            Err(error) => { session.error = Some(error.clone()); task_notice = None; }
+                        }
+                        if page.as_ref().is_some_and(settings::Page::is_tasks) { settings::tasks(session.api.clone(), settings_sender.clone()); }
+                        continue;
+                    }
                     if let Some(page) = &mut page {
                         page.update(event);
                         if page.refresh_pending() { settings::load(session.api.clone(), settings_sender.clone()); }
@@ -257,6 +269,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             if text == "/exit" { break; }
                             if text == "/stop" { stop(&mut session, &mut active, &sender, &mut runtime); input.clear(); continue; }
                             if text == "/audit" { input.clear(); page = Some(settings::Page::audit()); settings::audit(session.api.clone(), None, settings_sender.clone()); continue; }
+                            if text == "/tasks" { input.clear(); page = Some(settings::Page::tasks()); settings::tasks(session.api.clone(), settings_sender.clone()); continue; }
                             if text.is_empty() { continue; }
                             if session.busy {
                                 // Live refreshes and conversation operations can
@@ -271,6 +284,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 "/skills" if argument.is_empty() => { page = Some(settings::Page::Skills { scroll: 0 }); continue; },
                                 "/mcp" if argument.is_empty() => { page = Some(settings::Page::Mcp { scroll: 0 }); continue; },
                                 "/plugins" if argument.is_empty() => { page = Some(settings::Page::Plugins { scroll: 0 }); continue; },
+                                "/task" => { let api = session.api.clone(); let sender = settings_sender.clone(); let argument = argument.to_owned(); tokio::spawn(async move { let _ = sender.send(settings::Event::TaskChanged(task_command(api, &argument).await)); }); continue; },
                                 "/profile" => { page = Some(settings::Page::profile()); settings::load(session.api.clone(), settings_sender.clone()); continue; },
                                 "/model" if argument.is_empty() => { page = Some(settings::Page::models(session.current.as_ref().and_then(|thread| thread.model.clone()))); settings::models(session.api.clone(), settings_sender.clone()); continue; },
                                 "/model" => Action::Model(if argument == "default" { None } else { Some(argument.into()) }),
@@ -279,7 +293,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 "/open" if !argument.is_empty() => { show_threads = false; Action::Open(argument.into()) },
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /skills · /mcp · /plugins · /delete · /stop · /exit".into()); continue; },
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /tasks · /task · /skills · /mcp · /plugins · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -304,8 +318,9 @@ fn draw(
     show_threads: bool,
     scroll: u16,
     spinner: usize,
-    connected: bool,
+    status: (bool, Option<&str>),
 ) {
+    let (connected, task_notice) = status;
     let embedded = std::env::var_os("SOLMU_MUXER").is_some();
     let [header, conversation, status, composer, footer] = Layout::vertical([
         Constraint::Length(3),
@@ -412,13 +427,17 @@ fn draw(
         .saturating_sub(conversation.height)
         .saturating_sub(scroll);
     frame.render_widget(paragraph.scroll((offset, 0)), conversation);
-    let notice = session.error.as_deref().unwrap_or(if session.busy {
-        SPINNER[spinner % SPINNER.len()]
-    } else if !connected {
-        "Reconnecting to live updates…"
-    } else {
-        "Ready"
-    });
+    let notice = session
+        .error
+        .as_deref()
+        .or(task_notice)
+        .unwrap_or(if session.busy {
+            SPINNER[spinner % SPINNER.len()]
+        } else if !connected {
+            "Reconnecting to live updates…"
+        } else {
+            "Ready"
+        });
     frame.render_widget(
         Paragraph::new(notice)
             .style(Style::new().fg(if session.error.is_some() {
@@ -463,6 +482,73 @@ fn command_matches(input: &str) -> Vec<&'static str> {
         .collect()
 }
 
+async fn task_command(api: Api, argument: &str) -> Result<String, String> {
+    let (verb, rest) = argument.split_once(' ').unwrap_or((argument, ""));
+    match verb {
+        "once" | "cron" => {
+            let parts: Vec<_> = rest.splitn(3, '|').map(str::trim).collect();
+            if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
+                return Err("Use /task once <RFC3339 time> | <name> | <prompt> or /task cron <five fields> | <name> | <prompt>".into());
+            }
+            let task = api.create_task(parts[1], parts[2], verb, parts[0]).await?;
+            Ok(format!("Task created: {} ({})", task.name, task.id))
+        }
+        "run" => {
+            api.run_task(rest.trim()).await?;
+            Ok("Task started".into())
+        }
+        "pause" | "resume" => {
+            let task = api
+                .update_task(rest.trim(), json!({"enabled": verb == "resume"}))
+                .await?;
+            Ok(format!(
+                "Task {}: {}",
+                if task.enabled { "resumed" } else { "paused" },
+                task.name
+            ))
+        }
+        "delete" => {
+            api.delete_task(rest.trim()).await?;
+            Ok("Task deleted".into())
+        }
+        "edit" => {
+            let parts: Vec<_> = rest.splitn(5, '|').map(str::trim).collect();
+            if parts.len() != 5 {
+                return Err(
+                    "Use /task edit <id> | <name> | <prompt> | <schedule> | <once|cron>".into(),
+                );
+            }
+            let task = api.update_task(parts[0], json!({"name": parts[1], "prompt": parts[2], "schedule": parts[3], "schedule_kind": parts[4]})).await?;
+            Ok(format!("Task updated: {}", task.name))
+        }
+        "runs" => {
+            let runs = api.task_runs(rest.trim()).await?;
+            Ok(if runs.is_empty() {
+                "No runs yet".into()
+            } else {
+                runs.iter()
+                    .take(10)
+                    .map(|run| {
+                        format!(
+                            "{} {}{}",
+                            run.started_at,
+                            run.status,
+                            run.error
+                                .as_ref()
+                                .map(|error| format!(": {error}"))
+                                .unwrap_or_default()
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" · ")
+            })
+        }
+        _ => {
+            Err("Use /task once|cron|edit|run|pause|resume|delete|runs. See docs/tasks.md.".into())
+        }
+    }
+}
+
 fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
     let commands = command_matches(input);
     if commands.is_empty() {
@@ -478,6 +564,8 @@ fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
         "/mcp" => "Show MCP servers and tools",
         "/plugins" => "Show installed plugins",
         "/audit" => "Browse saved tool calls",
+        "/tasks" => "Browse scheduled tasks",
+        "/task" => "Create and manage scheduled tasks",
         "/rename" => "Rename this conversation",
         "/delete" => "Delete this conversation",
         "/help" => "Show available commands",

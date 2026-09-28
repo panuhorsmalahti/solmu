@@ -251,3 +251,8 @@ Use `/audit` inside a Solmu pane to browse saved tool calls across conversations
 See [Audit](audit.md).
 
 ![Audit in a Muxer pane](screenshots/muxer-audit.png)
+
+Use `/tasks` in a Solmu pane to browse [scheduled tasks](tasks.md). `/task`
+creates and manages them.
+
+![Tasks in a Muxer pane](screenshots/muxer-tasks.png)

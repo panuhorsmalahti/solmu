@@ -186,6 +186,7 @@ mod plugins;
 mod profile;
 mod skills;
 mod startup;
+mod tasks;
 mod tools;
 
 #[cfg(target_os = "linux")]

@@ -36,6 +36,16 @@ test('Audit guide is published and links client screenshots', async ({ page }) =
   await expect(page.locator('article img[alt="Web Audit"]')).toBeVisible()
 })
 
+test('Scheduled tasks are introduced on the website and documented from root docs', async ({ page }) => {
+  await page.goto(home)
+  await expect(page.getByRole('link', { name: 'Explore Tasks' })).toBeVisible()
+  await page.getByRole('link', { name: 'Explore Tasks' }).click()
+  await expect(page).toHaveURL(`${home}docs/tasks/`)
+  await expect(page.getByRole('heading', { name: 'Scheduled tasks' })).toBeVisible()
+  await expect(page.locator('article')).toContainText('/task cron')
+  await expect(page.locator('article img[alt="Tasks on the web"]')).toBeVisible()
+})
+
 test('Boxer guide uses default backend settings and describes explicit Linux network routes', async ({ page }) => {
   await page.goto(`${home}docs/boxer/`)
   const example = page.locator('article pre').filter({ hasText: 'boxer --profile solmu --cwd /path/to/project -- solmu-backend' })

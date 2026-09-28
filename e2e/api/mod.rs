@@ -44,6 +44,7 @@ mod mcp;
 mod mcp_transports;
 mod plugin_validation;
 mod plugins;
+mod scheduled_tasks;
 mod skills;
 mod tools;
 mod web;

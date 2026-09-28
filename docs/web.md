@@ -64,6 +64,15 @@ results; older calls load as you scroll. The list updates automatically. See
 
 ![Web Audit](screenshots/web-audit.png)
 
+## Scheduled tasks
+
+Choose **Tasks** in the sidebar or open `/tasks`. Create a one-time or recurring
+task, edit or pause it, run it now, see its run history, and open its saved
+conversation. The page updates automatically while preserving your form draft.
+See [scheduled tasks](tasks.md).
+
+![Web tasks](screenshots/web-tasks.png)
+
 ## Workspace tools
 
 Solmu can read, edit, and search files and run Bash commands in the thread's

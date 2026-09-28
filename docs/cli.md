@@ -51,6 +51,16 @@ and Esc to return. See [Audit](audit.md).
 
 ![CLI Audit](screenshots/cli-audit.png)
 
+## Scheduled tasks
+
+Use `/tasks` to browse scheduled work. `/task once <RFC3339 time> | <name> | <prompt>`
+creates a one-time task; `/task cron <five fields> | <name> | <prompt>` creates a
+recurring task. `/task run`, `pause`, `resume`, `runs`, and `delete` take a task ID.
+Use `/task edit <id> | <name> | <prompt> | <schedule> | <once|cron>` to change it.
+See [scheduled tasks](tasks.md).
+
+![CLI tasks](screenshots/cli-tasks.png)
+
 ## Workspace tools
 
 Solmu can read, edit, and search files and run Bash commands in the thread's

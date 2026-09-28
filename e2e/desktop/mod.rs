@@ -121,4 +121,5 @@ mod models;
 mod plugins;
 mod profile;
 mod skills;
+mod tasks;
 mod tools;

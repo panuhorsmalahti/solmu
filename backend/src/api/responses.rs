@@ -9,7 +9,7 @@ use crate::{
 use axum::{
     extract::{Path, State},
     response::{
-        Sse,
+        IntoResponse, Sse,
         sse::{Event, KeepAlive},
     },
 };
@@ -23,6 +23,54 @@ use std::{convert::Infallible, time::Duration};
 #[serde(deny_unknown_fields)]
 pub struct CreateResponse {
     message_id: String,
+}
+
+pub async fn run_scheduled(
+    state: AppState,
+    thread_id: String,
+    message_id: String,
+) -> Result<String, String> {
+    let response = create(
+        State(state.clone()),
+        Path(thread_id),
+        ApiJson(CreateResponse {
+            message_id: message_id.clone(),
+        }),
+    )
+    .await
+    .map_err(|error| error.message)?;
+    let mut stream = response.into_response().into_body().into_data_stream();
+    let mut tail = String::new();
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|error| error.to_string())?;
+        tail.push_str(&String::from_utf8_lossy(&bytes));
+        if tail.len() > 16_384 {
+            let mut start = tail.len() - 8192;
+            while !tail.is_char_boundary(start) {
+                start += 1;
+            }
+            tail.drain(..start);
+        }
+    }
+    let assistant: Option<String> =
+        sqlx::query_scalar("SELECT id FROM messages WHERE reply_to_id=? AND role='assistant'")
+            .bind(&message_id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|error| error.to_string())?;
+    assistant.ok_or_else(|| {
+        tail.lines()
+            .rev()
+            .find_map(|line| {
+                serde_json::from_str::<serde_json::Value>(line.strip_prefix("data: ")?)
+                    .ok()?
+                    .get("error")?
+                    .get("message")?
+                    .as_str()
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "The scheduled agent turn did not complete".into())
+    })
 }
 fn event(kind: &str, data: impl Serialize) -> Event {
     Event::default()
@@ -118,7 +166,7 @@ pub async fn create(
         let _permit=permit;
         let mut recovery=Recovery{state:state.clone(),thread_id:thread_id.clone(),ids:Vec::new()};
         yield Ok(event("start",json!({"message_id":input.message_id})));
-        let context=Context{workspace:workspace.into(),skill_roots:skills.roots,cancellation:token.clone()};
+        let context=Context{state:state.clone(),workspace:workspace.into(),skill_roots:skills.roots,cancellation:token.clone()};
         let mut pending=Some(first);
         let mut total_calls=0;
         for round in 0..16 {
