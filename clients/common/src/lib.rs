@@ -92,7 +92,15 @@ pub struct Plugin {
 impl PluginCatalog {
     pub fn text(&self) -> String {
         let mut lines = vec![
-            format!("{} plugins installed", self.items.len()),
+            format!(
+                "{} {} installed",
+                self.items.len(),
+                if self.items.len() == 1 {
+                    "plugin"
+                } else {
+                    "plugins"
+                }
+            ),
             String::new(),
         ];
         if self.items.is_empty() {

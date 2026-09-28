@@ -14,6 +14,7 @@ async fn solmu_panes_show_workspace_plugins() {
         .wait("No plugins installed in this workspace.")
         .await;
     solmu_e2e::support::plugins::install(backend.directory.path(), false);
+    terminal.wait("1 plugin installed").await;
     terminal.wait("Tools for this project").await;
     if std::env::var_os("SOLMU_CAPTURE_SCREENSHOTS").is_some() {
         solmu_e2e::support::capture_terminal(
