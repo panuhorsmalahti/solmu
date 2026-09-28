@@ -47,10 +47,20 @@ restart. Earlier cron occurrences are not replayed; the next future occurrence
 is scheduled. Tasks
 that were interrupted by shutdown are marked interrupted in their run history.
 
+## Tasks in each client
+
+### Terminal client
+
 ![Tasks in the CLI](screenshots/cli-tasks.png)
+
+### Desktop client
 
 ![Tasks in the desktop app](screenshots/desktop-tasks.png)
 
+### Web client
+
 ![Tasks on the web](screenshots/web-tasks.png)
+
+### Muxer
 
 ![Tasks in Muxer](screenshots/muxer-tasks.png)

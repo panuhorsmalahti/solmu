@@ -42,9 +42,15 @@ See [model settings](configuration.md) and [client screenshots](clients.md).
 
 ## Profile screens
 
+### Terminal client
+
 ![Solmu CLI Profile](screenshots/cli-profile.png)
 
+### Desktop client
+
 ![Solmu desktop Profile](screenshots/desktop-profile.png)
+
+### Web client
 
 ![Solmu web Profile](screenshots/web-profile.png)
 

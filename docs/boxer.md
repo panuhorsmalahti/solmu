@@ -38,6 +38,31 @@ and proxy settings remain available. `SSH_AUTH_SOCK` and unrelated secrets are
 not forwarded. Provider keys are still visible to the launched program; this
 is environment filtering, not credential brokering.
 
+### Run Claude Code or Codex
+
+Install the agent's CLI first, then start it in a project on Linux or macOS:
+
+```sh
+boxer --profile codex --cwd /path/to/project
+boxer --profile claude-code --cwd /path/to/project
+```
+
+These profiles start `codex` and `claude`, respectively. They allow writes to
+the project and keep each agent's login and settings in its own directory under
+`~/.boxer/profiles/`. Sign in the first time you run each profile. A login in
+your usual CLI home is separate from its Boxer login. The profiles forward the
+corresponding provider credentials if they are set, along with terminal and
+proxy settings. They leave unrelated environment variables out. All network
+requests remain allowed by default.
+
+If your CLI or its dependencies are installed outside the system runtime and
+project, grant the installation directory with `--read PATH`. Use `--write PATH`
+for any additional folder the agent needs to change. `boxer --profile codex
+--cwd /path/to/project --print-policy` shows the grants before launch. You can
+also put a different program after `--` while keeping the profile's permissions.
+The workspace profiles require Linux or macOS; native Windows currently rejects
+filesystem restrictions.
+
 Use `--workspace` for the same filesystem permissions without the Solmu-specific
 environment defaults. Add `--clean-env` to filter its environment, or
 `--pass-env NAME` to forward an additional variable. These options work with

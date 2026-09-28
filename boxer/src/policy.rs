@@ -46,6 +46,21 @@ pub enum Network {
     Proxy,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum AgentProfile {
+    Codex,
+    ClaudeCode,
+}
+
+impl AgentProfile {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Codex => "codex",
+            Self::ClaudeCode => "claude-code",
+        }
+    }
+}
+
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Policy {
@@ -67,6 +82,10 @@ pub struct Policy {
     pub isolated: bool,
     #[serde(skip)]
     pub solmu: bool,
+    #[serde(skip)]
+    pub agent: Option<AgentProfile>,
+    #[serde(skip)]
+    pub profile_home: Option<PathBuf>,
 }
 
 impl Policy {
@@ -238,8 +257,10 @@ impl Policy {
         if self.clean_env || self.isolated {
             command.env_clear();
             for (name, value) in std::env::vars_os() {
-                if forwarded(&name.to_string_lossy())
-                    || self.pass_env.iter().any(|key| name == key.as_str())
+                if self.agent.map_or_else(
+                    || forwarded(&name.to_string_lossy()),
+                    |agent| forwarded_for_agent(&name.to_string_lossy(), agent),
+                ) || self.pass_env.iter().any(|key| name == key.as_str())
                 {
                     command.env(name, value);
                 }
@@ -251,6 +272,17 @@ impl Policy {
                 .expect("resolved workspace")
                 .to_owned();
             command.env("SOLMU_WORKSPACE", workspace);
+        }
+        if let (Some(agent), Some(home)) = (self.agent, &self.profile_home) {
+            command.env("HOME", home).env("TMPDIR", home.join("tmp"));
+            match agent {
+                AgentProfile::Codex => {
+                    command.env("CODEX_HOME", home.join(".codex"));
+                }
+                AgentProfile::ClaudeCode => {
+                    command.env("CLAUDE_CONFIG_DIR", home.join(".claude"));
+                }
+            }
         }
     }
 }
@@ -289,6 +321,48 @@ pub fn forwarded(name: &str) -> bool {
         || name.starts_with("SOLMU_")
         || name.ends_with("_API_KEY")
         || name.ends_with("_AUTH_TOKEN")
+}
+
+fn forwarded_for_agent(name: &str, agent: AgentProfile) -> bool {
+    if matches!(
+        name,
+        "PATH"
+            | "TERM"
+            | "LANG"
+            | "LC_ALL"
+            | "COLORTERM"
+            | "SYSTEMROOT"
+            | "SystemRoot"
+            | "WINDIR"
+            | "HTTP_PROXY"
+            | "HTTPS_PROXY"
+            | "ALL_PROXY"
+            | "NO_PROXY"
+            | "http_proxy"
+            | "https_proxy"
+            | "all_proxy"
+            | "no_proxy"
+            | "SSL_CERT_FILE"
+    ) {
+        return true;
+    }
+    match agent {
+        AgentProfile::Codex => matches!(
+            name,
+            "OPENAI_API_KEY"
+                | "OPENAI_BASE_URL"
+                | "CODEX_API_KEY"
+                | "CODEX_ACCESS_TOKEN"
+                | "CODEX_CA_CERTIFICATE"
+                | "RUST_LOG"
+        ),
+        AgentProfile::ClaudeCode => {
+            name.starts_with("CLAUDE_")
+                || name.starts_with("ANTHROPIC_")
+                || name.starts_with("AWS_")
+                || name.starts_with("VERTEX_")
+        }
+    }
 }
 
 pub fn executable(command: &Command) -> io::Result<PathBuf> {

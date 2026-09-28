@@ -109,10 +109,18 @@ configuration `issues`. Server entries contain `name`, `source`, `transport`,
 WebSocket events use `{ "type": "mcp_changed", "thread_id": "..." }` when status
 or tools change. Clients fetch the catalog again on that event and reconnect.
 
+### Terminal client
+
 ![CLI MCP status](screenshots/cli-mcp.png)
+
+### Desktop client
 
 ![Desktop MCP status](screenshots/desktop-mcp.png)
 
+### Web client
+
 ![Web MCP status](screenshots/web-mcp.png)
+
+### Muxer
 
 ![MCP in a Muxer pane](screenshots/muxer-mcp.png)

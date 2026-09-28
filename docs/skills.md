@@ -89,10 +89,18 @@ means fetch that thread's catalog again.
 
 ## Screenshots
 
+### Terminal client
+
 ![CLI workspace skills](screenshots/cli-skills.png)
+
+### Desktop client
 
 ![Desktop workspace skills](screenshots/desktop-skills.png)
 
+### Web client
+
 ![Web workspace skills](screenshots/web-skills.png)
+
+### Muxer
 
 ![Skills in a Muxer Solmu pane](screenshots/muxer-skills.png)

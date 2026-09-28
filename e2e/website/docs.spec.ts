@@ -30,11 +30,29 @@ test('plugins guide is published from root docs', async ({ page }) => {
 
 test('Audit guide is published and links client screenshots', async ({ page }) => {
   await page.goto(`${home}docs/audit/`)
-  await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Audit', exact: true })).toBeVisible()
   await expect(page.locator('article')).toContainText('newest first')
   await expect(page.locator('article')).toContainText('prompt cache hit rate')
   await expect(page.locator('article')).toContainText('PageUp')
+  expect(await page.locator('article h3').allTextContents()).toEqual(['Terminal client', 'Desktop client', 'Web client', 'Muxer'])
   await expect(page.locator('article img[alt="Web Audit"]')).toBeVisible()
+})
+
+test('multi-client guides label each screenshot with its client', async ({ page }) => {
+  for (const guide of ['audit', 'mcp', 'plugins', 'skills', 'tasks']) {
+    await page.goto(`${home}docs/${guide}/`)
+    const article = page.locator('article')
+    for (const client of ['Terminal client', 'Desktop client', 'Web client', 'Muxer']) {
+      const heading = article.getByRole('heading', { level: 3, name: client, exact: true })
+      await expect(heading).toBeVisible()
+      await expect(heading.locator('xpath=following-sibling::p[1]/img')).toBeVisible()
+    }
+  }
+  await page.goto(`${home}docs/profile/`)
+  for (const client of ['Terminal client', 'Desktop client', 'Web client']) {
+    const heading = page.locator('article').getByRole('heading', { level: 3, name: client, exact: true })
+    await expect(heading.locator('xpath=following-sibling::p[1]/img')).toBeVisible()
+  }
 })
 
 test('Scheduled tasks are introduced on the website and documented from root docs', async ({ page }) => {
@@ -57,6 +75,9 @@ test('Boxer guide uses default backend settings and describes explicit Linux net
   await expect(page.locator('article')).toContainText('--allow-host api.openai.com --publish 3000')
   await expect(page.locator('article')).toContainText('--allow-local 127.0.0.1:3000')
   await expect(page.locator('article')).toContainText('Network routing does not yet provide credential injection')
+  await expect(page.getByRole('heading', { name: 'Run Claude Code or Codex' })).toBeVisible()
+  await expect(page.locator('article pre').filter({ hasText: 'boxer --profile codex --cwd /path/to/project' })).toBeVisible()
+  await expect(page.locator('article pre').filter({ hasText: 'boxer --profile claude-code --cwd /path/to/project' })).toBeVisible()
 })
 
 test('Docs is linked from the website and every Markdown guide is published', async ({ page }) => {

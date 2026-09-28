@@ -45,10 +45,20 @@ See the [Agent Plugins specification](https://agent-plugins.org/specification)
 for package format details. Solmu reads Agent Plugins 1.0.0 packages from this
 workspace location; plugin installation and updates are managed by you.
 
+## Plugins in each client
+
+### Terminal client
+
 ![CLI plugins](screenshots/cli-plugins.png)
+
+### Desktop client
 
 ![Desktop plugins](screenshots/desktop-plugins.png)
 
+### Web client
+
 ![Web plugins](screenshots/web-plugins.png)
+
+### Muxer
 
 ![Plugins in a Muxer pane](screenshots/muxer-plugins.png)

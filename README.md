@@ -143,6 +143,8 @@ requests are allowed by default. On Linux/macOS, `--profile solmu` restricts fil
 to a writable project and read-only runtime files. Add explicit read/write grants
 or reuse a JSON policy; preview permissions with `--print-policy` or check that
 your OS can enforce them with `--check` before launching your agent.
+Profiles for Codex and Claude Code launch those installed CLIs with separate
+login homes and the same project access.
 Use `--network deny` for offline commands, including their subprocesses.
 On Linux, `--isolated --network proxy` permits only explicit remote and local
 routes; publish the boxed backend on port 3000 to use normal client settings.

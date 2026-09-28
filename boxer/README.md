@@ -35,6 +35,17 @@ boxer --profile solmu --cwd /path/to/project -- solmu-backend
 boxer --workspace --cwd /path/to/project --read /path/to/reference -- another-agent
 ```
 
+Boxer also has profiles for installed Codex and Claude Code CLIs on Linux/macOS:
+
+```sh
+boxer --profile codex --cwd /path/to/project
+boxer --profile claude-code --cwd /path/to/project
+```
+
+Each profile keeps its own login and settings under `~/.boxer/profiles/`.
+Sign in when you first run it. See [agent profiles](../docs/boxer.md#run-claude-code-or-codex)
+for permissions and installation notes.
+
 The Solmu profile also filters the environment and sets the backend's default
 workspace. Tools run in the backend, so launch the backend inside Boxer to protect
 their file access. A boxed client uses its existing backend's permissions.

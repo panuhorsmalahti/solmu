@@ -31,10 +31,20 @@ The [API](api.md) provides cursor paging at `GET /api/v1/audit`. Each page has
 `before=<next_cursor>`.
 The default page size is 25 and the maximum is 100.
 
+## Audit in each client
+
+### Terminal client
+
 ![CLI Audit](screenshots/cli-audit.png)
+
+### Desktop client
 
 ![Desktop Audit](screenshots/desktop-audit.png)
 
+### Web client
+
 ![Web Audit](screenshots/web-audit.png)
+
+### Muxer
 
 ![Audit in Muxer](screenshots/muxer-audit.png)
