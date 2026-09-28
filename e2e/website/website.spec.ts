@@ -6,6 +6,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Good ideas')
   for (const feature of ['See it take shape', 'Follow your threads', 'Bring your model', 'Make it yours', 'Put ideas to work', 'See every action', 'Put work on the calendar', 'Add project skills', 'Connect your tools', 'Bring plugins along']) await expect(page.getByRole('heading', { name: feature })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Explore Audit' })).toHaveAttribute('href', 'docs/audit/')
+  await expect(page.getByText("last 24 hours' prompt cache hit rate", { exact: false })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Explore Tasks' })).toHaveAttribute('href', 'docs/tasks/')
   await expect(page.getByRole('link', { name: 'Use skills' })).toHaveAttribute('href', 'docs/skills/')
   await expect(page.getByRole('link', { name: 'Connect MCP' })).toHaveAttribute('href', 'docs/mcp/')

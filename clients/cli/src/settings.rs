@@ -6,8 +6,8 @@ use ratatui::{
     widgets::{Block, Paragraph, Wrap},
 };
 use solmu_client::{
-    Api, AuditPage, AuditRun, McpCatalog, ModelCatalog, PluginCatalog, Profile, ScheduledTask,
-    SkillCatalog,
+    Api, AuditPage, AuditRun, CacheSummary, McpCatalog, ModelCatalog, PluginCatalog, Profile,
+    ScheduledTask, SkillCatalog,
 };
 use tokio::sync::mpsc;
 
@@ -21,6 +21,7 @@ pub enum Page {
     },
     Audit {
         items: Vec<AuditRun>,
+        cache: Option<CacheSummary>,
         starts: Vec<Option<i64>>,
         page: usize,
         next: Option<i64>,
@@ -120,6 +121,7 @@ impl Page {
     pub fn audit() -> Self {
         Self::Audit {
             items: Vec::new(),
+            cache: None,
             starts: vec![None],
             page: 0,
             next: None,
@@ -223,6 +225,7 @@ impl Page {
         if let (
             Self::Audit {
                 items,
+                cache,
                 next,
                 selected,
                 busy,
@@ -236,6 +239,7 @@ impl Page {
             match result {
                 Ok(value) => {
                     *items = value.items.clone();
+                    *cache = Some(value.cache_24h.clone());
                     *next = value.next_cursor;
                     *selected = (*selected).min(items.len().saturating_sub(1));
                     error.clear();
@@ -601,6 +605,7 @@ impl Page {
         }
         if let Self::Audit {
             items,
+            cache,
             page,
             next,
             selected,
@@ -612,13 +617,30 @@ impl Page {
         } = self
         {
             let [header, list, detail, footer] = Layout::vertical([
-                Constraint::Length(4),
+                Constraint::Length(7),
                 Constraint::Min(6),
                 Constraint::Length(12),
                 Constraint::Length(2),
             ])
             .areas(frame.area());
-            frame.render_widget(Paragraph::new(format!(" SOLMU / AUDIT\n\nTool calls across every conversation · newest first · page {}", page + 1)).green(), header);
+            let (rate, counts) = cache.as_ref().map_or(
+                ("—".into(), "No token usage reported yet".into()),
+                |cache| {
+                    (
+                        cache
+                            .hit_rate_percent
+                            .map_or("—".into(), |rate| format!("{rate:.1}%")),
+                        format!(
+                            "Cached {} · Input {} · Output {} · Cache writes {}",
+                            cache.cached_input_tokens,
+                            cache.input_tokens,
+                            cache.output_tokens,
+                            cache.cache_creation_input_tokens
+                        ),
+                    )
+                },
+            );
+            frame.render_widget(Paragraph::new(format!(" SOLMU / AUDIT\n\nTool calls across every conversation · newest first · page {}\n\n Prompt cache · last 24 hours: {rate}\n {counts}", page + 1)).green(), header);
             let lines = if items.is_empty() {
                 vec![if *busy {
                     "Loading tool calls…".into()

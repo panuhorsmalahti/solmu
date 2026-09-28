@@ -260,6 +260,16 @@ pub struct AuditRun {
 pub struct AuditPage {
     pub items: Vec<AuditRun>,
     pub next_cursor: Option<i64>,
+    pub cache_24h: CacheSummary,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct CacheSummary {
+    pub requests: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cached_input_tokens: i64,
+    pub cache_creation_input_tokens: i64,
+    pub hit_rate_percent: Option<f64>,
 }
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScheduledTask {

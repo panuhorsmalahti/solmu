@@ -32,6 +32,7 @@ test('Audit guide is published and links client screenshots', async ({ page }) =
   await page.goto(`${home}docs/audit/`)
   await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible()
   await expect(page.locator('article')).toContainText('newest first')
+  await expect(page.locator('article')).toContainText('prompt cache hit rate')
   await expect(page.locator('article')).toContainText('PageUp')
   await expect(page.locator('article img[alt="Web Audit"]')).toBeVisible()
 })

@@ -12,6 +12,9 @@ async fn solmu_panes_can_browse_audit_tool_calls() {
     terminal.wait("Ready").await;
     terminal.command("/audit");
     terminal.wait("Tool calls across every conversation").await;
+    terminal.wait("Prompt cache").await;
+    terminal.wait("40.0%").await;
+    terminal.send(b"\x1b[B");
     terminal.send(b"\r");
     terminal.wait("Arguments:").await;
     if std::env::var_os("SOLMU_CAPTURE_SCREENSHOTS").is_some() {

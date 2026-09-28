@@ -144,7 +144,7 @@ pub async fn create(
         registry.register(tool);
     }
     let mut reply = tokio::select! {
-        result=state.llm.stream(&history,&profile.system_prompt,model.as_deref(),registry.definitions())=>result?,
+        result=state.llm.stream(&thread_id,&history,&profile.system_prompt,model.as_deref(),registry.definitions())=>result?,
         _=token.cancelled()=>return Err(stopped()),
     };
     // Fail before sending HTTP 200 when the provider cannot begin a response.
@@ -189,6 +189,13 @@ pub async fn create(
                     _=>{yield Ok(failed("The provider stream failed or ended before completion"));return;},
                 }
             };
+            if let Some(usage) = end.captured_usage.as_ref() {
+                if let Err(error) = crate::storage::usage::save(&state.pool, &thread_id, Some(&input.message_id), "response", &reply.model_iden, usage).await {
+                    eprintln!("Cannot save LLM usage for {thread_id}: {error:?}");
+                } else {
+                    state.changed(&thread_id);
+                }
+            }
             let calls=end.captured_tool_calls().unwrap_or_default().into_iter().cloned().collect::<Vec<_>>();
             if calls.is_empty() {
                 if content.trim().is_empty() {yield Ok(failed("The provider did not complete a text response"));return;}
@@ -232,7 +239,7 @@ pub async fn create(
             if round==15 {yield Ok(failed("The response reached the 16-round tool limit"));return;}
             reply=tokio::select! {
                 _=token.cancelled()=>{yield Ok(event("stopped",json!({"message_id":input.message_id})));return;},
-                result=state.llm.stream(&history,&profile.system_prompt,model.as_deref(),registry.definitions())=>match result {
+                result=state.llm.stream(&thread_id,&history,&profile.system_prompt,model.as_deref(),registry.definitions())=>match result {
                     Ok(reply)=>reply,
                     Err(_)=>{yield Ok(failed("The provider failed after the tool results"));return;},
                 },

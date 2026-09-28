@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { request, type AuditPage, type AuditRun } from '@/lib/api'
+import { request, type AuditPage, type AuditRun, type CacheSummary } from '@/lib/api'
 
 const PAGE_SIZE = 25
 
@@ -9,6 +9,7 @@ export default function Audit({ revision }: { revision: number }) {
   const [cursor, setCursor] = useState<number | null>(null)
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
+  const [cache, setCache] = useState<CacheSummary | null>(null)
   const itemsRef = useRef<AuditRun[]>([])
   const cursorRef = useRef<number | null>(null)
   const generation = useRef(0)
@@ -25,14 +26,17 @@ export default function Audit({ revision }: { revision: number }) {
         const count = Math.max(PAGE_SIZE, itemsRef.current.length)
         const fresh: AuditRun[] = []
         let next: number | null = null
+        let latestCache: CacheSummary | null = null
         do {
           const page: AuditPage = await request(`/audit?limit=${PAGE_SIZE}${next === null ? '' : `&before=${next}`}`)
+          latestCache = page.cache_24h
           fresh.push(...page.items)
           next = page.next_cursor
         } while (next !== null && fresh.length < count)
         if (!disposed && current === generation.current) {
           itemsRef.current = fresh; cursorRef.current = next
           setItems(fresh); setCursor(next); setError('')
+          setCache(latestCache)
         }
       } catch (cause) {
         if (!disposed && current === generation.current) setError(cause instanceof Error ? cause.message : 'Cannot load audit')
@@ -65,6 +69,10 @@ export default function Audit({ revision }: { revision: number }) {
   return <section className="audit-page" aria-label="Tool call audit" ref={scroll}>
     <div className="audit-inner"><span className="eyebrow">THE WORK BEHIND THE WORK</span><h1>Audit</h1>
       <p className="audit-intro">Tool calls from every conversation, newest first. Open a call to inspect its arguments and result.</p>
+      <section className="audit-cache" aria-label="Prompt cache, last 24 hours">
+        <div><span className="eyebrow">PROMPT CACHE · LAST 24 HOURS</span><strong>{cache?.hit_rate_percent == null ? '—' : `${cache.hit_rate_percent.toFixed(1)}%`}</strong><small>{cache?.hit_rate_percent == null ? 'No token usage reported yet' : 'Cached input tokens / all reported input tokens'}</small></div>
+        <dl><div><dt>Cached input</dt><dd>{(cache?.cached_input_tokens ?? 0).toLocaleString()}</dd></div><div><dt>Input</dt><dd>{(cache?.input_tokens ?? 0).toLocaleString()}</dd></div><div><dt>Output</dt><dd>{(cache?.output_tokens ?? 0).toLocaleString()}</dd></div><div><dt>Cache writes</dt><dd>{(cache?.cache_creation_input_tokens ?? 0).toLocaleString()}</dd></div></dl>
+      </section>
       {items.length === 0 && !busy && !error && <p>No tool calls yet.</p>}
       {items.map(item => <article className="audit-card" key={item.id} data-audit-id={item.id}>
         <details><summary><span className="audit-name">{item.name}</span><span className={`audit-status audit-${item.status}`}>{item.status}</span><span className="audit-time">{new Date(item.created_at).toLocaleString()}</span></summary>

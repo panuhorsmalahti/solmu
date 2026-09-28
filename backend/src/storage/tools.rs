@@ -30,6 +30,7 @@ pub struct AuditRun {
 pub struct AuditPage {
     pub items: Vec<AuditRun>,
     pub next_cursor: Option<i64>,
+    pub cache_24h: super::usage::CacheSummary,
 }
 fn decode(error: serde_json::Error) -> StoreError {
     StoreError::Database(sqlx::Error::Decode(Box::new(error)))
@@ -70,7 +71,12 @@ pub async fn audit(
         });
     }
     let next_cursor = more.then(|| items.last().expect("page with older rows").sequence);
-    Ok(AuditPage { items, next_cursor })
+    let cache_24h = super::usage::last_24_hours(pool).await?;
+    Ok(AuditPage {
+        items,
+        next_cursor,
+        cache_24h,
+    })
 }
 pub async fn create_turn(
     pool: &SqlitePool,

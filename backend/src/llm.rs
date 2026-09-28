@@ -2,9 +2,9 @@ use std::{error::Error, time::Duration};
 
 use axum::http::StatusCode;
 use genai::{
-    Client, ServiceTarget,
+    Client, ModelIden, ServiceTarget,
     adapter::AdapterKind,
-    chat::{ChatMessage, ChatOptions, ChatRequest, ChatStreamResponse, Tool},
+    chat::{CacheControl, ChatMessage, ChatOptions, ChatRequest, ChatStreamResponse, Tool, Usage},
     resolver::{Endpoint, ProviderConfig, ServiceTargetResolver},
 };
 
@@ -20,6 +20,12 @@ pub struct ModelCatalog {
 pub struct Model {
     pub id: String,
     pub name: String,
+}
+
+pub struct GeneratedTitle {
+    pub text: String,
+    pub model: ModelIden,
+    pub usage: Usage,
 }
 
 #[derive(Clone)]
@@ -160,6 +166,7 @@ impl Llm {
 
     pub async fn stream(
         &self,
+        cache_key: &str,
         history: &[ChatMessage],
         system_prompt: &str,
         model: Option<&str>,
@@ -174,18 +181,28 @@ impl Llm {
         } else {
             self.main_model().await?
         };
-        let messages = [
+        let mut messages: Vec<ChatMessage> = [
             ChatMessage::system(crate::prompt::INTERNAL_SYSTEM_PROMPT),
             ChatMessage::system(system_prompt),
         ]
         .into_iter()
         .chain(history.iter().cloned())
         .collect();
+        if self.provider == Some(AdapterKind::Anthropic) {
+            messages[1] = messages[1].clone().with_options(CacheControl::Ephemeral);
+            if let Some(last) = messages.last_mut() {
+                *last = last.clone().with_options(CacheControl::Ephemeral);
+            }
+        }
         let request = ChatRequest::new(messages).with_tools(tools);
-        let options = ChatOptions::default()
+        let mut options = ChatOptions::default()
             .with_capture_content(true)
             .with_capture_tool_calls(true)
-            .with_capture_reasoning_content(true);
+            .with_capture_reasoning_content(true)
+            .with_capture_usage(true);
+        if self.provider == Some(AdapterKind::OpenAI) {
+            options = options.with_prompt_cache_key(format!("solmu:{cache_key}"));
+        }
         tokio::time::timeout(
             Duration::from_secs(30),
             self.client
@@ -196,7 +213,7 @@ impl Llm {
         .map_err(|_| provider_error())
     }
 
-    pub async fn title(&self, content: &str) -> Option<String> {
+    pub async fn title(&self, content: &str) -> Option<GeneratedTitle> {
         let main = self.main_model().await.ok()?;
         let cheap = self.title_model.as_ref().map(|model| {
             if model.contains("::") {
@@ -241,7 +258,11 @@ impl Llm {
                     .take(80)
                     .collect::<String>();
                 if !title.is_empty() {
-                    return Some(title);
+                    return Some(GeneratedTitle {
+                        text: title,
+                        model: response.model_iden,
+                        usage: response.usage,
+                    });
                 }
             }
         }

@@ -1,5 +1,6 @@
 #[tokio::main(worker_threads = 2)]
 async fn main() {
+    // Browser tests share the same provider fixture as the Rust E2E clients.
     let backend = solmu_e2e::support::Backend::start().await;
     if std::env::var_os("SOLMU_FIXTURE_WEB").is_some() {
         let source = solmu_e2e::support::root().join("clients/web/dist");

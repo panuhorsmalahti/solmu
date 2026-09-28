@@ -249,6 +249,7 @@ Use `/plugins` in a Solmu pane to see installed [Agent Plugins](plugins.md).
 
 Use `/audit` inside a Solmu pane to browse saved tool calls across conversations.
 See [Audit](audit.md).
+Its header shows the last 24 hours' prompt cache hit rate and token counts.
 
 ![Audit in a Muxer pane](screenshots/muxer-audit.png)
 

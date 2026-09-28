@@ -24,7 +24,7 @@ See the [client overview](clients.md) for screenshots and shared features.
 ## Work with Solmu
 
 - [Profile](profile.md): edit the system prompt and default model.
-- [Audit](audit.md): review tool calls across conversations in order.
+- [Audit](audit.md): review tool calls and the prompt cache hit rate.
 - [Scheduled tasks](tasks.md): run Solmu once later or on a recurring schedule.
 - [Workspaces](workspaces.md): choose the folder Solmu works in.
 - [Tools](tools.md): read, search, edit, and write files or run commands.

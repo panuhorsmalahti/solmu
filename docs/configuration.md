@@ -69,6 +69,11 @@ Set `LLM_MODEL` to your preferred model. Otherwise Solmu uses the first model
 listed by the provider adapter. Set `LLM_ENDPOINT` to override the provider's
 native API base URL, including its API path (for example `/v1/` for OpenAI).
 
+Solmu requests prompt caching automatically for OpenAI and Anthropic. No extra
+setting is needed. [Audit](audit.md) shows the cache hit rate and provider
+reported token counts for the last 24 hours. Other providers can still report
+token counts, though caching depends on their own support.
+
 You can change models without restarting: set the optional Model field in
 [Profile](profile.md), or select a model for an individual thread. The order is
 thread model, then Profile model, then `LLM_MODEL` or provider discovery. An

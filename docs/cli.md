@@ -48,6 +48,7 @@ See the [CLI README](../clients/cli/README.md) for the full setup.
 `/audit` opens saved tool calls across all conversations, newest first. Use
 Up/Down to select, Enter to expand details, PageUp/PageDown for older pages,
 and Esc to return. See [Audit](audit.md).
+The Audit header also shows the last 24 hours' prompt cache hit rate and token counts.
 
 ![CLI Audit](screenshots/cli-audit.png)
 

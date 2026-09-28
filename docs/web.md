@@ -61,6 +61,7 @@ For source builds and web development, see [development](development.md).
 Choose **Audit** below Profile or open `/audit`. Expand a call for arguments and
 results; older calls load as you scroll. The list updates automatically. See
 [Audit](audit.md).
+The page also shows the last 24 hours' prompt cache hit rate and token counts.
 
 ![Web Audit](screenshots/web-audit.png)
 

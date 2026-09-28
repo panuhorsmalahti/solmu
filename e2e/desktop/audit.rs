@@ -11,8 +11,9 @@ async fn desktop_audit_pages_expands_calls_and_updates_without_losing_draft() {
     ui.step("type \"Keep my draft\"").await;
     ui.step("click \"Audit\"").await;
     ui.wait("Page 1").await;
-    ui.wait("Bash · completed").await;
-    ui.step("click \"Bash · completed\"").await;
+    ui.wait("40.0%").await;
+    ui.wait("Grep · completed").await;
+    ui.step("click \"Grep · completed\"").await;
     ui.wait("Arguments").await;
     ui.wait("Result").await;
     ui.wait_enabled("Next").await;

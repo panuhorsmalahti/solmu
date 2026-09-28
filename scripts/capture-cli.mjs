@@ -9,10 +9,10 @@ if (!['cli', 'cli-profile', 'cli-skills', 'cli-mcp', 'cli-plugins', 'cli-audit',
 const browser = await chromium.launch()
 try {
   const page = await browser.newPage({ viewport: { width: client.startsWith('muxer') ? 1700 : 1000, height: client.startsWith('muxer') ? 848 : 688 }, deviceScaleFactor: 1 })
-  await page.goto(pathToFileURL(resolve(`artifacts/${client}.html`)).href)
+  await page.goto(pathToFileURL(resolve(`artifacts/${client}.html`)).href, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.addStyleTag({ content: 'span { vertical-align: top }' })
   await mkdir('docs/screenshots', { recursive: true })
-  await page.screenshot({ path: `docs/screenshots/${client}.png` })
+  await page.screenshot({ path: `docs/screenshots/${client}.png`, timeout: 120_000 })
 } finally {
   await browser.close()
 }

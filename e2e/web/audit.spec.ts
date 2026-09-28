@@ -17,6 +17,9 @@ test('Audit follows Profile, expands saved calls, loads older pages, and updates
     await expect(sidebar.getByRole('button', { name: 'Audit', exact: true })).toBeVisible()
     await expect(sidebar.locator('.profile-link + .audit-link')).toBeVisible()
     await expect(page.locator('.audit-card')).toHaveCount(25)
+    const cache = page.getByRole('region', { name: 'Prompt cache, last 24 hours' })
+    await expect(cache.getByText('40.0%')).toBeVisible()
+    await expect(cache.getByText('Cached input', { exact: true })).toBeVisible()
     await page.locator('.audit-card summary').first().click()
     await expect(page.locator('.audit-card').first().getByText('Arguments', { exact: true })).toBeVisible()
     await expect(page.locator('.audit-card').first().getByText('Result', { exact: true })).toBeVisible()
@@ -31,6 +34,7 @@ test('Audit follows Profile, expands saved calls, loads older pages, and updates
     await expect.poll(() => page.locator('.audit-card').first().getAttribute('data-audit-id')).not.toBe(first)
     await request.delete(`/api/v1/threads/${thread.id}`)
     await expect(page.getByText('No tool calls yet.')).toBeVisible()
+    await expect(cache.getByText('No token usage reported yet')).toBeVisible()
   } finally {
     await request.delete(`/api/v1/threads/${thread.id}`)
   }

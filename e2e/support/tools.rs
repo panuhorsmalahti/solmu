@@ -45,7 +45,7 @@ pub fn calls(body: &Value) -> Option<Vec<Value>> {
 pub fn response(kind: &'static str, calls: Vec<Value>) -> Response {
     let stream = async_stream::stream! {
         if kind=="anthropic" {
-            yield Ok::<_,Infallible>(Event::default().event("message_start").data(json!({"type":"message_start","message":{"id":"tools","type":"message","role":"assistant","content":[],"model":"test-model","usage":{"input_tokens":1,"output_tokens":0}}}).to_string()));
+            yield Ok::<_,Infallible>(Event::default().event("message_start").data(json!({"type":"message_start","message":{"id":"tools","type":"message","role":"assistant","content":[],"model":"test-model","usage":{"input_tokens":50,"output_tokens":0,"cache_read_input_tokens":40,"cache_creation_input_tokens":10}}}).to_string()));
         }
         for (index,call) in calls.into_iter().enumerate() {
             let id=format!("call-{index}");
@@ -58,10 +58,11 @@ pub fn response(kind: &'static str, calls: Vec<Value>) -> Response {
             }
         }
         if kind=="anthropic" {
-            yield Ok(Event::default().event("message_delta").data("{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":2}}"));
+            yield Ok(Event::default().event("message_delta").data("{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":20}}"));
             yield Ok(Event::default().event("message_stop").data("{\"type\":\"message_stop\"}"));
         } else {
             yield Ok(Event::default().data(json!({"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}).to_string()));
+            yield Ok(Event::default().data(json!({"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"prompt_tokens_details":{"cached_tokens":40}}}).to_string()));
             yield Ok(Event::default().data("[DONE]"));
         }
     };

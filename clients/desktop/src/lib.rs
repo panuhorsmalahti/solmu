@@ -4,8 +4,8 @@ use iced::{
     widget::{button, column, container, row, scrollable, text, text_editor, text_input, tooltip},
 };
 use solmu_client::{
-    Action, Api, AuditPage, AuditRun, Connection, ModelCatalog, Profile, ScheduledTask, Session,
-    TaskRun, Update,
+    Action, Api, AuditPage, AuditRun, CacheSummary, Connection, ModelCatalog, Profile,
+    ScheduledTask, Session, TaskRun, Update,
 };
 
 mod appearance;
@@ -33,6 +33,7 @@ pub struct Desktop {
     plugins_open: bool,
     audit_open: bool,
     audit_items: Vec<AuditRun>,
+    audit_cache: Option<CacheSummary>,
     audit_next: Option<i64>,
     audit_starts: Vec<Option<i64>>,
     audit_page: usize,
@@ -145,6 +146,7 @@ impl Desktop {
             plugins_open: false,
             audit_open: false,
             audit_items: Vec::new(),
+            audit_cache: None,
             audit_next: None,
             audit_starts: vec![None],
             audit_page: 0,
@@ -412,6 +414,7 @@ impl Desktop {
                     Ok(page) => {
                         self.audit_items = page.items;
                         self.audit_next = page.next_cursor;
+                        self.audit_cache = Some(page.cache_24h);
                         self.audit_error.clear();
                     }
                     Err(error) => self.audit_error = error,
@@ -940,6 +943,40 @@ impl Desktop {
                     .color(appearance::MUTED),
             ]
             .spacing(14);
+            if let Some(cache) = &self.audit_cache {
+                let rate = cache
+                    .hit_rate_percent
+                    .map_or("—".into(), |rate| format!("{rate:.1}%"));
+                entries = entries.push(
+                    container(
+                        column![
+                            text("PROMPT CACHE · LAST 24 HOURS")
+                                .size(11)
+                                .color(appearance::MUTED),
+                            text(rate).size(36).color(appearance::PRIMARY),
+                            text(if cache.hit_rate_percent.is_some() {
+                                "Cached input / reported input"
+                            } else {
+                                "No token usage reported yet"
+                            })
+                            .size(13)
+                            .color(appearance::MUTED),
+                            text(format!(
+                                "Cached {} · Input {} · Output {} · Cache writes {}",
+                                cache.cached_input_tokens,
+                                cache.input_tokens,
+                                cache.output_tokens,
+                                cache.cache_creation_input_tokens
+                            ))
+                            .size(12),
+                        ]
+                        .spacing(7),
+                    )
+                    .padding(20)
+                    .width(Length::Fill)
+                    .style(|theme| appearance::message(theme, false)),
+                );
+            }
             if self.audit_items.is_empty() && !self.audit_busy {
                 entries = entries.push(text("No tool calls yet.").size(16));
             }

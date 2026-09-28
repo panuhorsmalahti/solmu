@@ -35,6 +35,7 @@ the user message is retained. Closing the window exits without deleting history.
 Choose **Audit** below Profile to browse tool calls across conversations.
 Click a call for arguments and results; **Previous** and **Next** change pages.
 The list updates automatically. See [Audit](audit.md).
+The Audit header also shows the last 24 hours' prompt cache hit rate and token counts.
 
 ![Desktop Audit](screenshots/desktop-audit.png)
 

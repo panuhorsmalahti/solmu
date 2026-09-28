@@ -39,13 +39,28 @@ pub async fn create(
         && crate::storage::threads::get(&state.pool, &id).await?.title == "New conversation"
     {
         let content = input.content;
+        let message_id = message.id.clone();
         tokio::spawn(async move {
             if let Some(title) = state.llm.title(&content).await {
+                if let Err(error) = crate::storage::usage::save(
+                    &state.pool,
+                    &id,
+                    Some(&message_id),
+                    "title",
+                    &title.model,
+                    &title.usage,
+                )
+                .await
+                {
+                    eprintln!("Cannot save title usage for {id}: {error:?}");
+                } else {
+                    state.changed(&id);
+                }
                 // A concurrent rename or deletion takes precedence over generated titles.
                 let updated = sqlx::query(
                     "UPDATE threads SET title = ? WHERE id = ? AND title = 'New conversation'",
                 )
-                .bind(title)
+                .bind(title.text)
                 .bind(&id)
                 .execute(&state.pool)
                 .await;

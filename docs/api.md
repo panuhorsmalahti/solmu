@@ -20,7 +20,7 @@ authentication is not implemented.
 | PUT | `/api/v1/profile` | Required `system_prompt`, optional `model`. Omission preserves the model; null clears it. Returns the saved profile. |
 | GET | `/api/v1/models` | Provider, effective `default_model`, and named `models` (`id`, `name`). |
 | GET | `/api/v1/tools` | Available tool definitions and their input schemas in `items`. |
-| GET | `/api/v1/audit` | Saved tool calls across all conversations, newest first. Cursor paging with `limit` (1–100, default 25) and optional positive `before`; returns `items` and `next_cursor`. See [Audit](audit.md). |
+| GET | `/api/v1/audit` | Saved tool calls across all conversations, newest first. Cursor paging with `limit` (1–100, default 25) and optional positive `before`; returns `items`, `next_cursor`, and `cache_24h` token counts and hit rate. See [Audit](audit.md). |
 | GET / POST | `/api/v1/tasks` | List tasks or create one with `name`, `prompt`, `schedule_kind` (`once` or `cron`), `schedule`, and optional `workspace`. |
 | GET / PATCH / DELETE | `/api/v1/tasks/{id}` | Read, edit (`name`, `prompt`, `schedule_kind`, `schedule`, `enabled`), or remove a task. |
 | POST | `/api/v1/tasks/{id}/run` | Start a run now (201). |

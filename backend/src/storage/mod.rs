@@ -3,6 +3,7 @@ pub mod profile;
 pub mod scheduled_tasks;
 pub mod threads;
 pub mod tools;
+pub mod usage;
 
 #[derive(Debug)]
 pub enum StoreError {

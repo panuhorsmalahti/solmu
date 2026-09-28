@@ -8,11 +8,14 @@ async fn audit_command_pages_through_all_tool_calls_and_expands_details() {
     terminal.ready().await;
     terminal.command("/audit");
     terminal.wait("Tool calls across every conversation").await;
+    terminal.wait("Prompt cache").await;
+    terminal.wait("40.0%").await;
     terminal.wait("page 1").await;
     terminal.send(b"\x1b[6~");
     terminal.wait("page 2").await;
     terminal.send(b"\x1b[5~");
     terminal.wait("page 1").await;
+    terminal.send(b"\x1b[B");
     terminal.send(b"\r");
     terminal.wait("Arguments:").await;
     terminal.wait("Result:").await;
