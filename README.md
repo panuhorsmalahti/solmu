@@ -13,6 +13,7 @@ Licensed under [MIT](LICENSE).
 - See changes across clients instantly and stop responses anytime.
 - Link directly to conversations in the web client.
 - Customize the shared system prompt and default model in Profile.
+- Inspect every saved tool call in Audit, with arguments, results, and older pages. See [Audit](docs/audit.md).
 - Use project skills discovered automatically from `.agents/skills/`.
 - Connect workspace MCP servers to use additional tools and inspect their live status in every client. See [MCP setup](docs/mcp.md).
 - Install Agent Plugins to bring skills and MCP tools into a workspace together. See [plugins](docs/plugins.md).

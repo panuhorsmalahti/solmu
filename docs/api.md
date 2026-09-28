@@ -20,6 +20,7 @@ authentication is not implemented.
 | PUT | `/api/v1/profile` | Required `system_prompt`, optional `model`. Omission preserves the model; null clears it. Returns the saved profile. |
 | GET | `/api/v1/models` | Provider, effective `default_model`, and named `models` (`id`, `name`). |
 | GET | `/api/v1/tools` | Available tool definitions and their input schemas in `items`. |
+| GET | `/api/v1/audit` | Saved tool calls across all conversations, newest first. Cursor paging with `limit` (1–100, default 25) and optional positive `before`; returns `items` and `next_cursor`. See [Audit](audit.md). |
 | GET | `/api/v1/threads/{id}/skills` | Workspace skill catalog: `directory`, `items`, and validation `issues`. See [skills](skills.md). |
 | GET | `/api/v1/threads/{id}/mcp` | Workspace MCP servers, protocol versions, connection status, tools, and issues. See [MCP](mcp.md). |
 | GET | `/api/v1/threads/{id}/plugins` | Installed Agent Plugins, their components, and loading issues. See [plugins](plugins.md). |
@@ -27,6 +28,9 @@ authentication is not implemented.
 
 List endpoints accept `limit` (1–100, default 50) and `offset` (default 0).
 Results have `{ "items": [], "limit": 50, "offset": 0 }`.
+Audit uses cursor paging instead: pass its returned `next_cursor` as `before`
+to get the next older page. Audit rows include the conversation title, global
+sequence, and creation time in addition to the tool-run fields below.
 Threads contain `id`, `title`, nullable `model`, `workspace`, `created_at`, and `updated_at`. Messages contain
 `id`, `thread_id`, `role`, `content`, `reply_to_id`, and `created_at`.
 

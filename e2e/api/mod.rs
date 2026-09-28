@@ -38,6 +38,7 @@ mod responses;
 
 mod events;
 
+mod audit;
 mod configuration;
 mod mcp;
 mod mcp_transports;

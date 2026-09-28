@@ -47,6 +47,7 @@ pub struct ListResponse<T> {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/tools", get(tools::definitions))
+        .route("/api/v1/audit", get(tools::audit))
         .route("/api/v1/threads/{thread_id}/skills", get(skills::list))
         .route("/api/v1/threads/{thread_id}/mcp", get(mcp::list))
         .route("/api/v1/threads/{thread_id}/plugins", get(plugins::list))

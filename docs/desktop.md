@@ -30,6 +30,14 @@ the user message is retained. Closing the window exits without deleting history.
 
 ![Solmu client screenshot](screenshots/desktop.png)
 
+## Audit
+
+Choose **Audit** below Profile to browse tool calls across conversations.
+Click a call for arguments and results; **Previous** and **Next** change pages.
+The list updates automatically. See [Audit](audit.md).
+
+![Desktop Audit](screenshots/desktop-audit.png)
+
 ## Workspace tools
 
 Solmu can read, edit, and search files and run Bash commands in the thread's

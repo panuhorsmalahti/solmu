@@ -56,6 +56,14 @@ For source builds and web development, see [development](development.md).
 
 ![Solmu client screenshot](screenshots/web.png)
 
+## Audit
+
+Choose **Audit** below Profile or open `/audit`. Expand a call for arguments and
+results; older calls load as you scroll. The list updates automatically. See
+[Audit](audit.md).
+
+![Web Audit](screenshots/web-audit.png)
+
 ## Workspace tools
 
 Solmu can read, edit, and search files and run Bash commands in the thread's

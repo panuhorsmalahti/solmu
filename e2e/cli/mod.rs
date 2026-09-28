@@ -116,6 +116,11 @@ impl Terminal {
         writer.write_all(format!("{text}\r").as_bytes()).unwrap();
         writer.flush().unwrap();
     }
+    fn send(&self, bytes: &[u8]) {
+        let mut writer = self.writer.lock().unwrap();
+        writer.write_all(bytes).unwrap();
+        writer.flush().unwrap();
+    }
     async fn wait(&self, expected: &str) {
         tokio::time::timeout(Duration::from_secs(20), async {
             loop {
@@ -171,6 +176,7 @@ mod conversations;
 
 mod responses;
 
+mod audit;
 #[cfg(unix)]
 mod boxer;
 mod input;

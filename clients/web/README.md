@@ -54,6 +54,14 @@ For source builds, see [development](../../docs/development.md).
 
 ![Solmu client screenshot](../../docs/screenshots/web.png)
 
+## Audit
+
+Choose **Audit** below Profile, or open `/audit`, to browse
+[saved tool calls](../../docs/audit.md). Expand a call for details and scroll to
+load older calls.
+
+![Web Audit](../../docs/screenshots/web-audit.png)
+
 ## Skills
 
 Choose **Skills** to see installed [workspace skills](../../docs/skills.md).

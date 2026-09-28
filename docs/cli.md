@@ -43,6 +43,14 @@ See the [CLI README](../clients/cli/README.md) for the full setup.
 
 ![Solmu client screenshot](screenshots/cli.png)
 
+## Audit
+
+`/audit` opens saved tool calls across all conversations, newest first. Use
+Up/Down to select, Enter to expand details, PageUp/PageDown for older pages,
+and Esc to return. See [Audit](audit.md).
+
+![CLI Audit](screenshots/cli-audit.png)
+
 ## Workspace tools
 
 Solmu can read, edit, and search files and run Bash commands in the thread's

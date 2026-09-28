@@ -8,4 +8,5 @@ license.workspace = true
 solmu-client = { path = "../common" }
 dotenvy = "0.15.7"
 futures-util = "0.3.34"
+serde_json = "1.0.151"
 iced = { version = "0.14.0", default-features = false, features = ["tiny-skia", "tokio", "fira-sans", "x11", "wayland"] }

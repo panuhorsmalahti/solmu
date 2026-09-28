@@ -28,6 +28,14 @@ test('plugins guide is published from root docs', async ({ page }) => {
   await expect(page.locator('article img[alt="Desktop plugins"]')).toBeVisible()
 })
 
+test('Audit guide is published and links client screenshots', async ({ page }) => {
+  await page.goto(`${home}docs/audit/`)
+  await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible()
+  await expect(page.locator('article')).toContainText('newest first')
+  await expect(page.locator('article')).toContainText('PageUp')
+  await expect(page.locator('article img[alt="Web Audit"]')).toBeVisible()
+})
+
 test('Boxer guide uses default backend settings and describes explicit Linux network routes', async ({ page }) => {
   await page.goto(`${home}docs/boxer/`)
   const example = page.locator('article pre').filter({ hasText: 'boxer --profile solmu --cwd /path/to/project -- solmu-backend' })

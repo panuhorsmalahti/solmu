@@ -5,10 +5,23 @@ use ratatui::{
     style::{Color, Stylize},
     widgets::{Block, Paragraph, Wrap},
 };
-use solmu_client::{Api, McpCatalog, ModelCatalog, PluginCatalog, Profile, SkillCatalog};
+use solmu_client::{
+    Api, AuditPage, AuditRun, McpCatalog, ModelCatalog, PluginCatalog, Profile, SkillCatalog,
+};
 use tokio::sync::mpsc;
 
 pub enum Page {
+    Audit {
+        items: Vec<AuditRun>,
+        starts: Vec<Option<i64>>,
+        page: usize,
+        next: Option<i64>,
+        selected: usize,
+        expanded: bool,
+        detail_scroll: u16,
+        busy: bool,
+        error: String,
+    },
     Mcp {
         scroll: u16,
     },
@@ -39,6 +52,7 @@ pub enum Page {
     },
 }
 pub enum Event {
+    AuditLoaded(Result<AuditPage, String>),
     Loaded(Result<Profile, String>),
     Saved(Result<Profile, String>),
     Models(Result<ModelCatalog, String>),
@@ -48,6 +62,13 @@ pub enum Action {
     Close,
     Save(String, Option<String>),
     Model(Option<String>),
+    AuditLoad(Option<i64>),
+}
+
+pub fn audit(api: Api, before: Option<i64>, sender: mpsc::UnboundedSender<Event>) {
+    tokio::spawn(async move {
+        let _ = sender.send(Event::AuditLoaded(api.audit(before, 20).await));
+    });
 }
 
 pub fn load(api: Api, sender: mpsc::UnboundedSender<Event>) {
@@ -69,6 +90,26 @@ pub fn models(api: Api, sender: mpsc::UnboundedSender<Event>) {
 }
 
 impl Page {
+    pub fn audit() -> Self {
+        Self::Audit {
+            items: Vec::new(),
+            starts: vec![None],
+            page: 0,
+            next: None,
+            selected: 0,
+            expanded: false,
+            detail_scroll: 0,
+            busy: true,
+            error: String::new(),
+        }
+    }
+    pub fn audit_cursor(&self) -> Option<Option<i64>> {
+        if let Self::Audit { starts, page, .. } = self {
+            Some(starts[*page])
+        } else {
+            None
+        }
+    }
     pub fn profile() -> Self {
         Self::Profile {
             draft: String::new(),
@@ -130,6 +171,30 @@ impl Page {
         false
     }
     pub fn update(&mut self, event: Event) {
+        if let (
+            Self::Audit {
+                items,
+                next,
+                selected,
+                busy,
+                error,
+                ..
+            },
+            Event::AuditLoaded(result),
+        ) = (&mut *self, &event)
+        {
+            *busy = false;
+            match result {
+                Ok(value) => {
+                    *items = value.items.clone();
+                    *next = value.next_cursor;
+                    *selected = (*selected).min(items.len().saturating_sub(1));
+                    error.clear();
+                }
+                Err(message) => *error = message.clone(),
+            }
+            return;
+        }
         let saved = matches!(&event, Event::Saved(_));
         match (self, event) {
             (
@@ -205,6 +270,51 @@ impl Page {
             return Action::Close;
         }
         match self {
+            Self::Audit {
+                items,
+                starts,
+                page,
+                next,
+                selected,
+                expanded,
+                detail_scroll,
+                busy,
+                ..
+            } => match key.code {
+                KeyCode::Up => {
+                    *selected = selected.saturating_sub(1);
+                    *detail_scroll = 0;
+                }
+                KeyCode::Down => {
+                    *selected = (*selected + 1).min(items.len().saturating_sub(1));
+                    *detail_scroll = 0;
+                }
+                KeyCode::Enter if !items.is_empty() => {
+                    *expanded = !*expanded;
+                    *detail_scroll = 0;
+                }
+                KeyCode::PageDown if !*busy => {
+                    if let Some(cursor) = *next {
+                        *page += 1;
+                        starts.truncate(*page);
+                        starts.push(Some(cursor));
+                        *selected = 0;
+                        *expanded = false;
+                        *busy = true;
+                        return Action::AuditLoad(Some(cursor));
+                    }
+                }
+                KeyCode::PageUp if !*busy && *page > 0 => {
+                    *page -= 1;
+                    *selected = 0;
+                    *expanded = false;
+                    *busy = true;
+                    return Action::AuditLoad(starts[*page]);
+                }
+                KeyCode::Char('j') if *expanded => *detail_scroll = detail_scroll.saturating_add(1),
+                KeyCode::Char('k') if *expanded => *detail_scroll = detail_scroll.saturating_sub(1),
+                _ => {}
+            },
             Self::Skills { scroll } | Self::Mcp { scroll } | Self::Plugins { scroll } => {
                 match key.code {
                     KeyCode::Up => *scroll = scroll.saturating_sub(1),
@@ -346,6 +456,81 @@ impl Page {
         mcp: &McpCatalog,
         plugins: &PluginCatalog,
     ) {
+        if let Self::Audit {
+            items,
+            page,
+            next,
+            selected,
+            expanded,
+            detail_scroll,
+            busy,
+            error,
+            ..
+        } = self
+        {
+            let [header, list, detail, footer] = Layout::vertical([
+                Constraint::Length(4),
+                Constraint::Min(6),
+                Constraint::Length(12),
+                Constraint::Length(2),
+            ])
+            .areas(frame.area());
+            frame.render_widget(Paragraph::new(format!(" SOLMU / AUDIT\n\nTool calls across every conversation · newest first · page {}", page + 1)).green(), header);
+            let lines = if items.is_empty() {
+                vec![if *busy {
+                    "Loading tool calls…".into()
+                } else {
+                    "No tool calls yet.".into()
+                }]
+            } else {
+                items
+                    .iter()
+                    .enumerate()
+                    .map(|(index, item)| {
+                        format!(
+                            "{} {} · {} · {} · {}",
+                            if index == *selected { "›" } else { " " },
+                            item.name,
+                            item.status,
+                            item.thread_title,
+                            item.created_at
+                        )
+                    })
+                    .collect()
+            };
+            let offset = selected.saturating_sub((list.height as usize).saturating_sub(2)) as u16;
+            frame.render_widget(Paragraph::new(lines.join("\n")).scroll((offset, 0)), list);
+            if !error.is_empty() {
+                frame.render_widget(Paragraph::new(error.as_str()).red(), detail);
+            } else if *expanded && let Some(item) = items.get(*selected) {
+                let args = serde_json::to_string_pretty(&item.arguments).unwrap_or_default();
+                let result = item
+                    .result
+                    .as_ref()
+                    .map(|value| serde_json::to_string_pretty(value).unwrap_or_default())
+                    .unwrap_or_else(|| "Pending".into());
+                frame.render_widget(Paragraph::new(format!("{} · {}\nArguments: {args}\nResult: {result}\nCall ID: {}\nStarted: {} · Finished: {}", item.name, item.thread_title, item.call_id, item.started_at.as_deref().unwrap_or("Pending"), item.finished_at.as_deref().unwrap_or("Pending"))).block(Block::bordered().title(" Details ")).wrap(Wrap { trim: false }).scroll((*detail_scroll, 0)), detail);
+            } else {
+                frame.render_widget(
+                    Paragraph::new("Enter opens the selected call's arguments and result.")
+                        .dark_gray(),
+                    detail,
+                );
+            }
+            frame.render_widget(
+                Paragraph::new(format!(
+                    "↑↓ select · Enter details · PgUp/PgDn pages{} · j/k details · Esc back",
+                    if next.is_some() {
+                        " · more available"
+                    } else {
+                        ""
+                    }
+                ))
+                .dark_gray(),
+                footer,
+            );
+            return;
+        }
         let [header, body, notice, footer] = Layout::vertical([
             Constraint::Length(4),
             Constraint::Min(3),
@@ -354,6 +539,7 @@ impl Page {
         ])
         .areas(frame.area());
         match self {
+            Self::Audit { .. } => unreachable!("audit was rendered above"),
             Self::Plugins { scroll } => {
                 frame.render_widget(
                     Paragraph::new(

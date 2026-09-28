@@ -84,6 +84,13 @@ For source builds, see [development](../docs/development.md).
 
 ![Solmu client screenshot](../docs/screenshots/muxer.png)
 
+## Audit
+
+Use `/audit` in a Solmu pane to browse [saved tool calls](../docs/audit.md)
+across conversations.
+
+![Audit in Muxer](../docs/screenshots/muxer-audit.png)
+
 ![Solmu prompt automation](../docs/screenshots/muxer-automation.png)
 
 ![Direct terminal control](../docs/screenshots/muxer-terminal.png)

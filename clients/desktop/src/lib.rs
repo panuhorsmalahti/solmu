@@ -3,7 +3,9 @@ use iced::{
     Element, Length, Task, Theme,
     widget::{button, column, container, row, scrollable, text, text_editor, text_input, tooltip},
 };
-use solmu_client::{Action, Api, Connection, ModelCatalog, Profile, Session, Update};
+use solmu_client::{
+    Action, Api, AuditPage, AuditRun, Connection, ModelCatalog, Profile, Session, Update,
+};
 
 mod appearance;
 pub use appearance::theme;
@@ -28,6 +30,15 @@ pub struct Desktop {
     skills_open: bool,
     mcp_open: bool,
     plugins_open: bool,
+    audit_open: bool,
+    audit_items: Vec<AuditRun>,
+    audit_next: Option<i64>,
+    audit_starts: Vec<Option<i64>>,
+    audit_page: usize,
+    audit_expanded: Option<String>,
+    audit_busy: bool,
+    audit_dirty: bool,
+    audit_error: String,
     catalog: Option<ModelCatalog>,
     custom_model: String,
 }
@@ -53,6 +64,12 @@ pub enum Event {
     OpenSkills,
     OpenMcp,
     OpenPlugins,
+    OpenAudit,
+    AuditLoaded(Result<AuditPage, String>),
+    AuditNext,
+    AuditPrevious,
+    CloseAudit,
+    AuditToggle(String),
     ModelsLoaded(Result<ModelCatalog, String>),
     CustomModel(String),
     ProfileModel(String),
@@ -98,6 +115,15 @@ impl Desktop {
             skills_open: false,
             mcp_open: false,
             plugins_open: false,
+            audit_open: false,
+            audit_items: Vec::new(),
+            audit_next: None,
+            audit_starts: vec![None],
+            audit_page: 0,
+            audit_expanded: None,
+            audit_busy: false,
+            audit_dirty: false,
+            audit_error: String::new(),
             catalog: None,
             custom_model: String::new(),
         };
@@ -120,6 +146,16 @@ impl Desktop {
         }
     }
 
+    fn load_audit(&mut self) -> Task<Event> {
+        self.audit_busy = true;
+        let api = self.session.api.clone();
+        let before = self.audit_starts[self.audit_page];
+        Task::perform(
+            async move { api.audit(before, 20).await },
+            Event::AuditLoaded,
+        )
+    }
+
     pub fn update(&mut self, event: Event) -> Task<Event> {
         let saved_profile = matches!(&event, Event::ProfileSaved(_));
         let opened_profile = matches!(&event, Event::OpenProfile);
@@ -134,8 +170,70 @@ impl Desktop {
         {
             self.mcp_open = false;
             self.plugins_open = false;
+            self.audit_open = false;
         }
         match event {
+            Event::OpenAudit => {
+                self.audit_open = true;
+                self.profile_open = false;
+                self.skills_open = false;
+                self.mcp_open = false;
+                self.plugins_open = false;
+                self.model_open = false;
+                self.audit_page = 0;
+                self.audit_starts = vec![None];
+                self.audit_expanded = None;
+                self.load_audit()
+            }
+            Event::CloseAudit => {
+                self.audit_open = false;
+                Task::none()
+            }
+            Event::AuditLoaded(result) => {
+                self.audit_busy = false;
+                match result {
+                    Ok(page) => {
+                        self.audit_items = page.items;
+                        self.audit_next = page.next_cursor;
+                        self.audit_error.clear();
+                    }
+                    Err(error) => self.audit_error = error,
+                }
+                if self.audit_open && std::mem::take(&mut self.audit_dirty) {
+                    self.load_audit()
+                } else {
+                    Task::none()
+                }
+            }
+            Event::AuditNext => {
+                if self.audit_busy {
+                    return Task::none();
+                }
+                let Some(cursor) = self.audit_next else {
+                    return Task::none();
+                };
+                self.audit_page += 1;
+                self.audit_starts.truncate(self.audit_page);
+                self.audit_starts.push(Some(cursor));
+                self.audit_expanded = None;
+                self.load_audit()
+            }
+            Event::AuditPrevious => {
+                if self.audit_busy || self.audit_page == 0 {
+                    return Task::none();
+                }
+                self.audit_page -= 1;
+                self.audit_expanded = None;
+                self.load_audit()
+            }
+            Event::AuditToggle(id) => {
+                if self.audit_expanded.as_deref() == Some(&id) {
+                    self.audit_expanded = None;
+                } else {
+                    self.audit_expanded = Some(id);
+                }
+                Task::none()
+            }
             Event::OpenPlugins => {
                 self.plugins_open = true;
                 self.mcp_open = false;
@@ -299,6 +397,13 @@ impl Desktop {
                     Connection::Disconnected => self.connected = false,
                     Connection::Connected | Connection::Changed => {
                         self.connected = true;
+                        if self.audit_open {
+                            if self.audit_busy {
+                                self.audit_dirty = true;
+                            } else {
+                                return Task::batch([self.load_audit(), self.act(Action::Refresh)]);
+                            }
+                        }
                         if self.session.busy {
                             self.pending_refresh = true;
                         } else {
@@ -313,6 +418,7 @@ impl Desktop {
                     self.skills_open = false;
                     self.profile_open = false;
                     self.model_open = false;
+                    self.audit_open = false;
                 }
                 self.act(action)
             }
@@ -414,6 +520,11 @@ impl Desktop {
                     .padding(12)
                     .style(appearance::ghost)
                     .on_press_maybe(enabled.then_some(Event::OpenProfile)),
+                button("Audit")
+                    .width(Length::Fill)
+                    .padding(12)
+                    .style(appearance::ghost)
+                    .on_press(Event::OpenAudit),
                 scrollable(list).height(Length::Fill),
                 text("YOUR IDEAS, CONNECTED")
                     .size(10)
@@ -425,6 +536,92 @@ impl Desktop {
         .width(270)
         .height(Length::Fill)
         .style(appearance::sidebar);
+
+        if self.audit_open {
+            let mut entries = column![
+                button("Back to conversation")
+                    .style(appearance::ghost)
+                    .on_press(Event::CloseAudit),
+                text("Audit").size(36),
+                text("Tool calls across every conversation · newest first")
+                    .size(14)
+                    .color(appearance::MUTED),
+            ]
+            .spacing(14);
+            if self.audit_items.is_empty() && !self.audit_busy {
+                entries = entries.push(text("No tool calls yet.").size(16));
+            }
+            for run in &self.audit_items {
+                let mut details = column![
+                    button(text(format!("{} · {}", run.name, run.status)).size(15))
+                        .style(appearance::ghost)
+                        .on_press(Event::AuditToggle(run.id.clone())),
+                    text(format!("{} · {}", run.thread_title, run.created_at))
+                        .size(12)
+                        .color(appearance::MUTED),
+                ]
+                .spacing(8);
+                if self.audit_expanded.as_deref() == Some(&run.id) {
+                    let arguments =
+                        serde_json::to_string_pretty(&run.arguments).unwrap_or_default();
+                    let result = run
+                        .result
+                        .as_ref()
+                        .map(|value| serde_json::to_string_pretty(value).unwrap_or_default())
+                        .unwrap_or_else(|| "Pending".into());
+                    details = details
+                        .push(text("Arguments").size(12))
+                        .push(text(arguments).size(12))
+                        .push(text("Result").size(12))
+                        .push(text(result).size(12))
+                        .push(
+                            text(format!(
+                                "Call ID: {} · Started: {} · Finished: {}",
+                                run.call_id,
+                                run.started_at.as_deref().unwrap_or("Pending"),
+                                run.finished_at.as_deref().unwrap_or("Pending")
+                            ))
+                            .size(11)
+                            .color(appearance::MUTED),
+                        );
+                }
+                entries = entries.push(
+                    container(details)
+                        .padding(16)
+                        .width(Length::Fill)
+                        .style(|theme| appearance::message(theme, false)),
+                );
+            }
+            if !self.audit_error.is_empty() {
+                entries = entries.push(text(&self.audit_error).size(14));
+            }
+            let controls = row![
+                button("Previous").style(appearance::ghost).on_press_maybe(
+                    (!self.audit_busy && self.audit_page > 0).then_some(Event::AuditPrevious)
+                ),
+                text(format!("Page {}", self.audit_page + 1)).size(13),
+                button("Next").style(appearance::ghost).on_press_maybe(
+                    (!self.audit_busy && self.audit_next.is_some()).then_some(Event::AuditNext)
+                ),
+                if self.audit_busy {
+                    text("Loading…").size(12)
+                } else {
+                    text("").size(12)
+                },
+            ]
+            .spacing(14)
+            .align_y(iced::Alignment::Center);
+            let content = column![scrollable(entries).height(Length::Fill), controls].spacing(18);
+            return row![
+                sidebar,
+                container(content)
+                    .padding(40)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+            ]
+            .height(Length::Fill)
+            .into();
+        }
 
         if self.plugins_open {
             let plugins = &self.session.plugins;

@@ -17,6 +17,8 @@ CLI, desktop, web, and Muxer show each tool's name, state, arguments, and result
 In the web client, click a tool row to expand its details. Tool activity is saved
 with the conversation and remains available after reopening it or restarting
 the backend. Failures are returned to the model so it can adjust its approach.
+Open [Audit](audit.md) to review all saved calls across conversations in one
+ordered list, with expandable arguments and results.
 
 Stop also stops tool execution. Bash and its child processes are terminated;
 queued calls are cancelled. A file write that has already started finishes

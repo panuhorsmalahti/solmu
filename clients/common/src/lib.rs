@@ -240,6 +240,27 @@ pub struct ToolRun {
     pub status: String,
     pub result: Option<Value>,
 }
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuditRun {
+    pub id: String,
+    pub sequence: i64,
+    pub thread_id: String,
+    pub thread_title: String,
+    pub message_id: String,
+    pub call_id: String,
+    pub name: String,
+    pub arguments: Value,
+    pub status: String,
+    pub result: Option<Value>,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuditPage {
+    pub items: Vec<AuditRun>,
+    pub next_cursor: Option<i64>,
+}
 impl ToolRun {
     pub fn details(&self) -> String {
         let arguments = format!("Arguments: {}", self.arguments);
@@ -340,6 +361,13 @@ impl Api {
     pub async fn plugins(&self, thread: &str) -> Result<PluginCatalog, String> {
         self.json(Method::GET, &format!("/threads/{thread}/plugins"), None)
             .await
+    }
+    pub async fn audit(&self, before: Option<i64>, limit: u32) -> Result<AuditPage, String> {
+        let path = match before {
+            Some(cursor) => format!("/audit?limit={limit}&before={cursor}"),
+            None => format!("/audit?limit={limit}"),
+        };
+        self.json(Method::GET, &path, None).await
     }
     pub async fn stop(&self, id: &str) -> Result<(), String> {
         self.request(Method::POST, &format!("/threads/{id}/stop"), None, false)

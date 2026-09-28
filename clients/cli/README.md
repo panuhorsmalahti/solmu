@@ -56,6 +56,7 @@ Typing `/` shows the command list. Use Up/Down to choose and Enter to select.
 | `/stop` | Cancel the current response. Esc also stops it. |
 | `/exit` | Exit. Ctrl+C also exits. |
 | `/plugins` | List installed Agent Plugins and loading errors. |
+| `/audit` | Browse saved tool calls across conversations. |
 
 Wait for a reply to finish before sending again or changing conversations.
 `/exit` still works during streaming. Errors are shown above the input; user
@@ -71,6 +72,13 @@ and [Docker instructions](../../docs/running.md).
 For source builds, see [development](../../docs/development.md).
 
 ![Solmu client screenshot](../../docs/screenshots/cli.png)
+
+## Audit
+
+Run `/audit` to inspect the [tool call timeline](../../docs/audit.md). Enter
+expands a call; PageUp and PageDown browse older pages.
+
+![CLI Audit](../../docs/screenshots/cli-audit.png)
 
 ## Skills
 

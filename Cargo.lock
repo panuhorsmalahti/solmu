@@ -4531,6 +4531,7 @@ dependencies = [
  "dotenvy",
  "futures-util",
  "iced",
+ "serde_json",
  "solmu-client",
 ]
 

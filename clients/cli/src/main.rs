@@ -15,8 +15,8 @@ use tokio::sync::mpsc;
 mod settings;
 
 const COMMANDS: &[&str] = &[
-    "/new", "/threads", "/open", "/model", "/profile", "/skills", "/mcp", "/plugins", "/rename",
-    "/delete", "/help", "/stop", "/exit",
+    "/new", "/threads", "/open", "/model", "/profile", "/audit", "/skills", "/mcp", "/plugins",
+    "/rename", "/delete", "/help", "/stop", "/exit",
 ];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -186,6 +186,9 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                         Connection::Disconnected => connected = false,
                         Connection::Connected | Connection::Changed => {
                             connected = true;
+                            if let Some(cursor) = page.as_ref().and_then(settings::Page::audit_cursor) {
+                                settings::audit(session.api.clone(), cursor, settings_sender.clone());
+                            }
                             if session.busy { pending_refresh = true; } else { active = launch(&mut session, Action::Refresh, &sender, &mut runtime); }
                         }
                     }
@@ -220,6 +223,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             settings::Action::Close => page = None,
                             settings::Action::Save(text, model) => settings::save(session.api.clone(), text, model, settings_sender.clone()),
                             settings::Action::Model(model) => { page = None; active = launch(&mut session, Action::Model(model), &sender, &mut runtime); },
+                            settings::Action::AuditLoad(before) => settings::audit(session.api.clone(), before, settings_sender.clone()),
                             settings::Action::None => {},
                         }
                         continue;
@@ -252,6 +256,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             let text = input.trim().to_owned();
                             if text == "/exit" { break; }
                             if text == "/stop" { stop(&mut session, &mut active, &sender, &mut runtime); input.clear(); continue; }
+                            if text == "/audit" { input.clear(); page = Some(settings::Page::audit()); settings::audit(session.api.clone(), None, settings_sender.clone()); continue; }
                             if text.is_empty() { continue; }
                             if session.busy {
                                 // Live refreshes and conversation operations can
@@ -274,7 +279,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 "/open" if !argument.is_empty() => { show_threads = false; Action::Open(argument.into()) },
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /skills · /mcp · /plugins · /delete · /stop · /exit".into()); continue; },
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /skills · /mcp · /plugins · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -472,6 +477,7 @@ fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
         "/skills" => "List workspace skills",
         "/mcp" => "Show MCP servers and tools",
         "/plugins" => "Show installed plugins",
+        "/audit" => "Browse saved tool calls",
         "/rename" => "Rename this conversation",
         "/delete" => "Delete this conversation",
         "/help" => "Show available commands",

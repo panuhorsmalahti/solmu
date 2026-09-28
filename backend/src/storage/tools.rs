@@ -18,6 +18,19 @@ pub struct ToolRun {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
 }
+#[derive(Clone, Serialize)]
+pub struct AuditRun {
+    #[serde(flatten)]
+    pub run: ToolRun,
+    pub sequence: i64,
+    pub thread_title: String,
+    pub created_at: String,
+}
+#[derive(Serialize)]
+pub struct AuditPage {
+    pub items: Vec<AuditRun>,
+    pub next_cursor: Option<i64>,
+}
 fn decode(error: serde_json::Error) -> StoreError {
     StoreError::Database(sqlx::Error::Decode(Box::new(error)))
 }
@@ -38,6 +51,26 @@ fn run(row: SqliteRow) -> Result<ToolRun, StoreError> {
         started_at: row.try_get("started_at")?,
         finished_at: row.try_get("finished_at")?,
     })
+}
+pub async fn audit(
+    pool: &SqlitePool,
+    limit: u32,
+    before: Option<i64>,
+) -> Result<AuditPage, StoreError> {
+    let rows = sqlx::query("SELECT r.*, t.title AS thread_title, tr.created_at AS created_at FROM tool_runs r JOIN threads t ON t.id=r.thread_id JOIN tool_turns tr ON tr.id=r.turn_id WHERE (? IS NULL OR r.sequence < ?) ORDER BY r.sequence DESC LIMIT ?")
+        .bind(before).bind(before).bind(i64::from(limit) + 1).fetch_all(pool).await?;
+    let more = rows.len() > limit as usize;
+    let mut items = Vec::with_capacity(rows.len().min(limit as usize));
+    for row in rows.into_iter().take(limit as usize) {
+        items.push(AuditRun {
+            sequence: row.try_get("sequence")?,
+            thread_title: row.try_get("thread_title")?,
+            created_at: row.try_get("created_at")?,
+            run: run(row)?,
+        });
+    }
+    let next_cursor = more.then(|| items.last().expect("page with older rows").sequence);
+    Ok(AuditPage { items, next_cursor })
 }
 pub async fn create_turn(
     pool: &SqlitePool,

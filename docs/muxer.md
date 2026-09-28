@@ -241,3 +241,8 @@ Use `/mcp` inside a Solmu pane to inspect live workspace server status and avail
 Use `/plugins` in a Solmu pane to see installed [Agent Plugins](plugins.md).
 
 ![Plugins in a Muxer pane](screenshots/muxer-plugins.png)
+
+Use `/audit` inside a Solmu pane to browse saved tool calls across conversations.
+See [Audit](audit.md).
+
+![Audit in a Muxer pane](screenshots/muxer-audit.png)
