@@ -30,6 +30,7 @@ OPENAI_API_KEY=your-api-key
 LLM_MODEL=gpt-6-sol
 LLM_TITLE_MODEL=gpt-6-luna
 SOLMU_WEB_DIR=web
+SOLMU_AUTO_UPDATE=true
 ```
 
 Restart the service after editing configuration. The service runs from
@@ -43,6 +44,20 @@ Set `SOLMU_WEB_INSTALL_DIR` for a different bundle web folder, and set
 by the service environment take precedence over `.env`.
 See [all configuration options](configuration.md).
 
+Managed service installations check GitHub Releases once per day and install a
+new backend release automatically. The update runs separately from the backend
+service, verifies the release checksum, then restarts the service. Set
+`SOLMU_AUTO_UPDATE=false` in this `.env` and restart the service to turn the
+check off. The updater reads this setting directly from the file.
+
+To check for and install an update immediately, rerun the backend installer:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-backend.sh | sh
+```
+
+On Windows, run `irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-backend.ps1 | iex`.
+
 ## Linux
 
 Uses a systemd user service, `solmu-backend.service`. A running user systemd
@@ -52,6 +67,7 @@ manager is required. It starts with your login session and restarts after crashe
 systemctl --user status solmu-backend
 systemctl --user restart solmu-backend
 systemctl --user stop solmu-backend
+systemctl --user list-timers solmu-auto-update.timer
 journalctl --user -u solmu-backend -f
 ```
 
@@ -69,6 +85,7 @@ launchctl print "gui/$(id -u)/dev.solmu.backend"
 launchctl kickstart -k "gui/$(id -u)/dev.solmu.backend"
 launchctl bootout "gui/$(id -u)/dev.solmu.backend"
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.solmu.backend.plist"
+launchctl print "gui/$(id -u)/dev.solmu.autoupdate"
 ```
 
 Output is in `~/.solmu/backend.log` and `backend-error.log`.
@@ -84,6 +101,7 @@ Logs are written while the backend is running.
 
 ```powershell
 Get-ScheduledTask -TaskName 'Solmu Backend'
+Get-ScheduledTask -TaskName 'Solmu Auto Update'
 Stop-ScheduledTask -TaskName 'Solmu Backend'
 Start-ScheduledTask -TaskName 'Solmu Backend'
 ```

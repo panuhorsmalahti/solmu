@@ -18,6 +18,7 @@ irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install
 
 Installs `solmu-desktop` from the latest release. Use an existing backend, or
 [install the backend separately](../../docs/releases.md#individual-components).
+Rerun the same command to update the desktop client.
 
 ## Run
 

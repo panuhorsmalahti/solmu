@@ -19,6 +19,7 @@ irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install
 
 Installs only `boxer`. To launch Solmu, install the
 [CLI](../clients/cli/README.md#install) and use an already running backend.
+Rerun the same command to update Boxer.
 
 ## Run
 

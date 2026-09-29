@@ -113,6 +113,10 @@ try {
     }
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     foreach ($binary in $selected) { Copy-Item -LiteralPath (Join-Path $solmuTemporary "files\$binary") -Destination (Join-Path $InstallDir $binary) -Force }
+    if ($Component -in @('backend', 'all')) {
+        New-Item -ItemType Directory -Path $serviceDir -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $serviceDir '.solmu-backend-version'), $Version, (New-Object System.Text.UTF8Encoding($false)))
+    }
     # Older Boxer/Muxer releases still locate the legacy runtime name.
     if ('solmu.exe' -in $selected -and (Test-Path -LiteralPath (Join-Path $solmuTemporary 'files/solmu-cli.exe'))) {
         Copy-Item -LiteralPath (Join-Path $solmuTemporary 'files/solmu-cli.exe') -Destination (Join-Path $InstallDir 'solmu-cli.exe') -Force

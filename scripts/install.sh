@@ -119,6 +119,11 @@ for binary in $selected; do
   cp "$temporary/$binary" "$destination/$binary"
   chmod 755 "$destination/$binary"
 done
+if [ "$component" = backend ] || [ "$component" = all ]; then
+  mkdir -p "$service_dir"
+  chmod 700 "$service_dir"
+  printf '%s\n' "$tag" > "$service_dir/.solmu-backend-version"
+fi
 if [ "$legacy_cli" = 1 ]; then
   case " $selected " in *' solmu '*) cp "$temporary/solmu-cli" "$destination/solmu-cli"; chmod 755 "$destination/solmu-cli" ;; esac
 fi

@@ -81,13 +81,13 @@ export async function releaseFixture(options: { corrupt?: boolean; webFiles?: Re
           const harness = path.join(directory, 'service-harness.ps1')
           await writeFile(harness, `
 $ErrorActionPreference = 'Stop'
-function Get-ScheduledTask { param($TaskName, $ErrorAction) if (Test-Path $env:SOLMU_SERVICE_RECORD) { [pscustomobject]@{State='Stopped'} } }
+function Get-ScheduledTask { param($TaskName, $ErrorAction) if (Test-Path ($env:SOLMU_SERVICE_RECORD + '.' + $TaskName + '.json')) { [pscustomobject]@{State='Stopped'} } }
 function Stop-ScheduledTask { param($TaskName) Add-Content $env:SOLMU_SERVICE_RECORD 'stop' }
 function New-ScheduledTaskAction { param($Execute, $Argument, $WorkingDirectory) [pscustomobject]@{Execute=$Execute; Argument=$Argument; WorkingDirectory=$WorkingDirectory} }
-function New-ScheduledTaskTrigger { param([switch]$AtLogOn, $User) [pscustomobject]@{AtLogOn=$AtLogOn.IsPresent; User=$User} }
+function New-ScheduledTaskTrigger { param([switch]$AtLogOn, [switch]$Daily, $At, $User) [pscustomobject]@{AtLogOn=$AtLogOn.IsPresent; Daily=$Daily.IsPresent; At="$At"; User=$User} }
 function New-ScheduledTaskPrincipal { param($UserId, $LogonType, $RunLevel) [pscustomobject]@{UserId=$UserId; LogonType=$LogonType; RunLevel=$RunLevel} }
 function New-ScheduledTaskSettingsSet { param($ExecutionTimeLimit, [switch]$AllowStartIfOnBatteries, [switch]$DontStopIfGoingOnBatteries, $MultipleInstances, $RestartCount, $RestartInterval) [pscustomobject]@{ExecutionTimeLimit=$ExecutionTimeLimit.ToString(); MultipleInstances=$MultipleInstances} }
-function Register-ScheduledTask { param($TaskName, $Action, $Trigger, $Principal, $Settings, [switch]$Force) @{Name=$TaskName; Action=$Action; Trigger=$Trigger; Principal=$Principal; Settings=$Settings} | ConvertTo-Json -Depth 5 | Set-Content ($env:SOLMU_SERVICE_RECORD + '.json'); Add-Content $env:SOLMU_SERVICE_RECORD 'register' }
+function Register-ScheduledTask { param($TaskName, $Action, $Trigger, $Principal, $Settings, [switch]$Force) @{Name=$TaskName; Action=$Action; Trigger=$Trigger; Principal=$Principal; Settings=$Settings} | ConvertTo-Json -Depth 5 | Set-Content ($env:SOLMU_SERVICE_RECORD + '.' + $TaskName + '.json'); Add-Content $env:SOLMU_SERVICE_RECORD 'register' }
 function Start-ScheduledTask { param($TaskName) Add-Content $env:SOLMU_SERVICE_RECORD 'start' }
 & $args[0] -NoPath
 `)
@@ -104,6 +104,14 @@ function Start-ScheduledTask { param($TaskName) Add-Content $env:SOLMU_SERVICE_R
       }
       return windows
         ? execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-NoPath'], { cwd: directory, timeout: 20_000, env })
+        : execute('sh', [script], { cwd: directory, timeout: 20_000, env })
+    },
+    async runAutoUpdate() {
+      const env = { ...process.env, HOME: path.join(directory, 'home'), USERPROFILE: path.join(directory, 'home'), SOLMU_SERVICE_DIR: path.join(directory, 'state'), SOLMU_RELEASE_API: `${base}/api`, SOLMU_INSTALLER_BASE_URL: `${base}/scripts` }
+      delete env.PSModulePath
+      const script = path.join(directory, 'state', `auto-update.${windows ? 'ps1' : 'sh'}`)
+      return windows
+        ? execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], { cwd: directory, timeout: 20_000, env })
         : execute('sh', [script], { cwd: directory, timeout: 20_000, env })
     },
     async close() {

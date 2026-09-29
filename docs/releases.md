@@ -41,10 +41,19 @@ The CLI command is `solmu`. When installing an older archive, installers also
 retain its legacy runtime alias for compatibility with that version of Muxer/Boxer.
 The built-in web server becomes available in the next release after v0.1.0.
 
-Rerun an installer to upgrade its module. Other installed programs and backend
-configuration are preserved. Managed web deployments keep previous hashed assets
-for open browser tabs; unrelated web folders are refused. Native release archives
+Rerun the matching installer to update any module. These commands install its
+latest release, verify the published checksum, and preserve other programs and
+backend configuration. Managed web deployments keep previous hashed assets for
+open browser tabs; unrelated web folders are refused. Native release archives
 contain all binaries, but module installers copy only the selected programs.
+Replace `install-backend` with `install-cli`, `install-desktop`, `install-web`,
+`install-boxer`, or `install-muxer` to update an individual part. Use
+`install-bundle` to update all modules together.
+
+Managed backend service installations automatically check for backend updates
+once per day. See [backend updates](services.md#configure) to disable this or
+install one immediately. Standalone client installs update only when their
+module installer is rerun.
 The legacy `install.sh` and `install.ps1` use the same bundle behavior as
 `install-bundle`; the explicit bundle scripts are the documented end-user option.
 
@@ -85,4 +94,13 @@ docker run --rm --env-file .env -p 127.0.0.1:3000:3000 -p 127.0.0.1:3001:3001 \
   -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest
 ```
 
-The image is public and can be pulled without a GitHub registry login.
+The image is public and can be pulled without a GitHub registry login. Update a
+Docker deployment manually by pulling the image again and recreating its
+container:
+
+```sh
+docker pull ghcr.io/panuhorsmalahti/solmu:latest
+```
+
+Docker deployments do not update themselves; the native service auto-update
+setting does not apply to containers.
