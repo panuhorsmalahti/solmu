@@ -10,6 +10,7 @@ export interface AuditRun extends ToolRun { sequence: number; thread_id: string;
 export interface CacheSummary { requests: number; input_tokens: number; output_tokens: number; cached_input_tokens: number; cache_creation_input_tokens: number; hit_rate_percent: number | null }
 export interface AuditPage { items: AuditRun[]; next_cursor: number | null; cache_24h: CacheSummary }
 export interface ScheduledTask { id: string; name: string; prompt: string; schedule_kind: 'once' | 'cron'; schedule: string; thread_id: string; enabled: boolean; running: boolean; next_run_at: string | null; last_run_at: string | null; last_status: string | null }
+export interface Webhook { id: string; name: string; enabled: boolean; auth_type: 'github-hmac-sha256' | 'bearer'; secret_configured: boolean; instructions: string; created_at: string; updated_at: string; port: number }
 export interface TaskRun { id: string; scheduled_for: string; started_at: string; finished_at: string | null; status: string; error: string | null }
 export type ReplyEvent = { event: 'delta'; data: { text: string } } | { event: 'done'; data: Message } | { event: 'reset'; data: object } | { event: 'tool_start' | 'tool_result'; data: ToolRun }
 

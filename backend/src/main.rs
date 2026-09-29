@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
 
 mod api;
 mod config;
@@ -31,9 +32,19 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let llm = llm::Llm::from_env()?;
     let pool = db::connect(&config.database_url).await?;
     let listener = TcpListener::bind(config.bind_addr).await?;
-    let state = api::state::AppState::new(pool.clone(), llm);
+    let webhook_listener = TcpListener::bind(config.webhook_bind_addr).await?;
+    let webhook_port = webhook_listener.local_addr()?.port();
+    let state = api::state::AppState::new(pool.clone(), llm, webhook_port);
     let scheduler = tokio::spawn(scheduler::run(state.clone()));
-    let app = web::router(api::router(state), &config.web_dir);
+    let app = web::router(api::router(state.clone()), &config.web_dir);
+    let webhook_app = api::webhooks::receiver(state);
+    let webhook_shutdown = CancellationToken::new();
+    let cancel_webhook_shutdown = webhook_shutdown.clone();
+    let webhook_server = tokio::spawn(async move {
+        axum::serve(webhook_listener, webhook_app)
+            .with_graceful_shutdown(async move { cancel_webhook_shutdown.cancelled().await })
+            .await
+    });
 
     println!("Solmu listening on http://{}", listener.local_addr()?);
 
@@ -41,6 +52,8 @@ async fn run() -> Result<(), Box<dyn Error>> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
+    webhook_shutdown.cancel();
+    webhook_server.await??;
     scheduler.abort();
     pool.close().await;
 

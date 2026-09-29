@@ -8,6 +8,8 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByRole('link', { name: 'Explore Audit' })).toHaveAttribute('href', 'docs/audit/')
   await expect(page.getByText("last 24 hours' prompt cache hit rate", { exact: false })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Explore Tasks' })).toHaveAttribute('href', 'docs/tasks/')
+  await expect(page.getByRole('link', { name: 'Explore Webhooks' })).toHaveAttribute('href', 'docs/webhooks/')
+  await expect(page.getByText('Authenticated webhooks can start a conversation from GitHub or another service.', { exact: false })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Use skills' })).toHaveAttribute('href', 'docs/skills/')
   await expect(page.getByRole('link', { name: 'Connect MCP' })).toHaveAttribute('href', 'docs/mcp/')
   await expect(page.getByRole('link', { name: 'Use plugins' })).toHaveAttribute('href', 'docs/plugins/')
@@ -39,7 +41,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByText('choose offline execution for standalone commands', { exact: false })).toBeVisible()
   await expect(page.getByText('Check that your OS can apply them before launching.', { exact: false })).toBeVisible()
   await expect(page.getByText('explicit network routes for your provider and backend', { exact: false })).toBeVisible()
-  await expect(page.locator('pre').filter({ hasText: 'docker run --rm --env-file .env -p 127.0.0.1:3000:3000 -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest' })).toBeVisible()
+  await expect(page.locator('pre').filter({ hasText: 'docker run --rm --env-file .env -p 127.0.0.1:3000:3000 -p 127.0.0.1:3001:3001 -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest' })).toBeVisible()
   await expect(page.getByText('Boxer is the recommended agent sandbox.', { exact: false })).toBeVisible()
   for (const script of ['install-bundle.sh', 'install-bundle.ps1']) await expect(page.locator('#install pre').filter({ hasText: `https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/${script}` })).toBeVisible()
   for (const client of ['cli', 'desktop', 'web', 'muxer']) {

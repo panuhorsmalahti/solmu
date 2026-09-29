@@ -88,6 +88,7 @@ static STARTUP_LIMIT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new
 
 pub struct Backend {
     pub url: String,
+    pub webhook_url: String,
     pub client: reqwest::Client,
     pub directory: TempDir,
     pub requests: Requests,
@@ -130,6 +131,9 @@ impl Backend {
     ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}/v1/", listener.local_addr().unwrap());
+        let webhook_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let webhook_bind = webhook_listener.local_addr().unwrap().to_string();
+        drop(webhook_listener);
         let requests = Requests::default();
         let reply_control = Arc::new(ReplyControl::default());
         let router = Router::new()
@@ -141,6 +145,7 @@ impl Backend {
         });
         let mut backend = Self {
             url: String::new(),
+            webhook_url: format!("http://{webhook_bind}"),
             client: reqwest::Client::new(),
             directory: tempfile::tempdir().unwrap(),
             requests,
@@ -220,6 +225,10 @@ impl Backend {
         command
             .current_dir(self.directory.path())
             .env("SOLMU_BIND_ADDR", bind)
+            .env(
+                "SOLMU_WEBHOOK_BIND_ADDR",
+                self.webhook_url.strip_prefix("http://").unwrap(),
+            )
             .env("SOLMU_WEB_DIR", self.directory.path().join("web"))
             .env("SOLMU_DATABASE_URL", "sqlite://solmu.db")
             .env("SOLMU_WORKSPACE", self.directory.path().join("workspace"))

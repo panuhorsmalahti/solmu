@@ -4,6 +4,7 @@ pub mod scheduled_tasks;
 pub mod threads;
 pub mod tools;
 pub mod usage;
+pub mod webhooks;
 
 #[derive(Debug)]
 pub enum StoreError {

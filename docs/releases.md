@@ -81,7 +81,7 @@ The **Publish Docker image** workflow publishes the backend to
 `sha-<commit>` tag; production releases add `v<version>`.
 
 ```sh
-docker run --rm --env-file .env -p 127.0.0.1:3000:3000 \
+docker run --rm --env-file .env -p 127.0.0.1:3000:3000 -p 127.0.0.1:3001:3001 \
   -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest
 ```
 

@@ -11,6 +11,7 @@ mod skills;
 pub mod state;
 mod threads;
 mod tools;
+pub(crate) mod webhooks;
 
 use axum::{
     Router,
@@ -66,6 +67,14 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/threads/{thread_id}/plugins", get(plugins::list))
         .route("/api/v1/threads/{thread_id}/tools", get(tools::list))
         .route("/api/v1/profile", get(profile::get).put(profile::save))
+        .route(
+            "/api/v1/webhooks",
+            get(webhooks::list).post(webhooks::create),
+        )
+        .route(
+            "/api/v1/webhooks/{id}",
+            axum::routing::patch(webhooks::update).delete(webhooks::delete),
+        )
         .route("/api/v1/models", get(models::list))
         .route("/api/v1/events", get(events::connect))
         .route("/api/v1/threads/{thread_id}/stop", post(responses::stop))

@@ -17,6 +17,7 @@ Licensed under [MIT](LICENSE).
 - Schedule Solmu to run once later or on a recurring cron schedule, with a saved conversation and run history for each task. See [Tasks](docs/tasks.md).
 - Use project skills discovered automatically from `.agents/skills/`.
 - Connect workspace MCP servers to use additional tools and inspect their live status in every client. See [MCP setup](docs/mcp.md).
+- Trigger agent conversations from GitHub and other services with authenticated [webhooks](docs/webhooks.md).
 - Install Agent Plugins to bring skills and MCP tools into a workspace together. See [plugins](docs/plugins.md).
 - Choose a model per thread and work from your CLI's current folder.
 - Run locally, in Docker, or in a Linux sandbox workspace.
@@ -167,6 +168,7 @@ Docker provides a convenient way to run the backend.
 
 ```sh
 docker run --rm --env-file .env -p 127.0.0.1:3000:3000 \
+  -p 127.0.0.1:3001:3001 \
   -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest
 ```
 

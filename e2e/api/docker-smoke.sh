@@ -4,7 +4,7 @@ set -eu
 image=${1:?Pass the Solmu backend image}
 container=solmu-docker-e2e
 base=http://127.0.0.1:3000/api/v1
-docker run --detach --name "$container" -p 127.0.0.1:3000:3000 "$image" >/dev/null
+docker run --detach --name "$container" -p 127.0.0.1:3000:3000 -p 127.0.0.1:3001:3001 "$image" >/dev/null
 trap 'docker rm --force "$container" >/dev/null' EXIT HUP INT TERM
 
 wait_for_backend() {

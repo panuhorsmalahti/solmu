@@ -2,6 +2,7 @@ use std::{env, error::Error, net::SocketAddr, path::PathBuf};
 
 pub struct Config {
     pub bind_addr: SocketAddr,
+    pub webhook_bind_addr: SocketAddr,
     pub database_url: String,
     pub web_dir: PathBuf,
 }
@@ -11,6 +12,9 @@ impl Config {
         Ok(Self {
             bind_addr: optional_env("SOLMU_BIND_ADDR")?
                 .unwrap_or_else(|| "127.0.0.1:3000".into())
+                .parse()?,
+            webhook_bind_addr: optional_env("SOLMU_WEBHOOK_BIND_ADDR")?
+                .unwrap_or_else(|| "127.0.0.1:3001".into())
                 .parse()?,
             database_url: optional_env("SOLMU_DATABASE_URL")?
                 .unwrap_or_else(|| "sqlite://solmu.db".into()),

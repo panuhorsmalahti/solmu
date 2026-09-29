@@ -65,6 +65,18 @@ test('Scheduled tasks are introduced on the website and documented from root doc
   await expect(page.locator('article img[alt="Tasks on the web"]')).toBeVisible()
 })
 
+test('webhook setup is published from the shared docs and linked on the website', async ({ page }) => {
+  await page.goto(`${home}docs/webhooks/`)
+  await expect(page.getByRole('heading', { name: 'Webhooks', exact: true })).toBeVisible()
+  await expect(page.locator('article')).toContainText('X-Hub-Signature-256')
+  await expect(page.locator('article')).toContainText('SOLMU_WEBHOOK_BIND_ADDR')
+  await expect(page.locator('article')).toContainText('at least 16 characters')
+  await expect(page.locator('article img[alt="Web webhook settings"]')).toBeVisible()
+  await page.goto(home)
+  await page.getByRole('link', { name: 'Explore Webhooks' }).click()
+  await expect(page).toHaveURL(`${home}docs/webhooks/`)
+})
+
 test('Boxer guide uses default backend settings and describes explicit Linux network routes', async ({ page }) => {
   await page.goto(`${home}docs/boxer/`)
   const example = page.locator('article pre').filter({ hasText: 'boxer --profile solmu --cwd /path/to/project -- solmu-backend' })

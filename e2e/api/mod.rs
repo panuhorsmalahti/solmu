@@ -49,3 +49,4 @@ mod scheduled_tasks;
 mod skills;
 mod tools;
 mod web;
+mod webhooks;

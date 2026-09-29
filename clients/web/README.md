@@ -50,6 +50,8 @@ clicks reuse the empty thread until you send a message. Profile updates appear
 automatically and preserve unsaved edits. See [Profile](../../docs/profile.md).
 
 See [web usage](../../docs/web.md).
+Configure authenticated event triggers in **Webhooks**; see the
+[webhook guide](../../docs/webhooks.md).
 For source builds, see [development](../../docs/development.md).
 
 ![Solmu client screenshot](../../docs/screenshots/web.png)
@@ -94,3 +96,10 @@ Choose **Plugins** to inspect installed [Agent Plugins](../../docs/plugins.md)
 and loading errors. The list updates automatically.
 
 ![Web plugins](../../docs/screenshots/web-plugins.png)
+
+## Webhooks
+
+Configure a GitHub signature or bearer secret, enable an endpoint, and let
+authenticated events start agent conversations. See [webhook setup](../../docs/webhooks.md).
+
+![Web webhook settings](../../docs/screenshots/web-webhooks.png)

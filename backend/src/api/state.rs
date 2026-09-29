@@ -46,6 +46,7 @@ type ThreadLocks = Arc<Mutex<HashMap<String, Weak<AsyncMutex<()>>>>>;
 pub struct AppState {
     pub pool: SqlitePool,
     pub llm: Llm,
+    pub webhook_port: u16,
     pub tools: crate::tools::Registry,
     pub skills: crate::skills::Manager,
     pub mcp: crate::mcp::Manager,
@@ -55,11 +56,12 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(pool: SqlitePool, llm: Llm) -> Self {
+    pub fn new(pool: SqlitePool, llm: Llm, webhook_port: u16) -> Self {
         let events = broadcast::channel(256).0;
         Self {
             pool,
             llm,
+            webhook_port,
             tools: crate::tools::Registry::new(),
             locks: Arc::default(),
             skills: crate::skills::Manager::new(events.clone()),
@@ -86,6 +88,13 @@ impl AppState {
     pub fn tasks_changed(&self) {
         let _ = self.events.send(Change {
             kind: "tasks_changed",
+            thread_id: None,
+        });
+    }
+
+    pub fn webhooks_changed(&self) {
+        let _ = self.events.send(Change {
+            kind: "webhooks_changed",
             thread_id: None,
         });
     }

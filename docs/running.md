@@ -33,7 +33,8 @@ the host for the container build.
 ```sh
 docker build -t solmu .
 docker run --rm --name solmu --env-file .env \
-  -p 127.0.0.1:3000:3000 -v solmu-data:/data solmu
+  -p 127.0.0.1:3000:3000 -p 127.0.0.1:3001:3001 \
+  -v solmu-data:/data solmu
 ```
 
 You can also use the published image `ghcr.io/panuhorsmalahti/solmu:latest`
@@ -46,3 +47,4 @@ for example `-p 127.0.0.1:8080:3000` and
 `SOLMU_BACKEND_URL=http://127.0.0.1:8080`.
 
 See [configuration](configuration.md) and [the API guide](api.md).
+For incoming GitHub and other authenticated agent events, see [Webhooks](webhooks.md).

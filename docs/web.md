@@ -43,6 +43,8 @@ default. OpenAI and Anthropic show named choices; custom model IDs also work.
 Profile changes appear live while preserving unsaved edits.
 See [Profile](profile.md) and [workspaces](workspaces.md).
 
+Use **Webhooks** to connect GitHub or another service. Authenticated JSON events create a conversation and start an agent response in the background. See [Webhooks](webhooks.md) for setup and listener configuration.
+
 Type a message and press Enter or the send arrow. Shift+Enter adds a newline.
 Replies stream into the conversation and are saved when complete. Thread
 changes and sending are disabled while a reply is processing. Provider errors

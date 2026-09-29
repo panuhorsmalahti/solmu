@@ -30,6 +30,7 @@ For the installed background backend, edit `~/.solmu/.env` (Windows:
 | Variable | Local default | Docker default | Purpose |
 | --- | --- | --- | --- |
 | `SOLMU_BIND_ADDR` | `127.0.0.1:3000` | `0.0.0.0:3000` | IP address and port for the API server. IPv6 addresses use brackets, such as `[::1]:3000`. |
+| `SOLMU_WEBHOOK_BIND_ADDR` | `127.0.0.1:3001` | `0.0.0.0:3001` | Separate listener for authenticated inbound webhooks. |
 | `SOLMU_WEB_DIR` | `~/.solmu/web` (Windows: `%USERPROFILE%\.solmu\web`) | `/app/web` | Published web client files served by the backend. Service installations use `web` relative to their state folder. |
 | `SOLMU_DATABASE_URL` | `sqlite://solmu.db` | `sqlite:///data/solmu.db` | SQLite file. Its parent directory must exist. Tables are created automatically. |
 | `SOLMU_BACKEND_URL` | `http://127.0.0.1:3000` | Same | Backend address used by Rust clients. |
@@ -152,7 +153,7 @@ ANTHROPIC_API_KEY=your-api-key
 Pass that file when starting the container:
 
 ```sh
-docker run --rm --env-file .env -p 127.0.0.1:3000:3000 solmu
+docker run --rm --env-file .env -p 127.0.0.1:3000:3000 -p 127.0.0.1:3001:3001 solmu
 ```
 
 The Docker image excludes `.env` files. Credentials supplied this way are
