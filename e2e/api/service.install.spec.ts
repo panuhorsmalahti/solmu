@@ -12,7 +12,12 @@ for (const component of ['backend', 'bundle']) {
       expect(await readFile(path.join(state, '.env'), 'utf8')).toContain('LLM_PROVIDER=openai')
       expect(await readFile(path.join(state, '.env'), 'utf8')).toContain('SOLMU_AUTO_UPDATE=true')
       expect(await readFile(path.join(state, '.solmu-backend-version'), 'utf8')).toBe('v0.1.0')
-      expect(await readFile(path.join(state, `auto-update.${process.platform === 'win32' ? 'ps1' : 'sh'}`), 'utf8')).toMatch(/SOLMU_AUTO_UPDATE/)
+      expect(await readFile(path.join(state, process.platform === 'win32' ? 'auto-update-v2.ps1' : 'auto-update.sh'), 'utf8')).toMatch(/SOLMU_AUTO_UPDATE/)
+      const installed = component === 'bundle' ? ['backend', 'cli', 'desktop', 'boxer', 'muxer', 'web'] : ['backend']
+      for (const module of installed) {
+        expect(await readFile(path.join(state, 'update-components', module), 'utf8')).toBe(module === 'web' ? path.join(state, 'web') : fixture.destination)
+        expect(await readFile(path.join(state, `.solmu-version-${module}`), 'utf8')).toBe('v0.1.0')
+      }
       const configuration = 'LLM_PROVIDER=openai\nOPENAI_API_KEY=user-provided-key\n'
       await writeFile(path.join(state, '.env'), configuration)
       await fixture.run(component, { service: true })
@@ -30,7 +35,8 @@ for (const component of ['backend', 'bundle']) {
         expect(task.Action.Argument).toContain(fixture.destination)
         const updateTask = JSON.parse(await readFile(path.join(fixture.directory, 'service-record.Solmu Auto Update.json'), 'utf8'))
         expect(updateTask.Trigger.Daily).toBe(true)
-        expect(updateTask.Action.Argument).toContain('auto-update.ps1')
+        expect(updateTask.Action.Argument).toContain('auto-update-v2.ps1')
+        expect(updateTask.Settings.StartWhenAvailable).toBe(true)
         const runner = await readFile(path.join(state, 'backend-service.ps1'), 'utf8')
         expect(runner).toContain('KILL_ON_JOB_CLOSE')
         expect(runner).toContain('$start.CreateNoWindow = $true')
@@ -61,6 +67,23 @@ for (const component of ['backend', 'bundle']) {
       await fixture.runAutoUpdate()
       expect(fixture.requests.slice(previousRequests)).toContain('/api/latest')
       expect(fixture.requests.slice(previousRequests)).not.toContain('/download/v0.1.0/solmu-v0.1.0-' + (process.platform === 'win32' ? 'windows-x86_64.zip' : process.platform === 'darwin' ? `macos-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}.tar.gz` : 'linux-x86_64.tar.gz'))
+      if (component === 'bundle') {
+        const tracked = ['backend', 'cli', 'desktop', 'boxer', 'muxer', 'web']
+        for (const module of tracked) {
+          const marker = module === 'web' ? path.join(state, 'web', '.solmu-web') : path.join(state, `.solmu-version-${module}`)
+          await writeFile(marker, 'v0.0.9')
+        }
+        const updateStart = fixture.requests.length
+        await fixture.runAutoUpdate()
+        for (const module of tracked) {
+          const marker = module === 'web' ? path.join(state, 'web', '.solmu-web') : path.join(state, `.solmu-version-${module}`)
+          expect(await readFile(marker, 'utf8')).toBe('v0.1.0')
+        }
+        const platformAsset = process.platform === 'win32' ? 'windows-x86_64.zip' : process.platform === 'darwin' ? `macos-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}.tar.gz` : 'linux-x86_64.tar.gz'
+        const requests = fixture.requests.slice(updateStart)
+        expect(requests.filter(request => request.endsWith(`solmu-v0.1.0-${platformAsset}`))).toHaveLength(1)
+        expect(requests.filter(request => request.endsWith('solmu-v0.1.0-web.zip'))).toHaveLength(1)
+      }
     } finally { await fixture.close() }
   })
 }

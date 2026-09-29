@@ -44,19 +44,24 @@ Set `SOLMU_WEB_INSTALL_DIR` for a different bundle web folder, and set
 by the service environment take precedence over `.env`.
 See [all configuration options](configuration.md).
 
-Managed service installations check GitHub Releases once per day and install a
-new backend release automatically. The update runs separately from the backend
-service, verifies the release checksum, then restarts the service. Set
-`SOLMU_AUTO_UPDATE=false` in this `.env` and restart the service to turn the
-check off. The updater reads this setting directly from the file.
+Module installers register installed components for a daily update check.
+Rerun each module installer once to register a previously installed module.
+Only modules you installed are updated; Muxer also updates its required
+CLI runtime. The updater verifies release checksums, and restarts the backend
+service after a backend update. This works for modules installed separately or
+with the bundle. Set `SOLMU_AUTO_UPDATE=false` in this `.env` and rerun an
+installer to stop automatic updates. The updater reads this setting directly
+from the file. On Windows, a running client is skipped until a later daily
+check so its executable can be replaced safely.
 
-To check for and install an update immediately, rerun the backend installer:
+To check for and install an update immediately, rerun the matching module
+installer (the backend example is):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-backend.sh | sh
 ```
 
-On Windows, run `irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-backend.ps1 | iex`.
+On Windows, run `irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-backend.ps1 | iex`. See [all module update commands](releases.md#individual-components).
 
 ## Linux
 
@@ -88,7 +93,8 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.solmu.backend
 launchctl print "gui/$(id -u)/dev.solmu.autoupdate"
 ```
 
-Output is in `~/.solmu/backend.log` and `backend-error.log`.
+Output is in `~/.solmu/backend.log` and `backend-error.log`. The daily update
+agent is `dev.solmu.autoupdate`.
 Remove its LaunchAgent plist after stopping to disable login startup.
 
 ## Windows

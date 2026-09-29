@@ -38,7 +38,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.locator('.tool-grid')).not.toContainText('SOLMU_BACKEND_URL=')
   await expect(page.getByText('Launch the backend inside Boxer to protect its tools.', { exact: false })).toBeVisible()
   await expect(page.getByText('Profiles also launch installed Codex and Claude Code CLIs with separate logins.', { exact: false })).toBeVisible()
-  await expect(page.getByText('Managed backend installs check for updates daily; update any client manually by rerunning its installer.', { exact: false })).toBeVisible()
+  await expect(page.getByText('The latest installers register installed modules for daily updates; rerun each installer once for existing installs.', { exact: false })).toBeVisible()
   await expect(page.getByText('choose offline execution for standalone commands', { exact: false })).toBeVisible()
   await expect(page.getByText('Check that your OS can apply them before launching.', { exact: false })).toBeVisible()
   await expect(page.getByText('explicit network routes for your provider and backend', { exact: false })).toBeVisible()

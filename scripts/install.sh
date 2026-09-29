@@ -55,13 +55,27 @@ temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 curl -fsSL "$base/$tag/SHA256SUMS" -o "$temporary/SHA256SUMS"
 verify_download() {
-  curl -fsSL "$base/$tag/$1" -o "$temporary/$1"
+  cache_file=
+  if [ -n "${SOLMU_INSTALL_CACHE_DIR:-}" ]; then
+    mkdir -p "$SOLMU_INSTALL_CACHE_DIR"
+    cache_file="$SOLMU_INSTALL_CACHE_DIR/$1"
+  fi
+  if [ -n "$cache_file" ] && [ -f "$cache_file" ] && [ ! -L "$cache_file" ]; then
+    cp "$cache_file" "$temporary/$1"
+  else
+    curl -fsSL "$base/$tag/$1" -o "$temporary/$1"
+  fi
   expected=$(awk -v file="$1" '$2 == file {print $1}' "$temporary/SHA256SUMS")
   printf '%s\n' "$expected" | grep -Eq '^[0-9a-f]{64}$' || { echo 'Missing release checksum' >&2; exit 1; }
   if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$temporary/$1" | awk '{print $1}');
   elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$temporary/$1" | awk '{print $1}');
   else echo 'A SHA-256 utility is required' >&2; exit 1; fi
-  [ "$actual" = "$expected" ] || { echo 'Release checksum mismatch' >&2; exit 1; }
+  if [ "$actual" != "$expected" ]; then
+    [ -z "$cache_file" ] || rm -f "$cache_file"
+    echo 'Release checksum mismatch' >&2
+    exit 1
+  fi
+  [ -z "$cache_file" ] || cp "$temporary/$1" "$cache_file"
 }
 verify_download "$asset"
 if [ "$component" = all ]; then verify_download "solmu-$tag-web.zip"; fi
@@ -88,7 +102,26 @@ install_web() {
   printf '%s\n' "$tag" > "$1/.solmu-web"
   printf 'Installed Solmu web %s to %s\nOpen http://127.0.0.1:3000 with the backend running.\n' "$tag" "$1"
 }
-if [ "$component" = web ]; then install_web "$destination"; exit 0; fi
+register_component() {
+  name=$1
+  path=$2
+  printf '%s\n' "$path" > "$service_dir/update-components/$name.new"
+  mv "$service_dir/update-components/$name.new" "$service_dir/update-components/$name"
+  printf '%s\n' "$tag" > "$service_dir/.solmu-version-$name"
+}
+if [ "$component" = web ]; then
+  install_web "$destination"
+  mkdir -p "$service_dir/update-components"
+  chmod 700 "$service_dir" "$service_dir/update-components"
+  register_component web "$destination"
+  if [ "${SOLMU_NO_AUTO_UPDATE:-0}" != 1 ]; then
+    installer_base=${SOLMU_INSTALLER_BASE_URL:-https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts}
+    curl -fsSL "$installer_base/service.sh" -o "$temporary/service.sh"
+    . "$temporary/service.sh"
+    solmu_setup_autoupdate
+  fi
+  exit 0
+fi
 
 tar -tzf "$temporary/$asset" > "$temporary/entries"
 while IFS= read -r entry; do
@@ -106,24 +139,32 @@ fi
 for binary in solmu-backend solmu solmu-desktop boxer muxer; do
   [ -f "$temporary/$binary" ] && [ ! -L "$temporary/$binary" ] || { echo "Missing binary: $binary" >&2; exit 1; }
 done
+installer_base=${SOLMU_INSTALLER_BASE_URL:-https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts}
+curl -fsSL "$installer_base/service.sh" -o "$temporary/service.sh"
+. "$temporary/service.sh"
 case "$component" in backend|all)
-  if [ "${SOLMU_NO_SERVICE:-0}" != 1 ]; then
-    installer_base=${SOLMU_INSTALLER_BASE_URL:-https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts}
-    curl -fsSL "$installer_base/service.sh" -o "$temporary/service.sh"
-    . "$temporary/service.sh"
-    solmu_stop_service
-  fi ;;
+  if [ "${SOLMU_NO_SERVICE:-0}" != 1 ]; then solmu_stop_service; fi ;;
 esac
 mkdir -p "$destination"
 for binary in $selected; do
   cp "$temporary/$binary" "$destination/$binary"
   chmod 755 "$destination/$binary"
 done
-if [ "$component" = backend ] || [ "$component" = all ]; then
-  mkdir -p "$service_dir"
-  chmod 700 "$service_dir"
-  printf '%s\n' "$tag" > "$service_dir/.solmu-backend-version"
-fi
+mkdir -p "$service_dir/update-components"
+chmod 700 "$service_dir" "$service_dir/update-components"
+case "$component" in
+  backend) if [ "${SOLMU_NO_SERVICE:-0}" != 1 ]; then register_component backend "$destination"; printf '%s\n' "$tag" > "$service_dir/.solmu-backend-version"; fi ;;
+  cli) register_component cli "$destination" ;;
+  desktop) register_component desktop "$destination" ;;
+  boxer) register_component boxer "$destination" ;;
+  muxer) register_component cli "$destination"; register_component muxer "$destination" ;;
+  web) register_component web "$destination" ;;
+  all)
+    for name in cli desktop boxer muxer; do register_component "$name" "$destination"; done
+    if [ "${SOLMU_NO_SERVICE:-0}" != 1 ]; then register_component backend "$destination"; printf '%s\n' "$tag" > "$service_dir/.solmu-backend-version"; fi
+    register_component web "$web_destination"
+    ;;
+esac
 if [ "$legacy_cli" = 1 ]; then
   case " $selected " in *' solmu '*) cp "$temporary/solmu-cli" "$destination/solmu-cli"; chmod 755 "$destination/solmu-cli" ;; esac
 fi
@@ -132,6 +173,7 @@ if [ "$component" = all ]; then install_web "$web_destination"; fi
 case "$component" in backend|all)
   if [ "${SOLMU_NO_SERVICE:-0}" != 1 ]; then solmu_start_service; fi ;;
 esac
+if [ "${SOLMU_NO_AUTO_UPDATE:-0}" != 1 ]; then solmu_setup_autoupdate; fi
 if [ "${SOLMU_NO_PATH:-0}" != 1 ]; then
   case ":$PATH:" in *":$destination:"*) ;; *)
     case "${SHELL:-}" in

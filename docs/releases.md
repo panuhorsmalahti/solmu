@@ -50,10 +50,15 @@ Replace `install-backend` with `install-cli`, `install-desktop`, `install-web`,
 `install-boxer`, or `install-muxer` to update an individual part. Use
 `install-bundle` to update all modules together.
 
-Managed backend service installations automatically check for backend updates
-once per day. See [backend updates](services.md#configure) to disable this or
-install one immediately. Standalone client installs update only when their
-module installer is rerun.
+The latest module installers register installed components, including clients,
+Web, Boxer, and Muxer, for daily automatic updates. Rerun the installer for each
+component once to register an existing installation. Muxer also updates its
+required CLI runtime. Set `SOLMU_AUTO_UPDATE=false` in
+`~/.solmu/.env` (Windows: `%USERPROFILE%\.solmu\.env`) to turn updates off;
+create the file first if you installed clients without the backend.
+Linux automatic updates require systemd user timers. On Windows, running clients
+are skipped until a later daily check. Docker images update only when pulled
+manually. See [update setup](services.md#configure).
 The legacy `install.sh` and `install.ps1` use the same bundle behavior as
 `install-bundle`; the explicit bundle scripts are the documented end-user option.
 

@@ -41,6 +41,10 @@ irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install
 The optional bundle installs the backend, every client, Boxer, and Muxer from
 the latest release, verifies checksums, and starts the backend in the background.
 See [bundle setup](docs/bundle.md) and [service management](docs/services.md).
+Installed modules update daily by default. Rerun each module's installer once
+to register an existing installation; set `SOLMU_AUTO_UPDATE=false` in
+`~/.solmu/.env` to disable updates. Docker images update by pulling a new image.
+See [update details](docs/releases.md).
 
 Prefer individual modules? Install the [backend](docs/services.md#install),
 then only the clients you need: [CLI](clients/cli/README.md#install),

@@ -51,7 +51,13 @@ New-Item -ItemType Directory -Path $solmuTemporary | Out-Null
 try {
     function Expand-Release([string]$asset, [string]$Output, [bool]$Web) {
         $archive = Join-Path $solmuTemporary $asset
-        Invoke-WebRequest -UseBasicParsing "$DownloadBase/$Version/$asset" -OutFile $archive
+        $cacheFile = $null
+        if ($env:SOLMU_INSTALL_CACHE_DIR) {
+            New-Item -ItemType Directory -Path $env:SOLMU_INSTALL_CACHE_DIR -Force | Out-Null
+            $cacheFile = Join-Path $env:SOLMU_INSTALL_CACHE_DIR $asset
+        }
+        if ($cacheFile -and (Test-Path -LiteralPath $cacheFile -PathType Leaf)) { Copy-Item -LiteralPath $cacheFile -Destination $archive }
+        else { Invoke-WebRequest -UseBasicParsing "$DownloadBase/$Version/$asset" -OutFile $archive }
         $checksumFile = Join-Path $solmuTemporary 'SHA256SUMS'
         Invoke-WebRequest -UseBasicParsing "$DownloadBase/$Version/SHA256SUMS" -OutFile $checksumFile
         $checksums = Get-Content -LiteralPath $checksumFile -Raw -Encoding UTF8
@@ -62,7 +68,16 @@ try {
         $inputStream = [System.IO.File]::OpenRead($archive)
         try { $actual = [BitConverter]::ToString($hasher.ComputeHash($inputStream)).Replace('-', '').ToLowerInvariant() }
         finally { $inputStream.Dispose(); $hasher.Dispose() }
+        if ($actual -ne $expected -and $cacheFile -and (Test-Path -LiteralPath $cacheFile -PathType Leaf)) {
+            Remove-Item -LiteralPath $cacheFile -Force
+            Invoke-WebRequest -UseBasicParsing "$DownloadBase/$Version/$asset" -OutFile $archive
+            $hasher = [System.Security.Cryptography.SHA256]::Create()
+            $inputStream = [System.IO.File]::OpenRead($archive)
+            try { $actual = [BitConverter]::ToString($hasher.ComputeHash($inputStream)).Replace('-', '').ToLowerInvariant() }
+            finally { $inputStream.Dispose(); $hasher.Dispose() }
+        }
         if ($actual -ne $expected) { throw 'Release checksum mismatch' }
+        if ($cacheFile -and -not (Test-Path -LiteralPath $cacheFile -PathType Leaf)) { Copy-Item -LiteralPath $archive -Destination $cacheFile }
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $zip = [System.IO.Compression.ZipFile]::OpenRead($archive)
         $binaries = @('solmu-backend.exe', 'solmu.exe', 'solmu-desktop.exe', 'boxer.exe', 'muxer.exe')
@@ -74,7 +89,7 @@ try {
                 if ($fileType -notin @(0, 32768, 16384)) { throw 'Links and special files are not allowed in release archives' }
                 if ($Web) {
                     if ($entry.FullName -notmatch '^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*/?$' -or ($entry.FullName.Split('/') | Where-Object { $_ -in @('.', '..') })) { throw 'Unsafe path in web archive' }
-                } elseif ($entry.FullName -notin ($binaries + @('solmu-cli.exe'))) { throw 'Unexpected file in release archive' }
+                } elseif ($entry.FullName -notin ($binaries + @('solmu-cli.exe'))) { throw "Unexpected file in release archive: $($entry.FullName)" }
             }
         } finally { $zip.Dispose() }
         [System.IO.Compression.ZipFile]::ExtractToDirectory($archive, $Output)
@@ -89,20 +104,21 @@ try {
         }
     }
     $binaries = @('solmu-backend.exe', 'solmu.exe', 'solmu-desktop.exe', 'boxer.exe', 'muxer.exe')
+    $needsService = $Component -in @('backend', 'all') -and -not $NoService
+    $installerBase = if ($env:SOLMU_INSTALLER_BASE_URL) { $env:SOLMU_INSTALLER_BASE_URL.TrimEnd('/') } else { 'https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts' }
+    $helper = Join-Path $solmuTemporary 'service.ps1'
+    Invoke-WebRequest -UseBasicParsing "$installerBase/service.ps1" -OutFile $helper
+    . $helper
     if ($Component -eq 'web') {
         Expand-Release $asset (Join-Path $solmuTemporary 'web') $true
         Install-Web $InstallDir (Join-Path $solmuTemporary 'web')
+        Register-SolmuModule 'web' $InstallDir $Version $serviceDir
+        if ($env:SOLMU_NO_AUTO_UPDATE -ne '1') { Register-SolmuAutoUpdate $serviceDir }
         return
     }
     Expand-Release $asset (Join-Path $solmuTemporary 'files') $false
     if ($Component -eq 'all') { Expand-Release "solmu-$Version-web.zip" (Join-Path $solmuTemporary 'web') $true }
-    if ($Component -in @('backend', 'all') -and -not $NoService) {
-        $installerBase = if ($env:SOLMU_INSTALLER_BASE_URL) { $env:SOLMU_INSTALLER_BASE_URL.TrimEnd('/') } else { 'https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts' }
-        $helper = Join-Path $solmuTemporary 'service.ps1'
-        Invoke-WebRequest -UseBasicParsing "$installerBase/service.ps1" -OutFile $helper
-        . $helper
-        Stop-SolmuService
-    }
+    if ($needsService) { Stop-SolmuService }
     $selected = switch ($Component) {
         'all' { $binaries }
         'backend' { 'solmu-backend.exe' }
@@ -115,7 +131,7 @@ try {
     foreach ($binary in $selected) { Copy-Item -LiteralPath (Join-Path $solmuTemporary "files\$binary") -Destination (Join-Path $InstallDir $binary) -Force }
     if ($Component -in @('backend', 'all')) {
         New-Item -ItemType Directory -Path $serviceDir -Force | Out-Null
-        [IO.File]::WriteAllText((Join-Path $serviceDir '.solmu-backend-version'), $Version, (New-Object System.Text.UTF8Encoding($false)))
+        if (-not $NoService) { [IO.File]::WriteAllText((Join-Path $serviceDir '.solmu-backend-version'), $Version, (New-Object System.Text.UTF8Encoding($false))) }
     }
     # Older Boxer/Muxer releases still locate the legacy runtime name.
     if ('solmu.exe' -in $selected -and (Test-Path -LiteralPath (Join-Path $solmuTemporary 'files/solmu-cli.exe'))) {
@@ -126,8 +142,20 @@ try {
         if (($userPath -split ';') -notcontains $InstallDir) { [Environment]::SetEnvironmentVariable('Path', (($userPath.TrimEnd(';') + ';' + $InstallDir).TrimStart(';')), 'User') }
         if (($env:Path -split ';') -notcontains $InstallDir) { $env:Path = "$InstallDir;$env:Path" }
     }
-    if ($Component -eq 'all') { Install-Web $webDestination (Join-Path $solmuTemporary 'web') }
+    $moduleNames = switch ($Component) {
+        'all' { @('backend', 'cli', 'desktop', 'boxer', 'muxer') }
+        'muxer' { @('cli', 'muxer') }
+        default { @($Component) }
+    }
+    if ($NoService -and $Component -eq 'backend') { $moduleNames = @() }
+    if ($NoService -and $Component -eq 'all') { $moduleNames = @('cli', 'desktop', 'boxer', 'muxer') }
+    foreach ($module in $moduleNames) { Register-SolmuModule $module $InstallDir $Version $serviceDir }
+    if ($Component -eq 'all') {
+        Install-Web $webDestination (Join-Path $solmuTemporary 'web')
+        Register-SolmuModule 'web' $webDestination $Version $serviceDir
+    }
     if ($Component -in @('backend', 'all') -and -not $NoService) { Start-SolmuService (Join-Path $InstallDir 'solmu-backend.exe') $serviceDir }
+    if ($env:SOLMU_NO_AUTO_UPDATE -ne '1' -and (Get-Command Register-SolmuAutoUpdate -ErrorAction SilentlyContinue)) { Register-SolmuAutoUpdate $serviceDir }
     Write-Host "Installed Solmu $Version ($Component) to $InstallDir"
     Write-Host 'Clients connect to a separately running solmu-backend. New terminals will use the updated PATH.'
 } finally {

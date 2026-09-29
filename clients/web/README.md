@@ -18,7 +18,7 @@ irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install
 
 Downloads and verifies the published site files into `~/.solmu/web`
 (Windows: `%USERPROFILE%\.solmu\web`). This installs only the web client.
-Rerun to update it; existing browser tabs keep their previous assets.
+Rerun to update it manually; existing browser tabs keep their previous assets. Installed modules update automatically each day by default; see [update settings](../../docs/configuration.md).
 
 ## Run
 

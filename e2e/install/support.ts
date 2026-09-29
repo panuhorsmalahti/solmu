@@ -64,7 +64,7 @@ export async function releaseFixture(options: { corrupt?: boolean; webFiles?: Re
   return {
     directory, destination, native, web, requests,
     async run(component: string, options: { pinned?: boolean; useDefaultDestination?: boolean; service?: boolean; persistPath?: boolean } = {}) {
-      const env = { ...process.env, SOLMU_NO_SERVICE: options.service ? '0' : '1', SOLMU_NO_PATH: options.persistPath ? '0' : '1', SOLMU_SERVICE_DIR: path.join(directory, 'state'), SOLMU_WEB_INSTALL_DIR: path.join(directory, 'state', 'web'), SOLMU_COMPONENT: 'all', SOLMU_VERSION: options.pinned ? '0.1.0' : '', SOLMU_INSTALLER_BASE_URL: `${base}/scripts`, SOLMU_RELEASE_API: `${base}/api`, SOLMU_RELEASE_BASE_URL: `${base}/download`, SOLMU_INSTALL_DIR: options.useDefaultDestination ? '' : destination }
+      const env = { ...process.env, SOLMU_NO_SERVICE: options.service ? '0' : '1', SOLMU_NO_AUTO_UPDATE: options.service ? '0' : '1', SOLMU_NO_PATH: options.persistPath ? '0' : '1', SOLMU_SERVICE_DIR: path.join(directory, 'state'), SOLMU_WEB_INSTALL_DIR: path.join(directory, 'state', 'web'), SOLMU_COMPONENT: 'all', SOLMU_VERSION: options.pinned ? '0.1.0' : '', SOLMU_INSTALLER_BASE_URL: `${base}/scripts`, SOLMU_RELEASE_API: `${base}/api`, SOLMU_RELEASE_BASE_URL: `${base}/download`, SOLMU_INSTALL_DIR: options.useDefaultDestination ? '' : destination }
       delete env.PSModulePath
       if (options.persistPath) {
         env.HOME = path.join(directory, 'home')
@@ -86,7 +86,7 @@ function Stop-ScheduledTask { param($TaskName) Add-Content $env:SOLMU_SERVICE_RE
 function New-ScheduledTaskAction { param($Execute, $Argument, $WorkingDirectory) [pscustomobject]@{Execute=$Execute; Argument=$Argument; WorkingDirectory=$WorkingDirectory} }
 function New-ScheduledTaskTrigger { param([switch]$AtLogOn, [switch]$Daily, $At, $User) [pscustomobject]@{AtLogOn=$AtLogOn.IsPresent; Daily=$Daily.IsPresent; At="$At"; User=$User} }
 function New-ScheduledTaskPrincipal { param($UserId, $LogonType, $RunLevel) [pscustomobject]@{UserId=$UserId; LogonType=$LogonType; RunLevel=$RunLevel} }
-function New-ScheduledTaskSettingsSet { param($ExecutionTimeLimit, [switch]$AllowStartIfOnBatteries, [switch]$DontStopIfGoingOnBatteries, $MultipleInstances, $RestartCount, $RestartInterval) [pscustomobject]@{ExecutionTimeLimit=$ExecutionTimeLimit.ToString(); MultipleInstances=$MultipleInstances} }
+function New-ScheduledTaskSettingsSet { param($ExecutionTimeLimit, [switch]$StartWhenAvailable, [switch]$AllowStartIfOnBatteries, [switch]$DontStopIfGoingOnBatteries, $MultipleInstances, $RestartCount, $RestartInterval) [pscustomobject]@{ExecutionTimeLimit=$ExecutionTimeLimit.ToString(); StartWhenAvailable=$StartWhenAvailable.IsPresent; MultipleInstances=$MultipleInstances} }
 function Register-ScheduledTask { param($TaskName, $Action, $Trigger, $Principal, $Settings, [switch]$Force) @{Name=$TaskName; Action=$Action; Trigger=$Trigger; Principal=$Principal; Settings=$Settings} | ConvertTo-Json -Depth 5 | Set-Content ($env:SOLMU_SERVICE_RECORD + '.' + $TaskName + '.json'); Add-Content $env:SOLMU_SERVICE_RECORD 'register' }
 function Start-ScheduledTask { param($TaskName) Add-Content $env:SOLMU_SERVICE_RECORD 'start' }
 & $args[0] -NoPath
@@ -107,9 +107,9 @@ function Start-ScheduledTask { param($TaskName) Add-Content $env:SOLMU_SERVICE_R
         : execute('sh', [script], { cwd: directory, timeout: 20_000, env })
     },
     async runAutoUpdate() {
-      const env = { ...process.env, HOME: path.join(directory, 'home'), USERPROFILE: path.join(directory, 'home'), SOLMU_SERVICE_DIR: path.join(directory, 'state'), SOLMU_RELEASE_API: `${base}/api`, SOLMU_INSTALLER_BASE_URL: `${base}/scripts` }
+      const env = { ...process.env, HOME: path.join(directory, 'home'), USERPROFILE: path.join(directory, 'home'), SOLMU_SERVICE_DIR: path.join(directory, 'state'), SOLMU_RELEASE_API: `${base}/api`, SOLMU_RELEASE_BASE_URL: `${base}/download`, SOLMU_INSTALLER_BASE_URL: `${base}/scripts` }
       delete env.PSModulePath
-      const script = path.join(directory, 'state', `auto-update.${windows ? 'ps1' : 'sh'}`)
+      const script = path.join(directory, 'state', windows ? 'auto-update-v2.ps1' : 'auto-update.sh')
       return windows
         ? execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], { cwd: directory, timeout: 20_000, env })
         : execute('sh', [script], { cwd: directory, timeout: 20_000, env })

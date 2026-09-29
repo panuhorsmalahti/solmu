@@ -27,7 +27,7 @@ irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install
 
 Installs `muxer` and its required `solmu` runtime from the latest release.
 Use an existing backend, or [install it separately](../docs/releases.md#individual-components).
-Rerun the same command to update Muxer and its runtime.
+Rerun the same command to update Muxer and its runtime manually. Installed modules update automatically each day by default; see [update settings](../docs/configuration.md).
 
 ## Run
 
