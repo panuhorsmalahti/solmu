@@ -229,6 +229,7 @@ export default function App() {
           <Button variant="ghost" disabled={!current} onClick={() => { setSkillsOpen(value => !value); setMcpOpen(false); setPluginsOpen(false) }}>Skills</Button>
           <Button variant="ghost" disabled={!current} aria-label="Status" onClick={() => void showInfo('status')}>Status</Button>
           <Button variant="ghost" disabled={!current} aria-label="Context" onClick={() => void showInfo('context')}>Context</Button>
+          <Button variant="ghost" disabled={busy || !current || messages.length < 2} aria-label="Compact conversation" onClick={() => void act(async () => { await request(`/threads/${current!.id}/compact`, 'POST'); await refresh() })}>Compact</Button>
           <Button variant="ghost" disabled={!current} aria-label="Export conversation" onClick={exportConversation}><Download size={15}/></Button>
           <Button variant="ghost" disabled={!current} aria-label="Copy latest reply" onClick={() => void copyReply()}><ClipboardCopy size={15}/></Button>
           <Button variant="ghost" aria-label="Select model" disabled={busy || !current} onClick={() => { setCustomModel(current?.model ?? ''); setModelPicker(true) }}>{catalog?.models.find(model => model.id === current?.model)?.name ?? current?.model ?? 'Default model'}</Button>

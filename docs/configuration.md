@@ -84,12 +84,17 @@ override restores the next setting in this order. The provider still comes
 from backend configuration.
 
 For OpenAI, an example is `LLM_MODEL=gpt-6-sol` and
-`LLM_TITLE_MODEL=gpt-6-luna`. `LLM_TITLE_MODEL` chooses a cheaper model to name
-conversations after their first user message. It uses the selected provider by
-default; a `provider::model` value can choose another configured provider.
-When unset or when the cheaper model fails, naming uses the main model. If both
-fail, the thread keeps “New conversation”. Naming runs in the background and
-never overwrites a manually chosen title. This makes an additional LLM request.
+`LLM_CHEAP_MODEL=gpt-6-luna`. For Anthropic, Solmu uses Haiku by default for
+short background tasks. `LLM_CHEAP_MODEL` is shared by conversation titles and
+history summaries; `LLM_TITLE_MODEL` remains supported as a compatibility
+alias. A `provider::model` value can choose a model from another configured
+provider. If the cheap model fails, Solmu falls back to the main conversation
+model.
+
+Solmu estimates context use and automatically compacts conversation history at
+95% of the selected model's context window. To override its model-window
+estimate, set `LLM_CONTEXT_WINDOW` to a positive token count. The estimate is
+based on serialized conversation size; provider tokenizers may count differently.
 
 Credentials are optional for starting the backend and managing conversations.
 Sending a reply request without a configured provider returns an error; the

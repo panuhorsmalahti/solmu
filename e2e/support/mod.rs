@@ -99,6 +99,7 @@ pub struct Backend {
     credentials: bool,
     dotenv: bool,
     title_model: Option<String>,
+    context_window: Option<usize>,
     reply_control: Arc<ReplyControl>,
     boxed: bool,
     routed: bool,
@@ -156,6 +157,7 @@ impl Backend {
             credentials,
             dotenv,
             title_model: None,
+            context_window: None,
             reply_control,
             boxed,
             routed,
@@ -235,6 +237,8 @@ impl Backend {
             .env_remove("LLM_PROVIDER")
             .env_remove("LLM_MODEL")
             .env_remove("LLM_TITLE_MODEL")
+            .env_remove("LLM_CHEAP_MODEL")
+            .env_remove("LLM_CONTEXT_WINDOW")
             .env_remove("LLM_ENDPOINT")
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
@@ -253,6 +257,9 @@ impl Backend {
         }
         if let Some(model) = &self.title_model {
             command.env("LLM_TITLE_MODEL", model);
+        }
+        if let Some(window) = self.context_window {
+            command.env("LLM_CONTEXT_WINDOW", window.to_string());
         }
         self.child = Some(
             command
@@ -290,6 +297,11 @@ impl Backend {
 
     pub async fn set_title_model(&mut self, model: &str) {
         self.title_model = Some(model.to_owned());
+        self.restart().await;
+    }
+
+    pub async fn set_context_window(&mut self, window: usize) {
+        self.context_window = Some(window);
         self.restart().await;
     }
 

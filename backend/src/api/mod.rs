@@ -78,6 +78,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/models", get(models::list))
         .route("/api/v1/events", get(events::connect))
         .route("/api/v1/threads/{thread_id}/stop", post(responses::stop))
+        .route(
+            "/api/v1/threads/{thread_id}/compact",
+            post(responses::compact),
+        )
         .route("/api/v1/threads", get(threads::list).post(threads::create))
         .route(
             "/api/v1/threads/{thread_id}",

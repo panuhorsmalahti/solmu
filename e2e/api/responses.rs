@@ -150,3 +150,117 @@ async fn stop_discards_partial_assistant_and_releases_the_thread() {
     );
     backend.send_message(id, "Continue").await;
 }
+
+#[tokio::test]
+async fn manual_compaction_replaces_active_history_and_keeps_future_turns_working() {
+    let backend = Backend::start().await;
+    let thread = backend.create_thread("Manual compaction").await;
+    let id = thread["id"].as_str().unwrap();
+    let first = backend.send_message(id, "First archived user turn").await;
+    assert!(
+        complete_reply(&backend, id, &first)
+            .await
+            .contains(&"done".into())
+    );
+    let second = backend.send_message(id, "Second archived user turn").await;
+    assert!(
+        complete_reply(&backend, id, &second)
+            .await
+            .contains(&"done".into())
+    );
+
+    let compact = backend
+        .client
+        .post(backend.endpoint(&format!("/api/v1/threads/{id}/compact")))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(compact.status(), StatusCode::OK);
+    let summary: Value = compact.json().await.unwrap();
+    assert!(
+        summary["content"]
+            .as_str()
+            .unwrap()
+            .contains("Conversation summary (compacted)")
+    );
+    let visible = backend.messages(id).await["items"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(visible.len(), 1);
+    assert_eq!(visible[0]["id"], summary["id"]);
+
+    let next = backend.send_message(id, "Continue after compaction").await;
+    assert!(
+        complete_reply(&backend, id, &next)
+            .await
+            .contains(&"done".into())
+    );
+    let requests = backend.requests.lock().unwrap();
+    let last_request = requests
+        .iter()
+        .rev()
+        .find(|(_, body)| body["stream"] == true)
+        .unwrap()
+        .1
+        .to_string();
+    assert!(last_request.contains("Conversation summary (compacted)"));
+    assert!(last_request.contains("Continue after compaction"));
+    assert!(!last_request.contains("First archived user turn"));
+    assert!(!last_request.contains("Second archived user turn"));
+}
+
+#[tokio::test]
+async fn responses_automatically_compact_at_the_configured_context_threshold() {
+    let mut backend = Backend::start().await;
+    backend.set_context_window(1).await;
+    let thread = backend.create_thread("Automatic compaction").await;
+    let id = thread["id"].as_str().unwrap();
+    let first = backend
+        .send_message(id, "Earlier conversation to summarize")
+        .await;
+    assert!(
+        complete_reply(&backend, id, &first)
+            .await
+            .contains(&"done".into())
+    );
+    let latest = backend
+        .send_message(id, "Latest request must remain intact")
+        .await;
+    assert!(
+        complete_reply(&backend, id, &latest)
+            .await
+            .contains(&"done".into())
+    );
+
+    let visible = backend.messages(id).await["items"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert!(visible.iter().any(|message| {
+        message["content"]
+            .as_str()
+            .unwrap()
+            .contains("Conversation summary (compacted)")
+    }));
+    assert!(
+        visible
+            .iter()
+            .any(|message| message["content"] == "Latest request must remain intact")
+    );
+    assert!(
+        !visible
+            .iter()
+            .any(|message| message["content"] == "Earlier conversation to summarize")
+    );
+    let requests = backend.requests.lock().unwrap();
+    let last_request = requests
+        .iter()
+        .rev()
+        .find(|(_, body)| body["stream"] == true)
+        .unwrap()
+        .1
+        .to_string();
+    assert!(last_request.contains("Conversation summary (compacted)"));
+    assert!(last_request.contains("Latest request must remain intact"));
+}

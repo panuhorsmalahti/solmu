@@ -53,11 +53,21 @@ pub async fn list(
 ) -> Result<Vec<Message>, StoreError> {
     threads::get(pool, thread_id).await?;
     Ok(sqlx::query_as::<_, Message>(
-        "SELECT id, thread_id, role, content, reply_to_id, created_at FROM messages WHERE thread_id = ? ORDER BY sequence LIMIT ? OFFSET ?",
+        "SELECT id, thread_id, role, content, reply_to_id, created_at FROM messages WHERE thread_id = ? AND archived_at IS NULL ORDER BY sequence LIMIT ? OFFSET ?",
     )
     .bind(thread_id)
     .bind(limit)
     .bind(offset)
+    .fetch_all(pool)
+    .await?)
+}
+
+pub async fn all(pool: &SqlitePool, thread_id: &str) -> Result<Vec<Message>, StoreError> {
+    threads::get(pool, thread_id).await?;
+    Ok(sqlx::query_as::<_, Message>(
+        "SELECT id,thread_id,role,content,reply_to_id,created_at FROM messages WHERE thread_id=? AND archived_at IS NULL ORDER BY sequence",
+    )
+    .bind(thread_id)
     .fetch_all(pool)
     .await?)
 }
@@ -69,7 +79,7 @@ pub async fn history_for_reply(
 ) -> Result<Vec<Message>, StoreError> {
     threads::get(pool, thread_id).await?;
     let history = sqlx::query_as::<_, Message>(
-        "SELECT id, thread_id, role, content, reply_to_id, created_at FROM messages WHERE thread_id = ? ORDER BY sequence",
+        "SELECT id, thread_id, role, content, reply_to_id, created_at FROM messages WHERE thread_id = ? AND archived_at IS NULL ORDER BY sequence",
     )
     .bind(thread_id)
     .fetch_all(pool)
@@ -86,4 +96,90 @@ pub async fn history_for_reply(
         ));
     }
     Ok(history)
+}
+
+pub async fn compact(
+    pool: &SqlitePool,
+    thread_id: &str,
+    summary: &str,
+    keep_message_id: Option<&str>,
+) -> Result<Message, StoreError> {
+    let summary = summary.trim();
+    if summary.is_empty() {
+        return Err(StoreError::Conflict("The compacted summary was empty"));
+    }
+    let mut tx = pool.begin().await?;
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM messages WHERE thread_id=? AND archived_at IS NULL",
+    )
+    .bind(thread_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if count < 2 {
+        return Err(StoreError::Conflict(
+            "There is not enough conversation history to compact",
+        ));
+    }
+
+    if let Some(keep_id) = keep_message_id {
+        let row: Option<(i64, String)> = sqlx::query_as(
+            "SELECT sequence, role FROM messages WHERE id=? AND thread_id=? AND archived_at IS NULL",
+        )
+        .bind(keep_id)
+        .bind(thread_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((sequence, role)) = row else {
+            return Err(StoreError::NotFound("Message to preserve was not found"));
+        };
+        if role != "user" {
+            return Err(StoreError::Conflict("Only a user message can be preserved"));
+        }
+        sqlx::query("UPDATE messages SET archived_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE thread_id=? AND archived_at IS NULL AND id<>?")
+            .bind(thread_id).bind(keep_id).execute(&mut *tx).await?;
+        sqlx::query("UPDATE messages SET sequence=? WHERE id=?")
+            .bind(-sequence)
+            .bind(keep_id)
+            .execute(&mut *tx)
+            .await?;
+    } else {
+        sqlx::query("UPDATE messages SET archived_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE thread_id=? AND archived_at IS NULL")
+            .bind(thread_id).execute(&mut *tx).await?;
+    }
+
+    let thread = sqlx::query(
+        "UPDATE threads SET updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+    )
+    .bind(thread_id)
+    .execute(&mut *tx)
+    .await?;
+    if thread.rows_affected() == 0 {
+        return Err(StoreError::NotFound("Thread not found"));
+    }
+    let message = sqlx::query_as::<_, Message>(
+        "INSERT INTO messages (id,thread_id,role,content) VALUES (?,?, 'assistant', ?) RETURNING id,thread_id,role,content,reply_to_id,created_at,sequence",
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(thread_id)
+    .bind(format!("Conversation summary (compacted):\n\n{summary}"))
+    .fetch_one(&mut *tx)
+    .await?;
+    if let Some(keep_id) = keep_message_id {
+        let summary_sequence: i64 = sqlx::query_scalar("SELECT sequence FROM messages WHERE id=?")
+            .bind(&message.id)
+            .fetch_one(&mut *tx)
+            .await?;
+        let kept_sequence = summary_sequence + 1;
+        sqlx::query("UPDATE messages SET sequence=? WHERE id=?")
+            .bind(kept_sequence)
+            .bind(keep_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE sqlite_sequence SET seq=? WHERE name='messages'")
+            .bind(kept_sequence)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(message)
 }

@@ -25,6 +25,10 @@ Conversation changes from other clients appear automatically over WebSockets.
 New threads are named automatically after the first user message.
 `/exit` or Ctrl+C exits without deleting conversations.
 
+Use `/compact` to replace the visible conversation history with a continuation
+summary. Solmu also compacts automatically when estimated context use reaches
+95% of the model's window.
+
 Use `/status` to see the backend connection, selected thread, model, and
 workspace. `/context` summarizes the loaded conversation and workspace tools.
 `/export <path>` saves the conversation as Markdown, and `/copy` copies the

@@ -448,6 +448,10 @@ impl Api {
             .await
             .map(|_| ())
     }
+    pub async fn compact(&self, id: &str) -> Result<Message, String> {
+        self.json(Method::POST, &format!("/threads/{id}/compact"), None)
+            .await
+    }
     async fn request(
         &self,
         method: Method,
@@ -587,6 +591,11 @@ impl Api {
                                 api.request(Method::DELETE, &format!("/threads/{}", thread.id), None, false).await?;
                                 Ok(None)
                             },
+                            Action::Compact => {
+                                let thread = current.as_ref().ok_or("No conversation selected")?;
+                                api.compact(&thread.id).await?;
+                                Ok(current)
+                            },
                             Action::Refresh => {
                                 let threads: Vec<Thread> = api.list("/threads").await?;
                                 Ok(current.and_then(|current| threads.into_iter().find(|thread| thread.id == current.id)))
@@ -652,6 +661,7 @@ pub enum Action {
     Refresh,
     List,
     Send(String),
+    Compact,
 }
 #[derive(Clone, Debug)]
 pub enum Update {

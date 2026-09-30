@@ -115,9 +115,7 @@ pub async fn create(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let permit = state.response(&thread_id)?;
     let token = permit.token.clone();
-    let messages = messages::history_for_reply(&state.pool, &thread_id, &input.message_id).await?;
     tools::recover(&state.pool, Some(&thread_id)).await?;
-    let mut history = tools::history(&state.pool, &thread_id, &messages).await?;
     let profile = crate::storage::profile::get(&state.pool).await?;
     let thread = crate::storage::threads::get(&state.pool, &thread_id).await?;
     let workspace = crate::workspace::resolve(thread.workspace.as_deref())?;
@@ -134,7 +132,6 @@ pub async fn create(
         .skills
         .load(&thread_id, workspace.clone().into())
         .await;
-    history.insert(0, ChatMessage::user(skills.context()));
     let mcp = tokio::select! {
         snapshot = state.mcp.load(&thread_id, workspace.clone().into()) => snapshot,
         _ = token.cancelled() => return Err(stopped()),
@@ -142,6 +139,51 @@ pub async fn create(
     let mut registry = state.tools.clone();
     for tool in mcp.tools {
         registry.register(tool);
+    }
+    let mut messages =
+        messages::history_for_reply(&state.pool, &thread_id, &input.message_id).await?;
+    let mut history = tools::history(&state.pool, &thread_id, &messages).await?;
+    history.insert(0, ChatMessage::user(skills.context()));
+    if state
+        .llm
+        .should_compact(
+            &history,
+            &profile.system_prompt,
+            model.as_deref(),
+            registry.definitions().len(),
+        )
+        .await
+        && messages.len() >= 2
+    {
+        let latest = messages.last().expect("reply history has a user message");
+        let generated = tokio::select! {
+            _ = token.cancelled() => return Err(stopped()),
+            generated = state.llm.compact(&history[..history.len().saturating_sub(1)], model.as_deref()) => generated,
+        }.ok_or_else(|| {
+                ApiError::new(
+                    axum::http::StatusCode::BAD_GATEWAY,
+                    "compaction_failed",
+                    "Solmu could not summarize the conversation before reaching its context limit",
+                )
+            })?;
+        let summary =
+            messages::compact(&state.pool, &thread_id, &generated.text, Some(&latest.id)).await?;
+        if let Err(error) = crate::storage::usage::save(
+            &state.pool,
+            &thread_id,
+            Some(&summary.id),
+            "compaction",
+            &generated.model,
+            &generated.usage,
+        )
+        .await
+        {
+            eprintln!("Cannot save compaction usage for {thread_id}: {error:?}");
+        }
+        state.changed(&thread_id);
+        messages = messages::history_for_reply(&state.pool, &thread_id, &input.message_id).await?;
+        history = tools::history(&state.pool, &thread_id, &messages).await?;
+        history.insert(0, ChatMessage::user(skills.context()));
     }
     let mut reply = tokio::select! {
         result=state.llm.stream(&thread_id,&history,&profile.system_prompt,model.as_deref(),registry.definitions())=>result?,
@@ -247,6 +289,52 @@ pub async fn create(
         }
     };
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+pub async fn compact(
+    State(state): State<AppState>,
+    Path(thread_id): Path<String>,
+) -> Result<axum::Json<messages::Message>, ApiError> {
+    let _guard = state.lock_thread(&thread_id)?;
+    let history_messages = messages::all(&state.pool, &thread_id).await?;
+    if history_messages.len() < 2 {
+        return Err(ApiError::invalid(
+            "There is not enough conversation history to compact",
+        ));
+    }
+    let profile = crate::storage::profile::get(&state.pool).await?;
+    let thread = crate::storage::threads::get(&state.pool, &thread_id).await?;
+    let model = thread.model.clone().or(profile.model.clone());
+    let workspace = crate::workspace::resolve(thread.workspace.as_deref())?;
+    let skills = state.skills.load(&thread_id, workspace.into()).await;
+    let mut history = tools::history(&state.pool, &thread_id, &history_messages).await?;
+    history.insert(0, ChatMessage::user(skills.context()));
+    let generated = state
+        .llm
+        .compact(&history, model.as_deref())
+        .await
+        .ok_or_else(|| {
+            ApiError::new(
+                axum::http::StatusCode::BAD_GATEWAY,
+                "compaction_failed",
+                "Solmu could not summarize this conversation",
+            )
+        })?;
+    let summary = messages::compact(&state.pool, &thread_id, &generated.text, None).await?;
+    if let Err(error) = crate::storage::usage::save(
+        &state.pool,
+        &thread_id,
+        Some(&summary.id),
+        "compaction",
+        &generated.model,
+        &generated.usage,
+    )
+    .await
+    {
+        eprintln!("Cannot save compaction usage for {thread_id}: {error:?}");
+    }
+    state.changed(&thread_id);
+    Ok(axum::Json(summary))
 }
 fn stopped() -> ApiError {
     ApiError::new(

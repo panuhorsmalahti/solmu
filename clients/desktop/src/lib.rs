@@ -1631,6 +1631,10 @@ impl Desktop {
         .spacing(12)
         .align_y(iced::Alignment::Center);
         let utilities = row![
+            button("Compact").style(appearance::ghost).on_press_maybe(
+                (enabled && self.session.current.is_some())
+                    .then_some(Event::Action(Action::Compact))
+            ),
             button("Status")
                 .style(appearance::ghost)
                 .on_press(Event::Info("status")),

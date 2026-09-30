@@ -15,6 +15,8 @@ authentication is not implemented.
 | GET | `/api/v1/threads/{id}/messages` | Saved messages in conversation order. |
 | POST | `/api/v1/threads/{id}/responses` | `{ "message_id": "saved-user-message-id" }`. Streams an assistant reply. |
 | POST | `/api/v1/threads/{id}/stop` | Cancels the active response (204). Safe to repeat. |
+| POST | `/api/v1/threads/{id}/compact` | Replaces visible conversation history with one generated continuation summary. |
+| POST | `/api/v1/threads/{id}/compact` | Summarizes visible conversation history into a continuation message. |
 | GET | `/api/v1/events` | WebSocket connection for live conversation updates. |
 | GET | `/api/v1/profile` | Current `system_prompt`, nullable `model`, `backend_default_model`, and `edited_at` (UTC timestamp). |
 | PUT | `/api/v1/profile` | Required `system_prompt`, optional `model`. Omission preserves the model; null clears it. Returns the saved profile. |
@@ -35,7 +37,9 @@ Results have `{ "items": [], "limit": 50, "offset": 0 }`.
 Audit uses cursor paging instead: pass its returned `next_cursor` as `before`
 to get the next older page. Audit rows include the conversation title, global
 sequence, and creation time in addition to the tool-run fields below.
-Threads contain `id`, `title`, nullable `model`, `workspace`, `created_at`, and `updated_at`. Messages contain
+Compaction keeps older database records for Audit and recovery, but excludes them
+from the conversation message list and future model context. Threads contain
+`id`, `title`, nullable `model`, `workspace`, `created_at`, and `updated_at`. Messages contain
 `id`, `thread_id`, `role`, `content`, `reply_to_id`, and `created_at`.
 
 ## Streaming replies

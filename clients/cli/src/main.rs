@@ -17,8 +17,8 @@ mod settings;
 
 const COMMANDS: &[&str] = &[
     "/new", "/threads", "/open", "/model", "/profile", "/audit", "/tasks", "/task", "/skills",
-    "/mcp", "/plugins", "/rename", "/delete", "/status", "/export", "/copy", "/context", "/help",
-    "/stop", "/exit",
+    "/mcp", "/plugins", "/rename", "/delete", "/status", "/export", "/copy", "/context",
+    "/compact", "/help", "/stop", "/exit",
 ];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -318,7 +318,8 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 "/open" if !argument.is_empty() => { show_threads = false; Action::Open(argument.into()) },
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /tasks · /task · /skills · /mcp · /plugins · /status · /context · /export <path> · /copy · /delete · /stop · /exit".into()); continue; },
+                                "/compact" if argument.is_empty() => Action::Compact,
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /tasks · /task · /skills · /mcp · /plugins · /status · /context · /compact · /export <path> · /copy · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -611,6 +612,7 @@ fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
         "/export" => "Save this conversation as Markdown",
         "/copy" => "Copy the latest reply to clipboard",
         "/context" => "Show the current conversation context",
+        "/compact" => "Replace conversation history with a summary",
         "/help" => "Show available commands",
         "/stop" => "Stop the current response",
         "/exit" => "Quit Solmu",

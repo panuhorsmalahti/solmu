@@ -54,6 +54,10 @@ appear above the composer; user messages remain saved.
 the unfinished reply. Changes from other clients and generated titles arrive
 automatically over WebSockets, with reconnect after a lost connection.
 
+Choose **Compact** in the conversation controls to replace the visible history
+with a continuation summary. Solmu also compacts automatically at an estimated
+95% of the selected model's context window.
+
 Use **Status** to see the backend connection, thread, model, and workspace.
 **Context** summarizes the messages, tool calls, skills, MCP servers, and
 plugins currently loaded for the conversation. The download icon exports the

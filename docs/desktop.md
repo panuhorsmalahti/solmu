@@ -28,6 +28,10 @@ discards the unfinished reply, keeping your user message. Wait for completion be
 changing threads or sending again. Provider errors appear above the input;
 the user message is retained. Closing the window exits without deleting history.
 
+Choose **Compact** in the conversation controls to replace the visible history
+with a continuation summary. Solmu also compacts automatically at an estimated
+95% of the selected model's context window.
+
 Use **Status** to see the backend connection, thread, model, and workspace.
 **Context** summarizes the messages, tool calls, skills, MCP servers, and
 plugins currently loaded for the conversation. **Export** saves the thread as

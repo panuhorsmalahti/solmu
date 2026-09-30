@@ -172,6 +172,7 @@ impl Drop for Terminal {
     }
 }
 
+mod compaction;
 mod conversations;
 
 mod responses;
