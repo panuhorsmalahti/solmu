@@ -6,7 +6,7 @@ test.beforeEach(async ({ request }) => {
   for (const thread of (await response.json()).items) await request.delete(`/api/v1/threads/${thread.id}`)
 })
 
-test('incremental replies, generated title, saved history, rename and delete', async ({ page, request }) => {
+test('incremental replies, thread utilities, generated title, rename and delete', async ({ page, request, context }) => {
   await page.goto('/')
   await expect(page.getByLabel('Message Solmu', { exact: true })).toBeEnabled()
   const threads = await (await request.get('/api/v1/threads')).json()
@@ -24,6 +24,18 @@ test('incremental replies, generated title, saved history, rename and delete', a
   await page.getByLabel('Conversation title').fill('A thoughtful project')
   await page.getByRole('button', { name: 'Rename thread' }).click()
   await expect(page.getByLabel('Thread selector').getByText('A thoughtful project')).toBeVisible()
+  await page.getByRole('button', { name: 'Status' }).click()
+  await expect(page.getByLabel('status details')).toContainText('Connected')
+  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Context' }).click()
+  await expect(page.getByLabel('context details')).toContainText('2 messages')
+  await page.getByRole('button', { name: 'Close' }).click()
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.getByRole('button', { name: 'Copy latest reply' }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('Hello from Solmu')
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export conversation' }).click()
+  expect((await download).suggestedFilename()).toBe('Solmu-' + id + '.md')
   await page.reload()
   await expect(page.getByText('Hello from Solmu', { exact: true })).toBeVisible()
   expect((await (await request.get('/api/v1/threads')).json()).items).toHaveLength(1)

@@ -54,6 +54,11 @@ appear above the composer; user messages remain saved.
 the unfinished reply. Changes from other clients and generated titles arrive
 automatically over WebSockets, with reconnect after a lost connection.
 
+Use **Status** to see the backend connection, thread, model, and workspace.
+**Context** summarizes the messages, tool calls, skills, MCP servers, and
+plugins currently loaded for the conversation. The download icon exports the
+thread as a Markdown file; the copy icon copies Solmu's latest reply.
+
 For source builds and web development, see [development](development.md).
 
 ![Solmu client screenshot](screenshots/web.png)

@@ -17,7 +17,8 @@ mod settings;
 
 const COMMANDS: &[&str] = &[
     "/new", "/threads", "/open", "/model", "/profile", "/audit", "/tasks", "/task", "/skills",
-    "/mcp", "/plugins", "/rename", "/delete", "/help", "/stop", "/exit",
+    "/mcp", "/plugins", "/rename", "/delete", "/status", "/export", "/copy", "/context", "/help",
+    "/stop", "/exit",
 ];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -280,6 +281,30 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             }
                             input.clear(); scroll = 0;
                             let (command, argument) = text.split_once(' ').unwrap_or((&text, ""));
+                            if command == "/status" && argument.is_empty() {
+                                let thread = session.current.as_ref();
+                                session.error = Some(format!("Status · {}\nThread: {} ({}) · Model: {} · Workspace: {}", if connected { "Connected" } else { "Disconnected" }, thread.map(|t| t.title.as_str()).unwrap_or("None"), thread.map(|t| t.id.as_str()).unwrap_or("—"), thread.and_then(|t| t.model.as_deref()).unwrap_or("backend default"), thread.and_then(|t| t.workspace.as_deref()).unwrap_or("—")));
+                                continue;
+                            }
+                            if command == "/context" && argument.is_empty() {
+                                let thread = session.current.as_ref();
+                                session.error = Some(format!("Context · {} messages · {} tool calls\nThread: {} · Model: {} · Workspace: {} · Skills: {} · MCP servers: {} · Plugins: {}", session.messages.len(), session.tools.len(), thread.map(|t| t.title.as_str()).unwrap_or("None"), thread.and_then(|t| t.model.as_deref()).unwrap_or("backend default"), thread.and_then(|t| t.workspace.as_deref()).unwrap_or("—"), session.skills.items.len(), session.mcp.servers.len(), session.plugins.items.len()));
+                                continue;
+                            }
+                            if command == "/export" && !argument.trim().is_empty() {
+                                let Some(thread) = session.current.as_ref() else { session.error = Some("No conversation selected".into()); continue; };
+                                let path = std::path::Path::new(argument.trim());
+                                let mut contents = format!("# {}\n\nThread: {}\nWorkspace: {}\n\n", thread.title, thread.id, thread.workspace.as_deref().unwrap_or(""));
+                                for message in &session.messages { contents.push_str(if message.role == "user" { "## You\n\n" } else { "## Solmu\n\n" }); contents.push_str(&message.content); contents.push_str("\n\n"); for tool in session.tools.iter().filter(|tool| tool.message_id == message.id) { contents.push_str(&format!("### Tool: {} · {}\n\n\x60\x60\x60text\n{}\n\x60\x60\x60\n\n", tool.name, tool.status, tool.details())); } }
+                                session.error = Some(match std::fs::write(path, contents) { Ok(()) => format!("Exported conversation to {}", path.display()), Err(error) => format!("Export failed: {error}") });
+                                continue;
+                            }
+                            if command == "/copy" && argument.is_empty() {
+                                let content = session.messages.iter().rev().find(|message| message.role == "assistant").map(|message| message.content.clone());
+                                if let Some(content) = content { let encoded = base64_encode(content.as_bytes()); let mut stdout = std::io::stdout().lock(); let _ = write!(stdout, "\x1b]52;c;{encoded}\x07"); let _ = stdout.flush(); session.error = Some("Copied latest reply to clipboard".into()); }
+                                else { session.error = Some("No Solmu reply to copy yet".into()); }
+                                continue;
+                            }
                             let action = match command {
                                 "/skills" if argument.is_empty() => { page = Some(settings::Page::Skills { scroll: 0 }); continue; },
                                 "/mcp" if argument.is_empty() => { page = Some(settings::Page::Mcp { scroll: 0 }); continue; },
@@ -293,7 +318,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 "/open" if !argument.is_empty() => { show_threads = false; Action::Open(argument.into()) },
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /tasks · /task · /skills · /mcp · /plugins · /delete · /stop · /exit".into()); continue; },
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /tasks · /task · /skills · /mcp · /plugins · /status · /context · /export <path> · /copy · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -325,7 +350,17 @@ fn draw(
     let [header, conversation, status, composer, footer] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(3),
-        Constraint::Length(2),
+        Constraint::Length(
+            if session
+                .error
+                .as_deref()
+                .is_some_and(|notice| notice.contains('\n'))
+            {
+                4
+            } else {
+                2
+            },
+        ),
         Constraint::Length(if embedded { 1 } else { 3 }),
         Constraint::Length(1),
     ])
@@ -440,11 +475,15 @@ fn draw(
         });
     frame.render_widget(
         Paragraph::new(notice)
-            .style(Style::new().fg(if session.error.is_some() {
-                Color::Red
-            } else {
-                Color::DarkGray
-            }))
+            .style(Style::new().fg(
+                if session.error.as_deref().is_some_and(|notice| {
+                    notice.starts_with("Export failed:") || notice.starts_with("Cannot reach")
+                }) {
+                    Color::Red
+                } else {
+                    Color::DarkGray
+                },
+            ))
             .wrap(Wrap { trim: false }),
         status,
     );
@@ -568,6 +607,10 @@ fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
         "/task" => "Create and manage scheduled tasks",
         "/rename" => "Rename this conversation",
         "/delete" => "Delete this conversation",
+        "/status" => "Show connection and thread status",
+        "/export" => "Save this conversation as Markdown",
+        "/copy" => "Copy the latest reply to clipboard",
+        "/context" => "Show the current conversation context",
         "/help" => "Show available commands",
         "/stop" => "Stop the current response",
         "/exit" => "Quit Solmu",
@@ -615,4 +658,27 @@ fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
         ),
         rect,
     );
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut output = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let a = chunk[0] as usize;
+        let b = *chunk.get(1).unwrap_or(&0) as usize;
+        let c = *chunk.get(2).unwrap_or(&0) as usize;
+        output.push(TABLE[a >> 2] as char);
+        output.push(TABLE[((a & 3) << 4) | (b >> 4)] as char);
+        output.push(if chunk.len() > 1 {
+            TABLE[((b & 15) << 2) | (c >> 6)] as char
+        } else {
+            '='
+        });
+        output.push(if chunk.len() > 2 {
+            TABLE[c & 63] as char
+        } else {
+            '='
+        });
+    }
+    output
 }

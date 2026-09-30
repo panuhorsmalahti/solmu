@@ -55,6 +55,9 @@ pub struct Desktop {
     task_error: String,
     catalog: Option<ModelCatalog>,
     custom_model: String,
+    info_panel: Option<&'static str>,
+    export_path: String,
+    info_notice: String,
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +105,11 @@ pub enum Event {
     ModelsLoaded(Result<ModelCatalog, String>),
     CustomModel(String),
     ProfileModel(String),
+    Info(&'static str),
+    ExportPath(String),
+    Export,
+    Exported(Result<(), String>),
+    CopyReply,
 }
 
 pub fn application(
@@ -120,6 +128,40 @@ pub fn application(
         })
     })
     .window_size((1120.0, 760.0))
+}
+
+fn conversation_markdown(session: &Session) -> String {
+    let Some(thread) = &session.current else {
+        return String::new();
+    };
+    let mut output = format!(
+        "# {}\n\nThread: {}\nWorkspace: {}\n\n",
+        thread.title,
+        thread.id,
+        thread.workspace.as_deref().unwrap_or("")
+    );
+    for message in &session.messages {
+        output.push_str(if message.role == "user" {
+            "## You\n\n"
+        } else {
+            "## Solmu\n\n"
+        });
+        output.push_str(&message.content);
+        output.push_str("\n\n");
+        for tool in session
+            .tools
+            .iter()
+            .filter(|tool| tool.message_id == message.id)
+        {
+            output.push_str(&format!(
+                "### Tool: {} · {}\n\n\x60\x60\x60text\n{}\n\x60\x60\x60\n\n",
+                tool.name,
+                tool.status,
+                tool.details()
+            ));
+        }
+    }
+    output
 }
 
 impl Desktop {
@@ -168,6 +210,9 @@ impl Desktop {
             task_error: String::new(),
             catalog: None,
             custom_model: String::new(),
+            info_panel: None,
+            export_path: String::new(),
+            info_notice: String::new(),
         };
         let task = desktop.act(Action::New("New conversation".into()));
         (desktop, task)
@@ -227,6 +272,9 @@ impl Desktop {
             self.plugins_open = false;
             self.audit_open = false;
             self.tasks_open = false;
+        }
+        if matches!(&event, Event::Action(action) if !matches!(action, Action::Refresh)) {
+            self.info_panel = None;
         }
         match event {
             Event::OpenTasks => {
@@ -390,6 +438,62 @@ impl Desktop {
                     async move { api.delete_task(&id).await },
                     Event::TaskMutated,
                 )
+            }
+            Event::Info(panel) => {
+                self.info_panel = if self.info_panel == Some(panel) {
+                    None
+                } else {
+                    Some(panel)
+                };
+                self.info_notice.clear();
+                if panel == "export" && self.export_path.is_empty() {
+                    self.export_path = format!(
+                        "Solmu-{}.md",
+                        self.session
+                            .current
+                            .as_ref()
+                            .map(|t| t.id.as_str())
+                            .unwrap_or("conversation")
+                    );
+                }
+                Task::none()
+            }
+            Event::ExportPath(path) => {
+                self.export_path = path;
+                Task::none()
+            }
+            Event::Export => {
+                let path = self.export_path.clone();
+                let content = conversation_markdown(&self.session);
+                Task::perform(
+                    async move { std::fs::write(path, content).map_err(|error| error.to_string()) },
+                    Event::Exported,
+                )
+            }
+            Event::Exported(result) => {
+                self.info_notice = result
+                    .map(|_| "Conversation exported".into())
+                    .unwrap_or_else(|error| format!("Export failed: {error}"));
+                Task::none()
+            }
+            Event::CopyReply => {
+                let content = self
+                    .session
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|message| message.role == "assistant")
+                    .map(|message| message.content.clone())
+                    .unwrap_or_default();
+                if content.is_empty() {
+                    self.info_panel = Some("context");
+                    self.info_notice = "No Solmu reply to copy yet".into();
+                    Task::none()
+                } else {
+                    self.info_panel = Some("context");
+                    self.info_notice = "Copied latest reply".into();
+                    iced::clipboard::write(content)
+                }
             }
             Event::OpenAudit => {
                 self.audit_open = true;
@@ -1526,6 +1630,31 @@ impl Desktop {
         ]
         .spacing(12)
         .align_y(iced::Alignment::Center);
+        let utilities = row![
+            button("Status")
+                .style(appearance::ghost)
+                .on_press(Event::Info("status")),
+            button("Context")
+                .style(appearance::ghost)
+                .on_press(Event::Info("context")),
+            button("Export")
+                .style(appearance::ghost)
+                .on_press(Event::Info("export")),
+            button("Copy reply")
+                .style(appearance::ghost)
+                .on_press(Event::CopyReply),
+        ]
+        .spacing(8);
+        let info: Element<'_, Event> = match self.info_panel {
+            Some("export") => column![
+                text_input("Markdown file path", &self.export_path).on_input(Event::ExportPath).padding(10),
+                row![button("Save conversation").on_press(Event::Export), button("Close").style(appearance::ghost).on_press(Event::Info("export"))].spacing(8),
+                text(&self.info_notice).size(12)
+            ].spacing(8).into(),
+            Some("status") => container(text(format!("{} · {} · {} · {}", if self.connected { "Connected" } else { "Disconnected" }, self.session.current.as_ref().map(|t| t.title.as_str()).unwrap_or("No conversation"), model_label, self.session.current.as_ref().and_then(|t| t.workspace.as_deref()).unwrap_or("No workspace"))).size(13)).padding(12).style(appearance::sidebar).into(),
+            Some("context") => container(column![text(format!("{} messages · {} tool calls · {} skills · {} MCP servers · {} plugins\nWorkspace: {}", self.session.messages.len(), self.session.tools.len(), self.session.skills.items.len(), self.session.mcp.servers.len(), self.session.plugins.items.len(), self.session.current.as_ref().and_then(|t| t.workspace.as_deref()).unwrap_or("No workspace"))).size(13), text(&self.info_notice).size(12)]).padding(12).style(appearance::sidebar).into(),
+            _ => iced::widget::space().height(0).into(),
+        };
         let status = self
             .session
             .error
@@ -1567,6 +1696,8 @@ impl Desktop {
             column![
                 heading,
                 model,
+                utilities,
+                info,
                 scrollable(history).height(Length::Fill),
                 text(status)
                     .size(12)

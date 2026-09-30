@@ -45,6 +45,20 @@ async fn cli_streaming_thread_commands_history_and_exit() {
         backend.messages(&id).await["items"][1]["content"],
         "Hello from Solmu"
     );
+    terminal.command("/status");
+    terminal.wait("Status · Connected").await;
+    terminal.command("/context");
+    terminal.wait("2 messages · 0 tool calls").await;
+    let export = backend.directory.path().join("conversation-export.md");
+    terminal.command(&format!("/export {}", export.display()));
+    terminal.wait("Exported conversation").await;
+    assert!(
+        std::fs::read_to_string(export)
+            .unwrap()
+            .contains("Hello from Solmu")
+    );
+    terminal.command("/copy");
+    terminal.wait("Copied latest reply").await;
     terminal.command("/ren\tTerminal planning");
     terminal.wait("SOLMU    Terminal planning").await;
     terminal.ready().await;

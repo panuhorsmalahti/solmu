@@ -25,6 +25,11 @@ Conversation changes from other clients appear automatically over WebSockets.
 New threads are named automatically after the first user message.
 `/exit` or Ctrl+C exits without deleting conversations.
 
+Use `/status` to see the backend connection, selected thread, model, and
+workspace. `/context` summarizes the loaded conversation and workspace tools.
+`/export <path>` saves the conversation as Markdown, and `/copy` copies the
+latest Solmu reply through the terminal's clipboard support (OSC 52).
+
 `/new` reuses the current empty conversation until you send a message.
 `/profile` edits the shared system prompt and optional default model, with its
 last edit time shown. `/model` opens the thread model picker, `/model <id>` sets

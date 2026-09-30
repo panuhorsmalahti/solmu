@@ -28,6 +28,22 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     );
     ui.wait("Hello from Solmu").await;
     ui.wait("Ready").await;
+    ui.step("click \"Status\"").await;
+    ui.wait("Connected").await;
+    ui.step("click \"Context\"").await;
+    ui.wait("2 messages").await;
+    ui.step("click \"Export\"").await;
+    ui.wait("Markdown file path").await;
+    let export = format!("Solmu-{id}.md");
+    ui.step("click \"Save conversation\"").await;
+    ui.wait("Conversation exported").await;
+    assert!(
+        std::fs::read_to_string(&export)
+            .unwrap()
+            .contains("Hello from Solmu")
+    );
+    std::fs::remove_file(export).unwrap();
+    ui.step("click \"Copy reply\"").await;
     ui.step("click (460, 52)").await;
     for _ in 0..16 {
         ui.step("type backspace").await;

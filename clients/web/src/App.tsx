@@ -7,7 +7,7 @@ import Plugins from './Plugins'
 import Audit from './Audit'
 import Tasks from './Tasks'
 import Webhooks from './Webhooks'
-import { ArrowUp, MessageSquare, Plus, Square, Trash2, Check, Sprout } from 'lucide-react'
+import { ArrowUp, MessageSquare, Plus, Square, Trash2, Check, Sprout, ClipboardCopy, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -35,6 +35,9 @@ export default function App() {
   const [tools, setTools] = useState<ToolRun[]>([])
   const [draft, setDraft] = useState(''), [title, setTitle] = useState('')
   const [partial, setPartial] = useState(''), [error, setError] = useState('')
+  const [infoPanel, setInfoPanel] = useState<'status' | 'context' | null>(null)
+  const [infoDetails, setInfoDetails] = useState('')
+  const [copyNotice, setCopyNotice] = useState('')
   const [busy, setBusy] = useState(true)
   const [responding, setResponding] = useState(false), [connected, setConnected] = useState(true)
   const end = useRef<HTMLDivElement>(null)
@@ -170,6 +173,39 @@ export default function App() {
     finally { controller.current?.abort(); setPartial(''); setResponding(false) }
   }
 
+  async function showInfo(kind: 'status' | 'context') {
+    if (infoPanel === kind) { setInfoPanel(null); return }
+    setInfoPanel(kind)
+    const thread = current
+    if (!thread) { setInfoDetails('No conversation selected.'); return }
+    if (kind === 'status') {
+      setInfoDetails(`${connected ? 'Connected' : 'Disconnected'} · ${thread.title}\nThread ID: ${thread.id}\nModel: ${thread.model ?? catalog?.default_model ?? 'backend default'}\nWorkspace: ${thread.workspace ?? '—'}`)
+      return
+    }
+    try {
+      const [skills, mcp, plugins] = await Promise.all([
+        request<{items: unknown[]; issues: unknown[]}>(`/threads/${thread.id}/skills`),
+        request<{servers: unknown[]; issues: unknown[]}>(`/threads/${thread.id}/mcp`),
+        request<{items: unknown[]; issues: unknown[]}>(`/threads/${thread.id}/plugins`),
+      ])
+      setInfoDetails(`${messages.length} messages · ${tools.length} tool calls\n${skills.items.length} skills · ${mcp.servers.length} MCP servers · ${plugins.items.length} plugins\nWorkspace: ${thread.workspace ?? '—'}`)
+    } catch (error) { setInfoDetails(describe(error)) }
+  }
+
+  function exportConversation() {
+    if (!current) return
+    const body = [`# ${current.title}`, '', `Thread: ${current.id}`, `Workspace: ${current.workspace ?? ''}`, '', ...messages.flatMap(message => [message.role === 'user' ? '## You' : '## Solmu', '', message.content, '', ...tools.filter(tool => tool.message_id === message.id).flatMap(tool => [`### Tool: ${tool.name} · ${tool.status}`, '', String.fromCharCode(96, 96, 96) + 'json', JSON.stringify({ arguments: tool.arguments, result: tool.result }, null, 2), String.fromCharCode(96, 96, 96), ''])])].join('\n')
+    const url = URL.createObjectURL(new Blob([body], { type: 'text/markdown;charset=utf-8' }))
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = `Solmu-${current.id}.md`; anchor.click(); URL.revokeObjectURL(url)
+  }
+
+  async function copyReply() {
+    const latest = [...messages].reverse().find(message => message.role === 'assistant')
+    if (!latest) { setCopyNotice('No Solmu reply to copy yet'); return }
+    try { await navigator.clipboard.writeText(latest.content); setCopyNotice('Copied latest reply') }
+    catch { setCopyNotice('Clipboard access is unavailable in this browser') }
+  }
+
   return <div className="app">
     <aside className="sidebar" aria-label="Conversation threads">
       <button className="brand" aria-label="Solmu · Profile" disabled={busy} onClick={() => navigate('/profile')}><Sprout className="brand-mark" strokeWidth={1.5} />solmu</button>
@@ -191,12 +227,18 @@ export default function App() {
           <Button variant="ghost" disabled={!current} onClick={() => { setPluginsOpen(value => !value); setMcpOpen(false); setSkillsOpen(false) }}>Plugins</Button>
           <Button variant="ghost" disabled={!current} onClick={() => { setMcpOpen(value => !value); setSkillsOpen(false); setPluginsOpen(false) }}>MCP</Button>
           <Button variant="ghost" disabled={!current} onClick={() => { setSkillsOpen(value => !value); setMcpOpen(false); setPluginsOpen(false) }}>Skills</Button>
+          <Button variant="ghost" disabled={!current} aria-label="Status" onClick={() => void showInfo('status')}>Status</Button>
+          <Button variant="ghost" disabled={!current} aria-label="Context" onClick={() => void showInfo('context')}>Context</Button>
+          <Button variant="ghost" disabled={!current} aria-label="Export conversation" onClick={exportConversation}><Download size={15}/></Button>
+          <Button variant="ghost" disabled={!current} aria-label="Copy latest reply" onClick={() => void copyReply()}><ClipboardCopy size={15}/></Button>
           <Button variant="ghost" aria-label="Select model" disabled={busy || !current} onClick={() => { setCustomModel(current?.model ?? ''); setModelPicker(true) }}>{catalog?.models.find(model => model.id === current?.model)?.name ?? current?.model ?? 'Default model'}</Button>
           <Button size="icon" variant="ghost" aria-label="Rename thread" title="Save title" disabled={busy || !current || !title.trim()} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { title }); setCurrent(thread); setTitle(thread.title); setThreads(await list('/threads')) })}><Check size={16} /></Button>
           <Button size="icon" variant="ghost" aria-label="Delete thread" title="Delete thread" disabled={busy || !current} onClick={() => void act(async () => { await request(`/threads/${current!.id}`, 'DELETE'); setCurrent(null); setTitle(''); setMessages([]); setDraft(''); setThreads(await list('/threads')); navigate('/') })}><Trash2 size={15} /></Button>
         </div>
       </header>
       {current?.workspace && <p className="workspace-path" aria-label="Workspace" title={current.workspace}>{current.workspace}</p>}
+      {infoPanel && <section className="model-picker" aria-label={`${infoPanel} details`}><div className="message-content"><strong>{infoPanel === 'status' ? 'Conversation status' : 'Current context'}</strong><br/>{infoDetails}</div><Button variant="ghost" onClick={() => setInfoPanel(null)}>Close</Button></section>}
+      {copyNotice && <p role="status" className="working">{copyNotice}</p>}
       {pluginsOpen && current ? <Plugins key={current.id} threadId={current.id} revision={pluginsRevision} onClose={() => setPluginsOpen(false)}/> : mcpOpen && current ? <Mcp key={current.id} threadId={current.id} revision={mcpRevision} onClose={() => setMcpOpen(false)}/> : skillsOpen && current ? <Skills key={current.id} threadId={current.id} revision={skillsRevision} onClose={() => setSkillsOpen(false)}/> : <>
       {modelPicker && <section className="model-picker" role="dialog" aria-label="Select model"><h2>Model for this thread</h2><p>{catalog?.provider ?? 'Configure a provider first'} · Changes apply to the next reply.</p><div className="model-options">{[{ id: '', name: `Default${catalog?.default_model ? ` · ${catalog.default_model}` : ''}` }, ...(catalog?.models ?? [])].map(model => <Button key={model.id} variant={model.id === (current?.model ?? '') ? 'default' : 'outline'} disabled={busy} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: model.id || null }); setCurrent(thread); setModelPicker(false); await refresh() })}>{model.name}</Button>)}</div><div className="model-custom"><Input aria-label="Custom model ID" placeholder="Custom model ID" value={customModel} disabled={busy} onChange={event => setCustomModel(event.target.value)}/><Button disabled={busy || !customModel.trim()} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: customModel.trim() }); setCurrent(thread); setModelPicker(false); await refresh() })}>Apply model</Button><Button variant="ghost" onClick={() => setModelPicker(false)}>Cancel</Button></div></section>}
       <section className="history" aria-label="Conversation" aria-busy={busy}>

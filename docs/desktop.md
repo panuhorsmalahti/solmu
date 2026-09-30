@@ -28,6 +28,12 @@ discards the unfinished reply, keeping your user message. Wait for completion be
 changing threads or sending again. Provider errors appear above the input;
 the user message is retained. Closing the window exits without deleting history.
 
+Use **Status** to see the backend connection, thread, model, and workspace.
+**Context** summarizes the messages, tool calls, skills, MCP servers, and
+plugins currently loaded for the conversation. **Export** saves the thread as
+Markdown to the path shown in its panel. **Copy reply** copies Solmu's latest
+reply to the system clipboard.
+
 ![Solmu client screenshot](screenshots/desktop.png)
 
 ## Audit
