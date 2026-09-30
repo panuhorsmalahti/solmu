@@ -80,3 +80,9 @@ test('daily release fails on an unreachable previous tag and uses a deliberate v
     expect(JSON.parse(repo.run('plan')).version).toBe('0.2.0')
   } finally { repo.close() }
 })
+
+test('release workflow combines the commit changelog with generated release notes', () => {
+  const workflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8')
+  expect(workflow).toContain('--notes "$(cat release-notes.md)" --generate-notes')
+  expect(workflow).not.toContain('--notes-file release-notes.md --generate-notes')
+})

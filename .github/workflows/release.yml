@@ -166,4 +166,4 @@ jobs:
         run: |
           cd artifacts
           sha256sum solmu-* > SHA256SUMS
-          gh release create "v$VERSION" solmu-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Solmu v$VERSION" --notes-file release-notes.md --generate-notes
+          gh release create "v$VERSION" solmu-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Solmu v$VERSION" --notes "$(cat release-notes.md)" --generate-notes
