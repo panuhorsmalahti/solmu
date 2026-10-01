@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 
-const packages = ['backend', 'clients/common', 'clients/cli', 'clients/desktop', 'boxer', 'muxer', 'e2e']
+const packages = ['backend', 'clients/common', 'clients/cli', 'clients/desktop', 'boxer', 'muxer', 'e2e', 'cloud/congregator/backend']
 const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const read = path => readFileSync(path, 'utf8')
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim()
@@ -62,13 +62,13 @@ if (command === 'plan') {
   const names = packages.map(path => read(`${path}/Cargo.toml`).match(/^name\s*=\s*"([^"]+)"/m)[1])
   for (const path of packages) writeFileSync(`${path}/Cargo.toml`, read(`${path}/Cargo.toml`).replace(/^version\s*=\s*"[^"]+"/m, `version = "${selected}"`))
   writeFileSync('Cargo.lock', read('Cargo.lock').replace(/(\[\[package\]\]\s*name = "([^"]+)"\s*version = ")[^"]+(")/g, (full, prefix, name, suffix) => names.includes(name) ? `${prefix}${selected}${suffix}` : full))
-  for (const path of ['package.json', 'clients/web/package.json']) {
+  for (const path of ['package.json', 'clients/web/package.json', 'cloud/congregator/web/package.json']) {
     const data = JSON.parse(read(path)); data.version = selected
     writeFileSync(path, JSON.stringify(data, null, 2) + '\n')
   }
   const lock = JSON.parse(read('package-lock.json'))
   lock.version = selected
-  for (const path of ['', 'clients/web']) lock.packages[path].version = selected
+  for (const path of ['', 'clients/web', 'cloud/congregator/web']) lock.packages[path].version = selected
   writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n')
 } else if (command === 'notes') {
   const previous = process.env.PREVIOUS_TAG

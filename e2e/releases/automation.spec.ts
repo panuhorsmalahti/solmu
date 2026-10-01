@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 const root = resolve('.')
-const packages = ['backend', 'clients/common', 'clients/cli', 'clients/desktop', 'boxer', 'muxer', 'e2e']
+const packages = ['backend', 'clients/common', 'clients/cli', 'clients/desktop', 'boxer', 'muxer', 'e2e', 'cloud/congregator/backend']
 
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), 'solmu-release-e2e-'))
@@ -59,7 +59,7 @@ test('release stamping updates every artifact manifest and preserves dependency 
     for (const path of packages) expect(readFileSync(join(repo.directory, path, 'Cargo.toml'), 'utf8')).toContain('version = "0.1.12"')
     const lock = readFileSync(join(repo.directory, 'Cargo.lock'), 'utf8')
     for (const block of before.split('[[package]]').filter(block => !block.includes('name = "solmu-'))) expect(lock).toContain(block)
-    for (const path of ['package.json', 'clients/web/package.json', 'package-lock.json']) expect(JSON.parse(readFileSync(join(repo.directory, path), 'utf8')).version).toBe('0.1.12')
+    for (const path of ['package.json', 'clients/web/package.json', 'cloud/congregator/web/package.json', 'package-lock.json']) expect(JSON.parse(readFileSync(join(repo.directory, path), 'utf8')).version).toBe('0.1.12')
     expect(JSON.parse(repo.run('plan', { GITHUB_EVENT_NAME: 'workflow_dispatch', VERSION: '0.1.12' }))).toEqual({ release: true, version: '0.1.12', previous: '' })
     expect(() => repo.run('stamp', { VERSION: 'invalid' })).toThrow()
     expect(() => repo.run('plan', { GITHUB_EVENT_NAME: 'workflow_dispatch', VERSION: '0.1.9' })).toThrow(/Bump/)

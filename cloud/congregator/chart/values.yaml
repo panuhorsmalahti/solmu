@@ -1,0 +1,33 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/panuhorsmalahti/solmu-congregator
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+openshell:
+  gatewayUrl: https://openshell.openshell.svc.cluster.local:8080
+  tokenSecretName: ""
+  tokenSecretKey: token
+  caSecretName: openshell-server-tls
+  caSecretKey: ca.crt
+
+agent:
+  image: ghcr.io/panuhorsmalahti/solmu:latest
+  openShellProvider: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: congregator.example.com
+  tls: []
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: congregator
+description: Solmu's cluster control plane for OpenShell agent sandboxes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/panuhorsmalahti/solmu
+sources:
+  - https://github.com/panuhorsmalahti/solmu/tree/main/cloud/congregator
+keywords:
+  - solmu
+  - agents
+  - openshell
+  - kubernetes
+annotations:
+  licenses: MIT

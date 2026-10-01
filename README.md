@@ -21,6 +21,7 @@ Licensed under [MIT](LICENSE).
 - Install Agent Plugins to bring skills and MCP tools into a workspace together. See [plugins](docs/plugins.md).
 - Choose a model per thread and work from your CLI's current folder.
 - Run locally, in Docker, or in a Linux sandbox workspace.
+- Manage Solmu agent sandboxes in Kubernetes with [Congregator](docs/congregator.md) and NVIDIA OpenShell.
 - Group Solmu terminal tabs into project spaces with nested panes and mouse controls.
 - Read, edit, and search workspace files and run Bash commands with saved tool results.
 
@@ -107,6 +108,13 @@ linkable `/threads/{id}` conversation pages.
 [Run and use the web client](clients/web/README.md).
 
 ![Solmu web client](docs/screenshots/web.png)
+
+### Congregator
+
+Manage Solmu agents running in isolated Kubernetes sandboxes with a dedicated
+web dashboard. [Install Congregator](docs/congregator.md).
+
+![Congregator cloud dashboard](docs/screenshots/congregator.png)
 
 ## Muxer
 

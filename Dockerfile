@@ -2,6 +2,7 @@ FROM node:24-bookworm-slim AS web-build
 WORKDIR /web
 COPY package.json package-lock.json ./
 COPY clients/web ./clients/web
+COPY cloud/congregator/web/package.json ./cloud/congregator/web/package.json
 RUN npm ci && npm run build:web
 
 FROM rust:1.98.1-slim-bookworm AS build
@@ -19,6 +20,7 @@ COPY clients/desktop ./clients/desktop
 COPY e2e ./e2e
 COPY boxer ./boxer
 COPY muxer ./muxer
+COPY cloud/congregator/backend ./cloud/congregator/backend
 RUN cargo build --release --locked -p solmu-backend
 
 FROM debian:bookworm-slim AS runtime

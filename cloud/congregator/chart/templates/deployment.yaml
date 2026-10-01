@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "congregator.fullname" . }}
+  labels:
+    {{- include "congregator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "congregator.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "congregator.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: congregator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: CONGREGATOR_BIND_ADDR
+              value: 0.0.0.0:8080
+            - name: OPENSHELL_GATEWAY_URL
+              value: {{ .Values.openshell.gatewayUrl | quote }}
+            - name: CONGREGATOR_SOLMU_IMAGE
+              value: {{ .Values.agent.image | quote }}
+            - name: CONGREGATOR_OPEN_SHELL_PROVIDER
+              value: {{ .Values.agent.openShellProvider | quote }}
+            {{- if .Values.openshell.tokenSecretName }}
+            - name: OPENSHELL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openshell.tokenSecretName }}
+                  key: {{ .Values.openshell.tokenSecretKey }}
+            {{- end }}
+            {{- if .Values.openshell.caSecretName }}
+            - name: OPENSHELL_CA_CERT_PATH
+              value: /etc/openshell-ca/ca.crt
+            {{- end }}
+          {{- if .Values.openshell.caSecretName }}
+          volumeMounts:
+            - name: openshell-ca
+              mountPath: /etc/openshell-ca
+              readOnly: true
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.openshell.caSecretName }}
+      volumes:
+        - name: openshell-ca
+          secret:
+            secretName: {{ .Values.openshell.caSecretName }}
+            items:
+              - key: {{ .Values.openshell.caSecretKey }}
+                path: ca.crt
+      {{- end }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}

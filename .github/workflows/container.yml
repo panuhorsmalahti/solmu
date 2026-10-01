@@ -3,7 +3,7 @@ name: Publish Docker image
 on:
   push:
     branches: [main]
-    paths: ['backend/**', 'Cargo*', 'Dockerfile', '.dockerignore', 'clients/**/Cargo.toml', 'clients/web/**', 'package*.json', 'muxer/Cargo.toml', 'e2e/**', 'boxer/**', '.github/workflows/container.yml']
+    paths: ['backend/**', 'Cargo*', 'Dockerfile', '.dockerignore', 'clients/**/Cargo.toml', 'clients/web/**', 'package*.json', 'muxer/Cargo.toml', 'e2e/**', 'boxer/**', 'cloud/congregator/backend/Cargo.toml', 'cloud/congregator/web/package.json', '.github/workflows/container.yml']
   workflow_dispatch:
   workflow_call:
     inputs:

@@ -32,6 +32,7 @@ See the [client overview](clients.md) for screenshots and shared features.
 - [Skills](skills.md): install reusable project instructions in `.agents/skills/`.
 - [MCP](mcp.md): connect workspace tools and inspect server status in every client.
 - [Plugins](plugins.md): install portable packages with skills and MCP tools.
+- [Congregator](congregator.md): manage Solmu agents in Kubernetes sandboxes.
 - [Boxer](boxer.md): launch a program with optional OS sandbox controls.
 
 ## Make room with Muxer
