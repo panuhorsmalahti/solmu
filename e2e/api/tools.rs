@@ -30,18 +30,20 @@ async fn all_tools_execute_stream_save_and_replay_across_restarts_for_both_provi
         assert!(events.contains(&"done".into()), "{provider}: {events:?}");
         assert_eq!(
             events.iter().filter(|event| *event == "tool_start").count(),
-            6
+            6,
+            "{provider}: {events:?}"
         );
         assert_eq!(
             events
                 .iter()
                 .filter(|event| *event == "tool_result")
                 .count(),
-            6
+            6,
+            "{provider}: {events:?}"
         );
         let saved = runs(&backend, &id).await;
         let items = saved["items"].as_array().unwrap();
-        assert_eq!(items.len(), 6);
+        assert_eq!(items.len(), 6, "{provider}: {items:?}");
         for run in items {
             assert_eq!(run["status"], "completed", "{run}");
             assert_eq!(run["result"]["success"], true);

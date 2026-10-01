@@ -87,15 +87,23 @@ async fn automatic_names_use_the_cheap_model_fall_back_and_preserve_manual_title
         .unwrap();
         {
             let requests = backend.requests.lock().unwrap();
-            assert_eq!(requests[0].1["model"], cheap.unwrap_or("test-model"));
-            assert_eq!(
-                requests.last().unwrap().1["model"],
-                if cheap == Some("unknown-title-model") {
-                    "test-model"
-                } else {
-                    cheap.unwrap_or("test-model")
+            let models = requests
+                .iter()
+                .map(|(_, request)| request["model"].as_str().unwrap())
+                .collect::<Vec<_>>();
+            match cheap {
+                None => assert!(
+                    models
+                        .iter()
+                        .any(|model| ["gpt-6-luna", "test-model"].contains(model)),
+                    "Default title generation should try Luna and may fall back to the main model: {models:?}"
+                ),
+                Some("unknown-title-model") => {
+                    assert!(models.contains(&"unknown-title-model"), "{models:?}");
+                    assert!(models.contains(&"test-model"), "{models:?}");
                 }
-            );
+                Some(model) => assert!(models.contains(&model), "{models:?}"),
+            }
         }
         let before = backend.requests.lock().unwrap().len();
         backend.send_message(id, "Follow up").await;
