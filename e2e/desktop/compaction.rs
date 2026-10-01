@@ -11,15 +11,35 @@ async fn desktop_can_compact_conversation_history() {
         .unwrap()
         .to_owned();
 
-    for prompt in ["First desktop turn", "Second desktop turn"] {
+    for (index, prompt) in ["First desktop turn", "Second desktop turn"]
+        .into_iter()
+        .enumerate()
+    {
         ui.step("click \"Message Solmu…\"").await;
         ui.step(&format!("type \"{prompt}\"")).await;
         ui.step("type enter").await;
+        let expected_messages = (index + 1) * 2;
+        tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                if backend.messages(&id).await["items"]
+                    .as_array()
+                    .unwrap()
+                    .len()
+                    == expected_messages
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(30)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("Desktop did not persist {expected_messages} messages"));
         ui.wait("Hello from Solmu").await;
         ui.wait("Ready").await;
     }
     ui.step("click \"Compact\"").await;
-    ui.wait("Conversation summary (compacted)").await;
+    ui.wait("Conversation summary (compacted):\n\nA new idea")
+        .await;
     ui.wait("Ready").await;
     if std::env::var_os("SOLMU_CAPTURE_SCREENSHOTS").is_some() {
         let screenshot =

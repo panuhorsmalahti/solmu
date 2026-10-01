@@ -29,11 +29,20 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     ui.wait("Hello from Solmu").await;
     ui.wait("Ready").await;
     ui.step("click \"Status\"").await;
-    ui.wait("Connected").await;
+    let status_thread = &backend.threads().await["items"][0];
+    ui.wait(&format!(
+        "Connected · {} · Default model · {}",
+        status_thread["title"].as_str().unwrap(),
+        status_thread["workspace"].as_str().unwrap()
+    ))
+    .await;
     ui.step("click \"Context\"").await;
-    ui.wait("2 messages").await;
+    ui.wait(&format!(
+        "2 messages · 0 tool calls · 0 skills · 0 MCP servers · 0 plugins\nWorkspace: {}",
+        status_thread["workspace"].as_str().unwrap()
+    ))
+    .await;
     ui.step("click \"Export\"").await;
-    ui.wait("Markdown file path").await;
     let export = format!("Solmu-{id}.md");
     ui.step("click \"Save conversation\"").await;
     ui.wait("Conversation exported").await;
