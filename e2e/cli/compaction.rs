@@ -10,12 +10,30 @@ async fn cli_can_compact_and_continue_a_conversation() {
         .unwrap()
         .to_owned();
 
-    for prompt in [
+    for (index, prompt) in [
         "First turn before compaction",
         "Second turn before compaction",
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         terminal.command(prompt);
-        terminal.wait("Hello from Solmu").await;
+        let expected_messages = (index + 1) * 2;
+        tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                if backend.messages(&id).await["items"]
+                    .as_array()
+                    .unwrap()
+                    .len()
+                    == expected_messages
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(30)).await;
+            }
+        })
+        .await
+        .unwrap();
         terminal.ready().await;
     }
     terminal.command("/compact");
