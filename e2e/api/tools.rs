@@ -62,10 +62,19 @@ async fn all_tools_execute_stream_save_and_replay_across_restarts_for_both_provi
             std::fs::read_to_string(backend.directory.path().join("workspace/hello.txt")).unwrap(),
             "Welcome tools\n"
         );
-        let captured = backend.requests.lock().unwrap()[0].1.clone();
+        let captured = backend
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(_, request)| request["stream"] == true)
+            .unwrap()
+            .1
+            .clone();
         let definitions = captured["tools"].as_array().unwrap();
-        assert_eq!(definitions.len(), 6);
+        assert_eq!(definitions.len(), 7);
         assert!(captured.to_string().contains("Bash"));
+        assert!(captured.to_string().contains("Tasks"));
         backend.restart().await;
         assert_eq!(runs(&backend, &id).await, saved);
         let next = backend.send_message(&id, "Continue after restart").await;
