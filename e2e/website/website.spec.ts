@@ -31,9 +31,16 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByText(/Detach while replies keep running, then reattach/)).toBeVisible()
   await expect(page.getByText(/Layouts and Solmu conversations return after a server restart/)).toBeVisible()
   await expect(page.getByText(/Attach directly to one pane, or stream its screen to scripts with multiple observers and one controller/)).toBeVisible()
-  for (const tool of ['Congregator', 'Boxer', 'Docker', 'Muxer']) await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
-  expect(await page.getByRole('heading', { level: 3 }).allTextContents()).toEqual(expect.arrayContaining(['Congregator', 'Boxer', 'Docker', 'Muxer']))
-  expect(await page.locator('.tool-grid > article h3').allTextContents()).toEqual(['Congregator', 'Boxer', 'Docker', 'Muxer'])
+  for (const tool of ['Congregator', 'Boxer', 'Muxer']) await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Docker', exact: true })).toHaveCount(0)
+  await expect(page.locator('.tool-grid')).not.toContainText('Docker')
+  expect(await page.getByRole('heading', { level: 3 }).allTextContents()).toEqual(expect.arrayContaining(['Congregator', 'Boxer', 'Muxer']))
+  expect(await page.locator('.tool-grid > article h3').allTextContents()).toEqual(['Congregator', 'Boxer', 'Muxer'])
+  const [congregatorBox, boxerBox] = await Promise.all([
+    page.locator('.congregator-feature').boundingBox(),
+    page.locator('.boxer-feature').boundingBox(),
+  ])
+  expect(boxerBox!.y).toBeGreaterThan(congregatorBox!.y + congregatorBox!.height)
   await expect(page.locator('pre').filter({ hasText: 'boxer --profile solmu --cwd /path/to/project -- solmu-backend' })).toBeVisible()
   await expect(page.locator('.tool-grid').getByText('connect any Solmu client using its default settings.', { exact: false })).toBeVisible()
   await expect(page.locator('.tool-grid')).not.toContainText('SOLMU_BIND_ADDR=')
@@ -44,16 +51,17 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByText('choose offline execution for standalone commands', { exact: false })).toBeVisible()
   await expect(page.getByText('Check that your OS can apply them before launching.', { exact: false })).toBeVisible()
   await expect(page.getByText('explicit network routes for your provider and backend', { exact: false })).toBeVisible()
-  await expect(page.locator('pre').filter({ hasText: 'docker run --rm --env-file .env -p 127.0.0.1:3000:3000 -p 127.0.0.1:3001:3001 -v solmu-data:/data ghcr.io/panuhorsmalahti/solmu:latest' })).toBeVisible()
-  await expect(page.getByText('Boxer is the recommended agent sandbox.', { exact: false })).toBeVisible()
   for (const script of ['install-bundle.sh', 'install-bundle.ps1']) await expect(page.locator('#install pre').filter({ hasText: `https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/${script}` })).toBeVisible()
-  for (const client of ['cli', 'desktop', 'web', 'congregator', 'muxer']) {
+  for (const client of ['cli', 'desktop', 'web', 'muxer']) {
     const image = page.locator(`img[src="screenshots/${client}.png"]`)
     await image.scrollIntoViewIfNeeded()
     await expect(image).toBeVisible()
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)
     expect((await page.request.get(`http://127.0.0.1:4174/solmu/screenshots/${client}.png`)).status()).toBe(200)
   }
+  const congregatorImage = page.locator('.congregator-feature img')
+  await expect(congregatorImage).toBeVisible()
+  await expect.poll(() => congregatorImage.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)
   await expect(page.getByRole('link', { name: 'Meet your Solmu' })).toHaveAttribute('href', 'https://github.com/panuhorsmalahti/solmu#install')
   await page.getByRole('link', { name: 'Find your space' }).click()
   await expect(page).toHaveURL(/#your-space$/)

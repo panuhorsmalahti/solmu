@@ -11,6 +11,13 @@ const buildSite = () => execute(process.execPath, [join(repository, 'website/bui
 
 const home = 'http://127.0.0.1:4174/solmu/'
 
+test('Docker setup remains available in the docs', async ({ page }) => {
+  await page.goto(`${home}docs/running/`)
+  await expect(page.getByRole('heading', { name: 'Docker backend' })).toBeVisible()
+  await expect(page.locator('article')).toContainText('docker run --rm --name solmu')
+  await expect(page.locator('article')).toContainText('Boxer over Docker')
+})
+
 test('MCP guide is published from the root docs and shows live status in every client', async ({ page }) => {
   await page.goto(`${home}docs/mcp/`)
   await expect(page.getByRole('heading', { name: 'MCP tools' })).toBeVisible()
