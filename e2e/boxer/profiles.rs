@@ -115,10 +115,7 @@ fn unsupported_profiles_and_conflicting_policy_are_rejected() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn agent_profiles_run_with_their_private_home_and_writable_project() {
-    for (profile, env_name, config_directory) in [
-        ("codex", "CODEX_HOME", ".codex"),
-        ("claude-code", "CLAUDE_CONFIG_DIR", ".claude"),
-    ] {
+    for (profile, config_directory) in [("codex", ".codex"), ("claude-code", ".claude")] {
         let root = tempfile::tempdir().unwrap();
         let project = root.path().join("project");
         std::fs::create_dir(&project).unwrap();

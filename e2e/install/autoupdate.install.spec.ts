@@ -15,8 +15,8 @@ for (const [component, modules] of Object.entries(installedModules)) {
       const state = path.join(fixture.directory, 'state')
       for (const module of modules) {
         const destination = fixture.destination
-        expect(await readFile(path.join(state, 'update-components', module), 'utf8')).toBe(destination)
-        expect(await readFile(path.join(state, `.solmu-version-${module}`), 'utf8')).toBe('v0.1.0')
+        expect((await readFile(path.join(state, 'update-components', module), 'utf8')).trim()).toBe(destination)
+        expect((await readFile(path.join(state, `.solmu-version-${module}`), 'utf8')).trim()).toBe('v0.1.0')
       }
       for (const module of ['backend', 'cli', 'desktop', 'web', 'boxer', 'muxer']) {
         if (!modules.includes(module)) await expect(readFile(path.join(state, 'update-components', module))).rejects.toThrow()
@@ -48,7 +48,7 @@ test('automatic updates honor the shared opt-out and update an installed CLI onl
     await writeFile(configuration, 'SOLMU_AUTO_UPDATE=true\n')
     await writeFile(path.join(state, '.solmu-version-cli'), 'v0.0.9')
     await fixture.runAutoUpdate()
-    expect(await readFile(path.join(state, '.solmu-version-cli'), 'utf8')).toBe('v0.1.0')
+    expect((await readFile(path.join(state, '.solmu-version-cli'), 'utf8')).trim()).toBe('v0.1.0')
     expect(fixture.requests).toContain('/api/latest')
     expect(fixture.requests.some(request => request.includes('solmu-v0.1.0-'))).toBe(true)
     expect(fixture.requests.some(request => request.includes('solmu-v0.1.0-web.zip'))).toBe(false)

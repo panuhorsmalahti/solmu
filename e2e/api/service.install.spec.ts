@@ -11,12 +11,12 @@ for (const component of ['backend', 'bundle']) {
       const state = path.join(fixture.directory, 'state')
       expect(await readFile(path.join(state, '.env'), 'utf8')).toContain('LLM_PROVIDER=openai')
       expect(await readFile(path.join(state, '.env'), 'utf8')).toContain('SOLMU_AUTO_UPDATE=true')
-      expect(await readFile(path.join(state, '.solmu-backend-version'), 'utf8')).toBe('v0.1.0')
+      expect((await readFile(path.join(state, '.solmu-backend-version'), 'utf8')).trim()).toBe('v0.1.0')
       expect(await readFile(path.join(state, process.platform === 'win32' ? 'auto-update-v2.ps1' : 'auto-update.sh'), 'utf8')).toMatch(/SOLMU_AUTO_UPDATE/)
       const installed = component === 'bundle' ? ['backend', 'cli', 'desktop', 'boxer', 'muxer', 'web'] : ['backend']
       for (const module of installed) {
-        expect(await readFile(path.join(state, 'update-components', module), 'utf8')).toBe(module === 'web' ? path.join(state, 'web') : fixture.destination)
-        expect(await readFile(path.join(state, `.solmu-version-${module}`), 'utf8')).toBe('v0.1.0')
+        expect((await readFile(path.join(state, 'update-components', module), 'utf8')).trim()).toBe(module === 'web' ? path.join(state, 'web') : fixture.destination)
+        expect((await readFile(path.join(state, `.solmu-version-${module}`), 'utf8')).trim()).toBe('v0.1.0')
       }
       const configuration = 'LLM_PROVIDER=openai\nOPENAI_API_KEY=user-provided-key\n'
       await writeFile(path.join(state, '.env'), configuration)
@@ -77,7 +77,7 @@ for (const component of ['backend', 'bundle']) {
         await fixture.runAutoUpdate()
         for (const module of tracked) {
           const marker = module === 'web' ? path.join(state, 'web', '.solmu-web') : path.join(state, `.solmu-version-${module}`)
-          expect(await readFile(marker, 'utf8')).toBe('v0.1.0')
+          expect((await readFile(marker, 'utf8')).trim()).toBe('v0.1.0')
         }
         const platformAsset = process.platform === 'win32' ? 'windows-x86_64.zip' : process.platform === 'darwin' ? `macos-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}.tar.gz` : 'linux-x86_64.tar.gz'
         const requests = fixture.requests.slice(updateStart)

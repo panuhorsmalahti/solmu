@@ -14,7 +14,7 @@ function fixture() {
     cpSync(join(root, path, 'Cargo.toml'), join(directory, path, 'Cargo.toml'))
   }
   mkdirSync(join(directory, 'scripts'))
-  for (const path of ['scripts/release.mjs', 'Cargo.lock', 'package.json', 'package-lock.json', 'clients/web/package.json']) {
+  for (const path of ['scripts/release.mjs', 'Cargo.lock', 'package.json', 'package-lock.json', 'clients/web/package.json', 'cloud/congregator/web/package.json']) {
     mkdirSync(join(directory, path, '..'), { recursive: true })
     cpSync(join(root, path), join(directory, path))
   }
