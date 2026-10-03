@@ -11,6 +11,34 @@ permissions:
   contents: read
 
 jobs:
+  android:
+    name: Android (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - run: gradle -p clients/android assembleDebug
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_7
+          script: |
+            gradle -p clients/android connectedDebugAndroidTest
+            mkdir -p docs/screenshots
+            adb exec-out run-as com.solmu.android cat files/android-e2e.png > docs/screenshots/android.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-client-screenshot
+          path: docs/screenshots/android.png
+
   installers:
     name: Installer (${{ matrix.os }})
     strategy:

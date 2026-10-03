@@ -1,8 +1,11 @@
 # Solmu clients
 
+The Android client is a native Kotlin and Jetpack Compose app. It uses the same
+backend APIs and live events as the other clients; see the [Android guide](android.md).
+
 Use `/skills` in the CLI or **Skills** in desktop and web to see the current
 workspace's installed skills. Lists update automatically. See [skills](skills.md).
-Use `/plugins` in CLI or Muxer, or **Plugins** in desktop and web, to see
+Use `/plugins` in CLI or Muxer, or **Plugins** in desktop, Android, and web, to see
 installed [Agent Plugins](plugins.md) and any loading errors.
 
 All clients connect to the same backend and share saved conversations.
@@ -20,13 +23,14 @@ The CLI and desktop show **Ready** when available, with progress and errors
 shown as needed.
 
 Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
-[Web](screenshots/web.png) · [Muxer](screenshots/muxer.png).
+[Android](screenshots/android.png) | [Web](screenshots/web.png) · [Muxer](screenshots/muxer.png).
 
 | Client | Start after installation | Guide |
 | --- | --- | --- |
 | CLI | `solmu` | [Terminal client](cli.md) |
 | Muxer (spaces and CLI tabs) | `muxer` | [Terminal workspace](muxer.md) |
 | Desktop | `solmu-desktop` | [Desktop client](desktop.md) |
+| Android | Install from Android Studio or build with Gradle | [Android client](android.md) |
 | Web | Open `http://127.0.0.1:3000` | [Web client](web.md) |
 
 These guides assume the backend is already running. Its [installer](services.md)

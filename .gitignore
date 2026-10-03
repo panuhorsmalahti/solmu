@@ -7,6 +7,9 @@
 *.db-wal
 **/node_modules/
 **/dist/
+**/.gradle/
+**/build/
+clients/android/local.properties
 /test-results/
 /playwright-report/
 /artifacts/

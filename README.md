@@ -1,7 +1,7 @@
 # Solmu
 
 An open-source autonomous agent. A Rust backend with terminal,
-native desktop, and web clients that share your conversations.
+native desktop, Android, and web clients that share your conversations.
 
 [Website](https://panuhorsmalahti.github.io/solmu/) · [Docs](https://panuhorsmalahti.github.io/solmu/docs/) · [Client guide](docs/clients.md) · [Configuration](docs/configuration.md) · [Releases](https://github.com/panuhorsmalahti/solmu/releases)
 
@@ -49,12 +49,14 @@ See [update details](docs/releases.md).
 
 Prefer individual modules? Install the [backend](docs/services.md#install),
 then only the clients you need: [CLI](clients/cli/README.md#install),
-[Desktop](clients/desktop/README.md#install), [Web](clients/web/README.md#install),
-or [Muxer](muxer/README.md#install). [Boxer](boxer/README.md#install) is separate too.
+[Desktop](clients/desktop/README.md#install), [Android](clients/android/README.md),
+[Web](clients/web/README.md#install), or [Muxer](muxer/README.md#install).
+[Boxer](boxer/README.md#install) is separate too.
 
 Add your provider key to `~/.solmu/.env` (Windows: `%USERPROFILE%\.solmu\.env`),
 then restart the backend service. Run `solmu`, `solmu-desktop`, or `muxer`,
-or open **http://127.0.0.1:3000** for the web client. The backend serves it directly.
+open **http://127.0.0.1:3000** for the web client, or build the Android app
+from [Android Studio](clients/android/README.md). The backend serves the web client directly.
 See [configuration](docs/configuration.md) for model choices.
 
 ## From source
@@ -108,6 +110,14 @@ linkable `/threads/{id}` conversation pages.
 [Run and use the web client](clients/web/README.md).
 
 ![Solmu web client](docs/screenshots/web.png)
+
+### Android
+
+A native Kotlin and Jetpack Compose app. It connects to the same backend and
+provides conversations, streaming, Profile, Audit, Tasks, and workspace tools.
+[Build and run the Android client](clients/android/README.md).
+
+![Solmu Android client](docs/screenshots/android.png)
 
 ### Congregator
 
