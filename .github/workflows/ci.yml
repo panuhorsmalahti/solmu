@@ -23,6 +23,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-36
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
@@ -139,6 +143,7 @@ jobs:
       - run: chmod +x target/debug/solmu-backend target/debug/fixture target/debug/mcp-fixture
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - run: npx playwright test --config e2e/congregator/playwright.config.ts
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

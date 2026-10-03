@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: 'list',
   use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:5174', trace: 'retain-on-failure' },
   webServer: {
-    command: 'npm run dev --workspace @solmu/congregator-web',
+    command: 'npm run dev --workspace @solmu/congregator-web -- --host 127.0.0.1 --port 5174 --strictPort',
     cwd: root,
     url: 'http://127.0.0.1:5174',
     reuseExistingServer: !process.env.CI,
