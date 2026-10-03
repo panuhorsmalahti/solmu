@@ -31,7 +31,7 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          profile: pixel_7
+          profile: pixel_2
           script: |
             gradle -p clients/android connectedDebugAndroidTest
             mkdir -p docs/screenshots
