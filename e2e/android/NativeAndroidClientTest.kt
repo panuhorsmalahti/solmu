@@ -97,12 +97,12 @@ class NativeAndroidClientTest {
 
     @Test
     fun nativeClientStreamsRepliesAndManagesItsCorePages() {
-        compose.waitUntil(30_000, conditionDescription = "the chat screen loads") {
+        compose.waitUntil(conditionDescription = "the chat screen loads", timeoutMillis = 30_000) {
             compose.onAllNodesWithText("A little space for your next big idea.").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("message-input").performTextInput("Hello from Android")
         compose.onNodeWithTag("send-message").performClick()
-        compose.waitUntil(30_000, conditionDescription = "the streamed assistant reply appears") {
+        compose.waitUntil(conditionDescription = "the streamed assistant reply appears", timeoutMillis = 30_000) {
             compose.onAllNodesWithText("Hello from Solmu").fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -110,7 +110,7 @@ class NativeAndroidClientTest {
         compose.onNodeWithText("System prompt").assertIsDisplayed()
         compose.onAllNodes(hasSetTextAction()).get(0).performTextInput("\nBe concise.")
         compose.onNodeWithText("Save profile").performScrollTo().performClick()
-        compose.waitUntil(30_000, conditionDescription = "the edited profile prompt is saved") { profilePrompt.get().contains("Be concise.") }
+        compose.waitUntil(conditionDescription = "the edited profile prompt is saved", timeoutMillis = 30_000) { profilePrompt.get().contains("Be concise.") }
         assertTrue(profilePrompt.get().contains("You are Solmu"))
 
         compose.onNodeWithTag("nav-Audit").performClick()
@@ -120,20 +120,20 @@ class NativeAndroidClientTest {
         compose.onAllNodes(hasSetTextAction()).get(0).performScrollTo().performTextInput("Android follow-up")
         compose.onAllNodes(hasSetTextAction()).get(1).performScrollTo().performTextInput("Review the workspace")
         compose.onNodeWithText("Create task").performScrollTo().performClick()
-        compose.waitUntil(30_000, conditionDescription = "the scheduled task is created") { taskCreated.get() }
+        compose.waitUntil(conditionDescription = "the scheduled task is created", timeoutMillis = 30_000) { taskCreated.get() }
 
         compose.onNodeWithTag("nav-More").performClick()
         compose.onNodeWithText("Webhooks").performClick()
         compose.onAllNodes(hasSetTextAction()).get(1).performScrollTo().performTextInput("android-test-secret-123")
         compose.onNodeWithText("Create webhook").performScrollTo().performClick()
-        compose.waitUntil(30_000, conditionDescription = "the webhook is created") { webhookCreated.get() }
+        compose.waitUntil(conditionDescription = "the webhook is created", timeoutMillis = 30_000) { webhookCreated.get() }
 
         compose.onNodeWithText("Change backend").assertDoesNotExist()
         compose.onNodeWithTag("nav-More").performClick()
         compose.onNodeWithText("Skills").performClick()
         compose.onNodeWithText("No skills installed in this workspace.").assertIsDisplayed()
         compose.onNodeWithTag("nav-Chat").performClick()
-        compose.waitUntil(30_000, conditionDescription = "the chat screen returns with the assistant reply") { compose.onAllNodesWithText("Hello from Solmu").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(conditionDescription = "the chat screen returns with the assistant reply", timeoutMillis = 30_000) { compose.onAllNodesWithText("Hello from Solmu").fetchSemanticsNodes().isNotEmpty() }
         val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         val screenshotFile = File(context.filesDir, "android-e2e.png")
         FileOutputStream(screenshotFile).use { assertTrue(screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
