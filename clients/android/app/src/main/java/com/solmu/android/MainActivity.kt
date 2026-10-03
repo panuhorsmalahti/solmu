@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -440,9 +441,9 @@ private fun SolmuApplication(server: String, onChangeServer: () -> Unit) {
                 "Tasks" -> TasksScreen(model)
                 "More" -> MoreScreen(model)
                 "Webhooks" -> WebhooksScreen(model)
-                "Skills" -> CatalogScreen("Workspace skills", model.skills, "No skills installed in this workspace.", "items", model.error)
+                "Skills" -> CatalogScreen("Workspace skills", model.skills, "No skills installed in this workspace.", "items")
                 "MCP" -> McpScreen(model)
-                "Plugins" -> CatalogScreen("Agent Plugins", model.plugins, "No plugins installed in this workspace.", "items", model.error)
+                "Plugins" -> CatalogScreen("Agent Plugins", model.plugins, "No plugins installed in this workspace.", "items")
                 else -> MoreScreen(model)
             }
         }
@@ -876,7 +877,7 @@ private fun WebhookCard(model: SolmuModel, hook: JSONObject) {
             OutlinedTextField(secret, { secret = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Replace secret (optional)") }, supportingText = { Text(if (hook.boolean("secret_configured")) "Secret is stored. Leave blank to keep it." else "Set a secret with at least 16 characters.") }, singleLine = true)
             OutlinedTextField(instructions, { instructions = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Instructions for Solmu") }, minLines = 2)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = name.isNotBlank() && !model.busy && (secret.isBlank() || secret.length >= 16), onClick = { model.launch { model.api.patch("/webhooks/$id", json { put("name", name.trim()); put("instructions", instructions); put("auth_type", authType); if (secret.isNotBlank()) put("secret", secret) }); secret = ""; model.loadWebhooks() } }) { Text("Save changes") }
+                Button(enabled = name.isNotBlank() && !model.busy && (secret.isBlank() || secret.length >= 16), onClick = { model.launch { model.api.patch("/webhooks/$id", json { put("name", name.trim()); put("instructions", instructions); put("auth_type", authType); if (secret.isNotBlank()) put("secret", secret); this }); secret = ""; model.loadWebhooks() } }) { Text("Save changes") }
                 TextButton(onClick = { model.launch { model.api.delete("/webhooks/$id"); model.loadWebhooks() } }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             }
         }
@@ -895,7 +896,7 @@ private fun MoreScreen(model: SolmuModel) {
 }
 
 @Composable
-private fun CatalogScreen(title: String, catalog: JSONObject?, empty: String, key: String, _: String) {
+private fun CatalogScreen(title: String, catalog: JSONObject?, empty: String, key: String) {
     PageColumn(title = title, subtitle = "Automatically discovered from this conversation’s workspace.") {
         if (catalog == null) CircularProgressIndicator()
         val values = catalog?.array(key).orEmpty()
