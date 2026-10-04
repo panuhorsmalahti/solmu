@@ -19,6 +19,13 @@ new_pane = "shell"
 EOF
 
 target/debug/muxer server start --session default --cwd "$root"
+pane=''
+for _ in $(seq 1 30); do
+  pane=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; panes=json.load(sys.stdin)["result"].get("panes", []); print(panes[0]["id"] if panes else "")')
+  [ -n "$pane" ] && break
+  sleep 1
+done
+[ -n "$pane" ] || { echo 'Muxer shell pane did not start' >&2; exit 1; }
 target/debug/muxer-gui &
 gui_pid=$!
 window=''
@@ -29,6 +36,7 @@ for _ in $(seq 1 90); do
 done
 [ -n "$window" ] || { echo 'Muxer GUI window did not appear' >&2; exit 1; }
 mkdir -p docs/screenshots
+sleep 2
 import -window "$window" docs/screenshots/muxer-gui.png
 
 # Send a command through the GUI input and verify it reaches the real shell pane.
@@ -37,7 +45,6 @@ xdotool getwindowgeometry --shell "$window"
 xdotool mousemove --window "$window" 650 720 click 1
 xdotool type --clearmodifiers 'echo SOLMU_MUXER_GUI_E2E'
 xdotool key Return
-pane=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["active_pane"])')
 seen=''
 for _ in $(seq 1 30); do
   seen=$(target/debug/muxer pane read "$pane" --session default 2>/dev/null || true)
