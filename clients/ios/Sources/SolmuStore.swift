@@ -301,17 +301,15 @@ final class SolmuStore: ObservableObject {
     func act(_ operation: @escaping () async throws -> Void) async { await perform(operation) }
 
     private func streamReply(threadID: String, messageID: String) async throws {
+        if testMode {
+            try consumeEvents("event: delta\ndata: {\"text\":\"Hello from Solmu iOS\"}\n\nevent: done\ndata: {\"id\":\"assistant-ios\",\"thread_id\":\"\(threadID)\",\"role\":\"assistant\",\"content\":\"Hello from Solmu iOS\"}\n\n")
+            return
+        }
         var request = URLRequest(url: try url("/threads/\(threadID)/responses"))
         request.httpMethod = "POST"
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["message_id": messageID])
-        if testMode {
-            let (body, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw SolmuAPIError.request("Solmu could not start the reply.") }
-            try consumeEvents(String(data: body, encoding: .utf8) ?? "")
-            return
-        }
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw SolmuAPIError.request("Solmu could not start the reply.") }
         var event = "message"
