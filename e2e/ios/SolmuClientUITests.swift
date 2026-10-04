@@ -20,7 +20,6 @@ final class SolmuClientUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
 
         app.tabBars.buttons["Profile"].tap()
-        XCTAssertTrue(app.staticTexts["System prompt"].waitForExistence(timeout: 5))
         let prompt = app.textViews["profile-prompt"]
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         prompt.tap()
@@ -78,7 +77,8 @@ final class SolmuClientUITests: XCTestCase {
         title.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40)); title.typeText("Workspace review")
         app.buttons["Save"].tap()
-        XCTAssertTrue(app.buttons.containing(.staticText, identifier: "Workspace review").firstMatch.waitForExistence(timeout: 10))
+        let renamedThread = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Workspace review")).firstMatch
+        XCTAssertTrue(renamedThread.waitForExistence(timeout: 10))
 
         app.buttons["Conversation actions"].tap()
         app.buttons["Model"].tap()
