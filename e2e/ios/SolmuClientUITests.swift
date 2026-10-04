@@ -6,7 +6,11 @@ final class SolmuClientUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["--uitesting", "--backend", "http://solmu.test"]
+        if name.contains("BackendAddressValidation") {
+            app.launchArguments = []
+        } else {
+            app.launchArguments = ["--uitesting", "--backend", "http://solmu.test"]
+        }
         app.launch()
     }
 
@@ -18,6 +22,7 @@ final class SolmuClientUITests: XCTestCase {
         input.typeText("Hello from iOS")
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
+        app.buttons["dismiss-chat-keyboard"].tap()
 
         app.tabBars.buttons["Profile"].tap()
         let prompt = app.descendants(matching: .any).matching(identifier: "profile-prompt").firstMatch
@@ -69,6 +74,7 @@ final class SolmuClientUITests: XCTestCase {
         input.tap(); input.typeText("Check the workspace")
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
+        app.buttons["dismiss-chat-keyboard"].tap()
 
         app.buttons["Conversation actions"].tap()
         app.buttons["Rename"].tap()
@@ -77,8 +83,9 @@ final class SolmuClientUITests: XCTestCase {
         title.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40)); title.typeText("Workspace review")
         app.buttons["Save"].tap()
-        let renamedThread = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Workspace review")).firstMatch
+        let renamedThread = app.buttons["thread-selector"]
         XCTAssertTrue(renamedThread.waitForExistence(timeout: 10))
+        XCTAssertTrue(renamedThread.label.contains("Workspace review"))
 
         app.buttons["Conversation actions"].tap()
         app.buttons["Model"].tap()
@@ -103,9 +110,6 @@ final class SolmuClientUITests: XCTestCase {
     }
 
     func testBackendAddressValidationIsNativeAndActionable() {
-        app.terminate()
-        app.launchArguments = []
-        app.launch()
         XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 10))
         let address = app.textFields["backend-address"]
         address.tap()

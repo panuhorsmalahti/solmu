@@ -57,6 +57,7 @@ struct SolmuHomeView: View {
 struct ConversationView: View {
     @ObservedObject var store: SolmuStore
     let onDisconnect: () -> Void
+    @FocusState private var draftFocused: Bool
     @State private var draft = ""
     @State private var showThreads = false
     @State private var showRename = false
@@ -172,6 +173,7 @@ struct ConversationView: View {
             TextField("Where shall we begin?", text: $draft, axis: .vertical)
                 .lineLimit(1...5).padding(11).background(SolmuPalette.paper, in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(SolmuPalette.border))
+                .focused($draftFocused)
                 .accessibilityIdentifier("message-input")
                 .disabled(store.busy)
             if store.responding {
@@ -188,6 +190,7 @@ struct ConversationView: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9).background(.white).overlay(alignment: .top) { Rectangle().fill(SolmuPalette.border).frame(height: 1) }
+        .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { draftFocused = false }.accessibilityIdentifier("dismiss-chat-keyboard") } }
     }
 
     private func copyLatest() {
