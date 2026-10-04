@@ -101,7 +101,10 @@ final class SolmuStore: ObservableObject {
 
     private func url(_ path: String) throws -> URL {
         guard let base = URL(string: baseURL), var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else { throw SolmuAPIError.request("Enter a valid backend address.") }
-        components.path = "/api/v1" + (path.hasPrefix("/") ? path : "/" + path)
+        let parts = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+        let route = String(parts[0])
+        components.path = "/api/v1" + (route.hasPrefix("/") ? route : "/" + route)
+        if parts.count > 1 { components.percentEncodedQuery = String(parts[1]) }
         guard let result = components.url else { throw SolmuAPIError.request("The backend address is invalid.") }
         return result
     }
