@@ -550,7 +550,7 @@ private struct WebhookRow: View {
     @State private var editing = false
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(hook.string("name")).font(.headline)
+            Text(hook.string("name")).font(.headline).accessibilityIdentifier("webhook-\(hook.string("id"))")
             Toggle("Enabled", isOn: Binding(get: { hook.bool("enabled") }, set: { value in Task { await store.act { _ = try await store.request("PATCH", "/webhooks/\(hook.string("id"))", body: ["enabled": value]); try await store.loadWebhooks() } } }))
             Text("\(hook.string("auth_type")) · Port \(hook.string("port"))").font(.caption).foregroundStyle(SolmuPalette.muted)
             Text("Webhook URL").font(.caption).foregroundStyle(SolmuPalette.muted)

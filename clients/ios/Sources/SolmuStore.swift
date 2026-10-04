@@ -42,7 +42,21 @@ final class SolmuURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let (status, text) = Self.handler?(request) ?? (500, "{}")
+        var intercepted = request
+        if intercepted.httpBody == nil, let stream = intercepted.httpBodyStream {
+            stream.open()
+            var body = Data()
+            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
+            defer { buffer.deallocate(); stream.close() }
+            while stream.hasBytesAvailable {
+                let count = stream.read(buffer, maxLength: 1024)
+                if count <= 0 { break }
+                body.append(buffer, count: count)
+            }
+            intercepted.httpBody = body
+            intercepted.httpBodyStream = nil
+        }
+        let (status, text) = Self.handler?(intercepted) ?? (500, "{}")
         let data = Data(text.utf8)
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": request.value(forHTTPHeaderField: "Accept") == "text/event-stream" ? "text/event-stream" : "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)

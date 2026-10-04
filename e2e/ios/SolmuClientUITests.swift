@@ -62,7 +62,7 @@ final class SolmuClientUITests: XCTestCase {
         secret.tap(); secret.typeText("ios-test-secret-123")
         app.buttons["dismiss-keyboard"].tap()
         app.buttons["save-webhook"].tap()
-        XCTAssertTrue(app.staticTexts["iOS test"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["webhook-hook-ios"].waitForExistence(timeout: 10))
 
         app.tabBars.buttons["Chat"].tap()
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 10))
