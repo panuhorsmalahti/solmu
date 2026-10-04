@@ -15,7 +15,7 @@ pub fn main() -> iced::Result {
         .title("Muxer GUI")
         .theme(theme)
         .subscription(subscription)
-        .window_size((1320.0, 820.0))
+        .window_size((1180.0, 760.0))
         .run()
 }
 
