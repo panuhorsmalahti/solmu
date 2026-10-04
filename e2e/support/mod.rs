@@ -84,7 +84,7 @@ struct ReplyControl {
     release: tokio::sync::Notify,
 }
 type ProviderState = (Requests, Arc<ReplyControl>);
-static STARTUP_LIMIT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+static STARTUP_LIMIT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
 pub struct Backend {
     pub url: String,
@@ -188,8 +188,8 @@ impl Backend {
     }
 
     async fn launch(&mut self) {
-        // Bound simultaneous native launches (not test execution), avoiding
-        // startup resource contention on Windows runners.
+        // Serialize native launches so the main and webhook ephemeral ports
+        // cannot collide while backend listeners are being established.
         let _startup = STARTUP_LIMIT.acquire().await.unwrap();
         let bind = if self.routed {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

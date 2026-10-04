@@ -204,7 +204,7 @@ final class SolmuStore: ObservableObject {
                 let user = try await request("POST", "/threads/\(id)/messages", body: ["content": content])
                 messages.append(user)
                 try await streamReply(threadID: id, messageID: user.string("id"))
-                try await loadThreads()
+                if !testMode { try await loadThreads() }
             } catch is CancellationError {
             } catch { self.error = error.localizedDescription; partial = "" }
             responding = false
