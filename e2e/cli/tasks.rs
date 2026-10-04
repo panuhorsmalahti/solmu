@@ -15,6 +15,23 @@ async fn cli_creates_and_browses_tasks() {
         solmu_e2e::support::capture_terminal(terminal.screen.lock().unwrap().screen(), "cli-tasks");
     }
     terminal.send(b"\x1b");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let tasks_page_open = terminal
+                .screen
+                .lock()
+                .unwrap()
+                .screen()
+                .contents()
+                .contains("SOLMU / TASKS");
+            if !tasks_page_open {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("Tasks page did not close before the task command was sent");
     let tasks: serde_json::Value = backend
         .client
         .get(backend.endpoint("/api/v1/tasks"))
