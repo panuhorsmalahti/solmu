@@ -18,6 +18,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.solmu.ios
     info:
+      path: Generated/Info.plist
       properties:
         CFBundleDisplayName: Solmu
         NSAppTransportSecurity:
