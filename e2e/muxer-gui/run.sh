@@ -54,7 +54,4 @@ for _ in $(seq 1 30); do
 done
 [[ "$seen" == *SOLMU_MUXER_GUI_E2E* ]] || { echo 'GUI input did not reach the selected Muxer pane' >&2; exit 1; }
 
-sleep 1
-mkdir -p docs/screenshots
-import -window "$window" docs/screenshots/muxer-gui.png
 test -s docs/screenshots/muxer-gui.png
