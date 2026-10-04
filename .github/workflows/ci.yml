@@ -171,13 +171,21 @@ jobs:
 
   browser:
     name: Web and website
-    needs: [rust, ios]
+    needs: [rust, ios, android, muxer-gui]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
           name: ios-client-screenshot
+          path: docs/screenshots
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-client-screenshot
+          path: docs/screenshots
+      - uses: actions/download-artifact@v4
+        with:
+          name: muxer-gui-screenshot
           path: docs/screenshots
       - uses: actions/setup-node@v6
         with:
