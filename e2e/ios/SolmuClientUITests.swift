@@ -32,11 +32,12 @@ final class SolmuClientUITests: XCTestCase {
         app.buttons["dismiss-keyboard"].tap()
         app.buttons["save-profile"].tap()
         XCTAssertTrue(app.staticTexts["Edited on 2026-10-03T00:00:00Z"].waitForExistence(timeout: 10))
+        if app.alerts.firstMatch.exists { app.alerts.buttons["OK"].tap() }
 
         app.tabBars.buttons["Audit"].tap()
         let cacheRate = app.staticTexts["audit-cache-hit-rate"]
-        XCTAssertTrue(cacheRate.waitForExistence(timeout: 10))
-        XCTAssertEqual(cacheRate.label, "40.0%")
+        let cacheRateLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "40.0%"), object: cacheRate)
+        XCTAssertEqual(XCTWaiter.wait(for: [cacheRateLoaded], timeout: 10), .completed)
         XCTAssertTrue(app.staticTexts["Read · completed"].exists)
 
         app.tabBars.buttons["Tasks"].tap()
@@ -46,6 +47,8 @@ final class SolmuClientUITests: XCTestCase {
         taskName.tap(); taskName.typeText("iOS follow-up")
         let taskPrompt = app.descendants(matching: .any).matching(identifier: "task-prompt").firstMatch
         taskPrompt.tap(); taskPrompt.typeText("Review the workspace")
+        XCTAssertEqual(taskName.value as? String, "iOS follow-up")
+        XCTAssertEqual(taskPrompt.value as? String, "Review the workspace")
         app.buttons["dismiss-keyboard"].tap()
         app.buttons["save-task"].tap()
         XCTAssertTrue(app.staticTexts["iOS follow-up"].waitForExistence(timeout: 10))
@@ -84,10 +87,11 @@ final class SolmuClientUITests: XCTestCase {
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40)); title.typeText("Workspace review")
+        XCTAssertEqual(title.value as? String, "Workspace review")
         app.buttons["Save"].tap()
         let renamedThread = app.buttons["thread-selector"]
-        XCTAssertTrue(renamedThread.waitForExistence(timeout: 10))
-        XCTAssertEqual(renamedThread.label, "Workspace review")
+        let titleUpdated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Workspace review"), object: renamedThread)
+        XCTAssertEqual(XCTWaiter.wait(for: [titleUpdated], timeout: 10), .completed)
 
         app.buttons["Conversation actions"].tap()
         app.buttons["Model"].tap()
