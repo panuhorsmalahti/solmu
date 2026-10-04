@@ -1,0 +1,14 @@
+[package]
+name = "solmu-muxer-gui"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[[bin]]
+name = "muxer-gui"
+path = "src/main.rs"
+
+[dependencies]
+iced = { version = "0.14.0", default-features = false, features = ["tiny-skia", "tokio", "fira-sans", "x11", "wayland"] }
+serde_json = "1.0.151"
+tokio = { version = "1.49.0", features = ["process"] }

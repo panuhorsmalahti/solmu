@@ -91,7 +91,7 @@ temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 curl -fsSL "$base/install.sh" -o "$temporary/install.sh"
 failed=0
-for component in web cli desktop boxer muxer backend; do
+for component in web cli desktop boxer muxer muxer-gui backend; do
   manifest="$state_dir/update-components/$component"
   [ -f "$manifest" ] || continue
   marker="$state_dir/.solmu-version-$component"

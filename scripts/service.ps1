@@ -50,7 +50,7 @@ $cache = Join-Path $temporaryDirectory 'cache'
 $failed = $false
 try {
     Invoke-WebRequest -UseBasicParsing "$base/install.ps1" -OutFile $installer
-    foreach ($component in @('web', 'cli', 'desktop', 'boxer', 'muxer', 'backend')) {
+    foreach ($component in @('web', 'cli', 'desktop', 'boxer', 'muxer', 'muxer-gui', 'backend')) {
         $manifest = Join-Path (Join-Path $Directory 'update-components') $component
         if (-not (Test-Path -LiteralPath $manifest)) { continue }
         $destination = (Get-Content -LiteralPath $manifest -Raw).Trim()
@@ -62,6 +62,7 @@ try {
             'desktop' { @('solmu-desktop') }
             'boxer' { @('boxer') }
             'muxer' { @('muxer') }
+            'muxer-gui' { @('muxer-gui') }
             default { @() }
         }
         $busy = $false

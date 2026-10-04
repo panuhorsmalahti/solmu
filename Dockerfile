@@ -20,6 +20,7 @@ COPY clients/desktop ./clients/desktop
 COPY e2e ./e2e
 COPY boxer ./boxer
 COPY muxer ./muxer
+COPY muxer-gui ./muxer-gui
 COPY cloud/congregator/backend ./cloud/congregator/backend
 RUN cargo build --release --locked -p solmu-backend
 

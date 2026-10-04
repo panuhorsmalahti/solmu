@@ -5184,6 +5184,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "solmu-muxer-gui"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

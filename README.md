@@ -157,6 +157,10 @@ opens one existing pane, with one controller and multiple observers.
 
 [Run and use Muxer](muxer/README.md).
 
+Prefer a window? [Muxer GUI](muxer-gui/README.md) is a native Rust desktop
+companion for switching spaces, tabs, and panes while viewing and controlling
+the selected terminal.
+
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)
 
 ## Boxer

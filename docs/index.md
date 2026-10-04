@@ -18,6 +18,7 @@ tools. The backend must be running before you open a client.
 - [Desktop](desktop.md): open `solmu-desktop`.
 - [Web](web.md): open `http://127.0.0.1:3000`.
 - [Muxer](muxer.md): keep Solmu, shells, and commands together in terminal spaces.
+- [Muxer GUI](muxer-gui.md): manage a Muxer session in a native window.
 
 See the [client overview](clients.md) for screenshots and shared features.
 

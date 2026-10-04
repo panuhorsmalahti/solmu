@@ -23,12 +23,14 @@ The CLI and desktop show **Ready** when available, with progress and errors
 shown as needed.
 
 Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
-[Android](screenshots/android.png) | [Web](screenshots/web.png) · [Muxer](screenshots/muxer.png).
+[Android](screenshots/android.png) | [Web](screenshots/web.png) ·
+[Muxer](screenshots/muxer.png) · [Muxer GUI](screenshots/muxer-gui.png).
 
 | Client | Start after installation | Guide |
 | --- | --- | --- |
 | CLI | `solmu` | [Terminal client](cli.md) |
 | Muxer (spaces and CLI tabs) | `muxer` | [Terminal workspace](muxer.md) |
+| Muxer GUI (native window) | `muxer-gui` | [Graphical workspace](muxer-gui.md) |
 | Desktop | `solmu-desktop` | [Desktop client](desktop.md) |
 | Android | Install from Android Studio or build with Gradle | [Android client](android.md) |
 | Web | Open `http://127.0.0.1:3000` | [Web client](web.md) |

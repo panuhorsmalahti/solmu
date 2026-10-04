@@ -4,7 +4,7 @@ import path from 'node:path'
 import { releaseFixture } from './support'
 
 const installedModules: Record<string, string[]> = {
-  cli: ['cli'], desktop: ['desktop'], web: ['web'], boxer: ['boxer'], muxer: ['cli', 'muxer'],
+  cli: ['cli'], desktop: ['desktop'], web: ['web'], boxer: ['boxer'], muxer: ['cli', 'muxer'], 'muxer-gui': ['cli', 'muxer', 'muxer-gui'],
 }
 
 for (const [component, modules] of Object.entries(installedModules)) {
@@ -18,7 +18,7 @@ for (const [component, modules] of Object.entries(installedModules)) {
         expect((await readFile(path.join(state, 'update-components', module), 'utf8')).trim()).toBe(destination)
         expect((await readFile(path.join(state, `.solmu-version-${module}`), 'utf8')).trim()).toBe('v0.1.0')
       }
-      for (const module of ['backend', 'cli', 'desktop', 'web', 'boxer', 'muxer']) {
+      for (const module of ['backend', 'cli', 'desktop', 'web', 'boxer', 'muxer', 'muxer-gui']) {
         if (!modules.includes(module)) await expect(readFile(path.join(state, 'update-components', module))).rejects.toThrow()
       }
       if (process.platform === 'win32') {

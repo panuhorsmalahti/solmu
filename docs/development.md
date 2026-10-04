@@ -18,7 +18,7 @@ npm run test:e2e
 Build the binaries before e2e tests. Tests launch a real Solmu backend with
 temporary SQLite files and a local provider fixture; they never use your keys
 or make paid model requests. Tests live in `e2e/api`, `e2e/cli`, `e2e/desktop`,
-`e2e/web`, `e2e/website`, `e2e/boxer`, and `e2e/muxer`.
+`e2e/web`, `e2e/website`, `e2e/boxer`, `e2e/muxer`, and `e2e/muxer-gui`.
 Release automation tests under `e2e/releases` use local Git repositories and
 release metadata fixtures; they do not publish tags, images, or releases.
 Within each client, keep feature tests in separate files such as `conversations`,
@@ -70,6 +70,8 @@ Plugin tests capture `artifacts/cli-plugins.html` and
 Audit tests capture `artifacts/cli-audit.html` and `artifacts/muxer-audit.html`;
 render them with `node scripts/capture-cli.mjs cli-audit` and
 `node scripts/capture-cli.mjs muxer-audit`.
+The Muxer GUI E2E launches a native window under Xvfb, sends input to a real
+Muxer shell pane, and captures `docs/screenshots/muxer-gui.png` in CI.
 Installer tests under `e2e/install` use local release archives and temporary
 directories; they do not change your PATH or installed applications. Background
 service tests replace OS service commands with recorders, so no real service is
