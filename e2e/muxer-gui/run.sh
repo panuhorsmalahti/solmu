@@ -26,6 +26,7 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 [ -n "$pane" ] || { echo 'Muxer shell pane did not start' >&2; exit 1; }
+target/debug/muxer api snapshot --session default --json
 target/debug/muxer-gui &
 gui_pid=$!
 window=''

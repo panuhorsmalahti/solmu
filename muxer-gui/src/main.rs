@@ -221,7 +221,9 @@ impl MuxerGui {
                 match result {
                     Ok(snapshot) => {
                         self.snapshot = snapshot;
-                        self.notice = "Connected · updates automatically".into();
+                        let spaces = self.snapshot["spaces"].as_array().map_or(0, Vec::len);
+                        let panes = self.snapshot["panes"].as_array().map_or(0, Vec::len);
+                        self.notice = format!("Connected · {spaces} spaces · {panes} panes");
                         let panes = self.snapshot["panes"]
                             .as_array()
                             .cloned()
