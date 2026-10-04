@@ -28,6 +28,8 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 [ -n "$window" ] || { echo 'Muxer GUI window did not appear' >&2; exit 1; }
+mkdir -p docs/screenshots
+import -window "$window" docs/screenshots/muxer-gui.png
 
 # Send a command through the GUI input and verify it reaches the real shell pane.
 xdotool windowfocus --sync "$window"
