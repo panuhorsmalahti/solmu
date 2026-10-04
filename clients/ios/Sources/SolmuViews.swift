@@ -413,10 +413,12 @@ private struct TaskRow: View {
     let edit: () -> Void
     @State private var runs: [SolmuJSON]?
     var body: some View {
+        let scheduleStatus = task.bool("enabled") ? "Scheduled" : "Paused"
+        let runningStatus = task.bool("running") ? " · Running" : ""
         VStack(alignment: .leading, spacing: 8) {
             Text(task.string("name")).font(.headline)
             Text(task.string("prompt")).font(.subheadline).foregroundStyle(SolmuPalette.muted)
-            Text("\(task.string("schedule_kind")): \(task.string("schedule")) · \(task.bool("enabled") ? "Scheduled" : "Paused")\(task.bool("running") ? " · Running" : "")")").font(.caption).foregroundStyle(SolmuPalette.muted)
+            Text("\(task.string("schedule_kind")): \(task.string("schedule")) · \(scheduleStatus)\(runningStatus)").font(.caption).foregroundStyle(SolmuPalette.muted)
             HStack {
                 Button("Run now") { Task { await store.act { _ = try await store.request("POST", "/tasks/\(task.string("id"))/run"); try await store.loadTasks() } } }.disabled(task.bool("running"))
                 Button(task.bool("enabled") ? "Pause" : "Resume") { Task { await store.act { _ = try await store.request("PATCH", "/tasks/\(task.string("id"))", body: ["enabled": !task.bool("enabled")]); try await store.loadTasks() } } }.disabled(task.bool("running"))
