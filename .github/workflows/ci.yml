@@ -26,6 +26,8 @@ jobs:
             -project clients/ios/Solmu.xcodeproj \
             -scheme Solmu \
             -destination "platform=iOS Simulator,id=$device_id" \
+            -parallel-testing-enabled NO \
+            -maximum-concurrent-test-simulator-destinations 1 \
             -derivedDataPath "$RUNNER_TEMP/ios-build" \
             -resultBundlePath "$RUNNER_TEMP/Solmu.xcresult" \
             CODE_SIGNING_ALLOWED=NO

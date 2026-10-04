@@ -20,7 +20,7 @@ final class SolmuClientUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
 
         app.tabBars.buttons["Profile"].tap()
-        let prompt = app.textViews["profile-prompt"]
+        let prompt = app.descendants(matching: .any).matching(identifier: "profile-prompt").firstMatch
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         prompt.tap()
         prompt.typeText("\nBe concise.")
