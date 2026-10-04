@@ -97,7 +97,9 @@ struct ConversationView: View {
                 Button { showThreads = true } label: {
                     HStack(spacing: 5) { Text(store.current?.string("title", "Conversations") ?? "Conversations").lineLimit(1); Image(systemName: "chevron.down").font(.caption2) }
                         .font(.subheadline.weight(.semibold)).foregroundStyle(SolmuPalette.ink)
-                }.accessibilityIdentifier("thread-selector")
+                }
+                .accessibilityLabel(store.current?.string("title", "Conversations") ?? "Conversations")
+                .accessibilityIdentifier("thread-selector")
             }
             ToolbarItem(placement: .topBarLeading) {
                 Button { Task { await store.newThread() } } label: { Image(systemName: "square.and.pencil") }
@@ -355,7 +357,7 @@ struct AuditView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("PROMPT CACHE · LAST 24 HOURS").font(.caption2.weight(.semibold)).tracking(1).foregroundStyle(SolmuPalette.green)
                     Text(store.auditCache["hit_rate_percent"] == nil ? "—" : String(format: "%.1f%%", store.auditCache.number("hit_rate_percent")))
-                        .font(.system(size: 40, design: .serif)).foregroundStyle(SolmuPalette.green)
+                        .font(.system(size: 40, design: .serif)).foregroundStyle(SolmuPalette.green).accessibilityIdentifier("audit-cache-hit-rate")
                     Text("Cached input \(Int(store.auditCache.number("cached_input_tokens"))) · Input \(Int(store.auditCache.number("input_tokens")))")
                     Text("Output \(Int(store.auditCache.number("output_tokens"))) · Cache writes \(Int(store.auditCache.number("cache_creation_input_tokens")))")
                 }.font(.caption).foregroundStyle(SolmuPalette.muted).padding(10)

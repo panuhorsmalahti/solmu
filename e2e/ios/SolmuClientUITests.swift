@@ -34,7 +34,9 @@ final class SolmuClientUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Edited on 2026-10-03T00:00:00Z"].waitForExistence(timeout: 10))
 
         app.tabBars.buttons["Audit"].tap()
-        XCTAssertTrue(app.staticTexts["40.0%"].waitForExistence(timeout: 10))
+        let cacheRate = app.staticTexts["audit-cache-hit-rate"]
+        XCTAssertTrue(cacheRate.waitForExistence(timeout: 10))
+        XCTAssertEqual(cacheRate.label, "40.0%")
         XCTAssertTrue(app.staticTexts["Read · completed"].exists)
 
         app.tabBars.buttons["Tasks"].tap()
@@ -85,7 +87,7 @@ final class SolmuClientUITests: XCTestCase {
         app.buttons["Save"].tap()
         let renamedThread = app.buttons["thread-selector"]
         XCTAssertTrue(renamedThread.waitForExistence(timeout: 10))
-        XCTAssertTrue(renamedThread.label.contains("Workspace review"))
+        XCTAssertEqual(renamedThread.label, "Workspace review")
 
         app.buttons["Conversation actions"].tap()
         app.buttons["Model"].tap()
