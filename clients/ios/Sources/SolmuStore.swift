@@ -306,6 +306,12 @@ final class SolmuStore: ObservableObject {
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["message_id": messageID])
+        if testMode {
+            let (body, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw SolmuAPIError.request("Solmu could not start the reply.") }
+            try consumeEvents(String(data: body, encoding: .utf8) ?? "")
+            return
+        }
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw SolmuAPIError.request("Solmu could not start the reply.") }
         var event = "message"
@@ -314,23 +320,39 @@ final class SolmuStore: ObservableObject {
             try Task.checkCancellation()
             if line.isEmpty {
                 if !data.isEmpty {
-                    let value = (try? JSONSerialization.jsonObject(with: Data(data.utf8))) as? SolmuJSON ?? [:]
-                    switch event {
-                    case "delta": partial += value.string("text")
-                    case "reset": partial = ""
-                    case "done": partial = ""; messages.append(value)
-                    case "tool_start", "tool_result":
-                        if let index = tools.firstIndex(where: { $0.string("id") == value.string("id") }) { tools[index] = value }
-                        else { tools.append(value) }
-                    case "error": throw SolmuAPIError.request((value["error"] as? SolmuJSON)?.string("message", "The reply failed") ?? "The reply failed")
-                    case "stopped": return
-                    default: break
-                    }
+                    try consumeEvent(event, data: data)
                 }
                 event = "message"
                 data = ""
             } else if line.hasPrefix("event:") { event = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces) }
             else if line.hasPrefix("data:") { data += String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+        }
+    }
+
+    private func consumeEvents(_ text: String) throws {
+        var event = "message"
+        var data = ""
+        for line in text.components(separatedBy: .newlines) {
+            if line.isEmpty {
+                if !data.isEmpty { try consumeEvent(event, data: data) }
+                event = "message"
+                data = ""
+            } else if line.hasPrefix("event:") { event = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces) }
+            else if line.hasPrefix("data:") { data += String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+        }
+    }
+
+    private func consumeEvent(_ event: String, data: String) throws {
+        let value = (try? JSONSerialization.jsonObject(with: Data(data.utf8))) as? SolmuJSON ?? [:]
+        switch event {
+        case "delta": partial += value.string("text")
+        case "reset": partial = ""
+        case "done": partial = ""; messages.append(value)
+        case "tool_start", "tool_result":
+            if let index = tools.firstIndex(where: { $0.string("id") == value.string("id") }) { tools[index] = value }
+            else { tools.append(value) }
+        case "error": throw SolmuAPIError.request((value["error"] as? SolmuJSON)?.string("message", "The reply failed") ?? "The reply failed")
+        default: break
         }
     }
 
