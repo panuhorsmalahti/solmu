@@ -272,18 +272,18 @@ impl MuxerGui {
         Task::perform(
             async move {
                 tokio::task::spawn_blocking(move || {
-                    let output = muxer_command(&[
-                        "pane",
+                let output = muxer_command(&[
+                    "pane",
                         "read",
                         &id.to_string(),
                         "--json",
                         "--session",
-                        &session,
-                    ])?;
-                    Ok(output["result"]["text"]
-                        .as_str()
-                        .unwrap_or_default()
-                        .to_string())
+                    &session,
+                ])?;
+                Ok(output["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string())
                 })
                 .await
                 .map_err(|e| e.to_string())?
@@ -446,14 +446,12 @@ where
 }
 
 fn snapshot(session: &str) -> Result<Value, String> {
-    let output = muxer_command(&["api", "snapshot", "--session", session, "--json"])?;
-    Ok(output["result"].clone())
+    muxer_command(&["api", "snapshot", "--session", session, "--json"])
 }
 
 fn request(session: &str, request: Value) -> Result<Value, String> {
     let request = serde_json::to_string(&request).map_err(|e| e.to_string())?;
-    let output = muxer_command(&["api", "request", &request, "--session", session, "--json"])?;
-    Ok(output["result"].clone())
+    muxer_command(&["api", "request", &request, "--session", session, "--json"])
 }
 
 fn muxer_command(args: &[&str]) -> Result<Value, String> {
