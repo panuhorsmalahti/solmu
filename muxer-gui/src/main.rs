@@ -272,18 +272,15 @@ impl MuxerGui {
         Task::perform(
             async move {
                 tokio::task::spawn_blocking(move || {
-                let output = muxer_command(&[
-                    "pane",
+                    let output = muxer_command(&[
+                        "pane",
                         "read",
                         &id.to_string(),
                         "--json",
                         "--session",
-                    &session,
-                ])?;
-                Ok(output["text"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string())
+                        &session,
+                    ])?;
+                    Ok(output["text"].as_str().unwrap_or_default().to_string())
                 })
                 .await
                 .map_err(|e| e.to_string())?
