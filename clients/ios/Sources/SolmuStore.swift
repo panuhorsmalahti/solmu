@@ -246,7 +246,12 @@ final class SolmuStore: ObservableObject {
 
     func rename(_ title: String) async {
         guard let id = current?.string("id") else { return }
-        await perform { self.current = try await self.request("PATCH", "/threads/\(id)", body: ["title": title]); try await self.loadThreads() }
+        await perform {
+            let updated = try await self.request("PATCH", "/threads/\(id)", body: ["title": title])
+            try await self.loadThreads()
+            self.current = updated
+            self.threads = self.threads.map { $0.string("id") == id ? updated : $0 }
+        }
     }
 
     func setThreadModel(_ value: String?) async {
