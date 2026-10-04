@@ -21,7 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.98.1'
-      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev xvfb xdotool imagemagick
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libfontconfig1-dev xvfb xdotool imagemagick
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked -p solmu-muxer -p solmu-muxer-gui
       - run: xvfb-run -a -s '-screen 0 1180x760x24' bash e2e/muxer-gui/run.sh
