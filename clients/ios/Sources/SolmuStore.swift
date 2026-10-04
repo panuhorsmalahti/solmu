@@ -248,7 +248,6 @@ final class SolmuStore: ObservableObject {
         guard let id = current?.string("id") else { return }
         await perform {
             let updated = try await self.request("PATCH", "/threads/\(id)", body: ["title": title])
-            try await self.loadThreads()
             self.current = updated
             self.threads = self.threads.map { $0.string("id") == id ? updated : $0 }
         }

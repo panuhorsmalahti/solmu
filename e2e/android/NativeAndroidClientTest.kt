@@ -124,6 +124,7 @@ class NativeAndroidClientTest {
 
         compose.onNodeWithTag("nav-More").performClick()
         compose.onNodeWithText("Webhooks").performClick()
+        compose.onAllNodes(hasSetTextAction()).get(0).performScrollTo().performTextInput("Android webhook")
         compose.onAllNodes(hasSetTextAction()).get(1).performScrollTo().performTextInput("android-test-secret-123")
         compose.onNodeWithText("Create webhook").performScrollTo().performClick()
         compose.waitUntil(conditionDescription = "the webhook is created", timeoutMillis = 30_000) { webhookCreated.get() }
