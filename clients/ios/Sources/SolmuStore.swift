@@ -42,8 +42,6 @@ final class SolmuURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let body = request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        print("IOS_FIXTURE \(request.httpMethod ?? "GET") \(request.url?.path ?? "")?\(request.url?.query ?? "") \(body)")
         let (status, text) = Self.handler?(request) ?? (500, "{}")
         let data = Data(text.utf8)
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": request.value(forHTTPHeaderField: "Accept") == "text/event-stream" ? "text/event-stream" : "application/json"])!

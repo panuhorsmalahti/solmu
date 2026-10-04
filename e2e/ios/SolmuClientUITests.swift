@@ -22,7 +22,6 @@ final class SolmuClientUITests: XCTestCase {
         input.typeText("Hello from iOS")
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
-        app.buttons["dismiss-chat-keyboard"].tap()
 
         app.tabBars.buttons["Profile"].tap()
         let prompt = app.descendants(matching: .any).matching(identifier: "profile-prompt").firstMatch
@@ -79,7 +78,6 @@ final class SolmuClientUITests: XCTestCase {
         input.tap(); input.typeText("Check the workspace")
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
-        app.buttons["dismiss-chat-keyboard"].tap()
 
         app.buttons["Conversation actions"].tap()
         app.buttons["Rename"].tap()

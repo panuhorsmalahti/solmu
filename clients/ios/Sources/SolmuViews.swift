@@ -185,6 +185,7 @@ struct ConversationView: View {
                 Button {
                     let message = draft
                     draft = ""
+                    draftFocused = false
                     store.send(message)
                 } label: { Image(systemName: "arrow.up").fontWeight(.bold).frame(width: 44, height: 44) }
                     .buttonStyle(.borderedProminent).accessibilityLabel("Send message").accessibilityIdentifier("send-message")
@@ -192,7 +193,6 @@ struct ConversationView: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9).background(.white).overlay(alignment: .top) { Rectangle().fill(SolmuPalette.border).frame(height: 1) }
-        .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { draftFocused = false }.accessibilityIdentifier("dismiss-chat-keyboard") } }
     }
 
     private func copyLatest() {
