@@ -6,7 +6,7 @@ state=$(mktemp -d)
 gui_pid=''
 cleanup() {
   if [ -n "$gui_pid" ]; then kill "$gui_pid" 2>/dev/null || true; fi
-  target/debug/muxer server stop --session gui-e2e >/dev/null 2>&1 || true
+  target/debug/muxer server stop --session default >/dev/null 2>&1 || true
   rm -rf "$state"
 }
 trap cleanup EXIT
@@ -18,7 +18,7 @@ cat > "$SOLMU_MUXER_CONFIG" <<'EOF'
 new_pane = "shell"
 EOF
 
-target/debug/muxer server start --session gui-e2e --cwd "$root"
+target/debug/muxer server start --session default --cwd "$root"
 target/debug/muxer-gui &
 gui_pid=$!
 window=''
@@ -37,10 +37,10 @@ xdotool getwindowgeometry --shell "$window"
 xdotool mousemove --window "$window" 650 720 click 1
 xdotool type --clearmodifiers 'echo SOLMU_MUXER_GUI_E2E'
 xdotool key Return
-pane=$(target/debug/muxer status --session gui-e2e --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["active_pane"])')
+pane=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["active_pane"])')
 seen=''
 for _ in $(seq 1 30); do
-  seen=$(target/debug/muxer pane read "$pane" --session gui-e2e 2>/dev/null || true)
+  seen=$(target/debug/muxer pane read "$pane" --session default 2>/dev/null || true)
   [[ "$seen" == *SOLMU_MUXER_GUI_E2E* ]] && break
   sleep 0.5
 done

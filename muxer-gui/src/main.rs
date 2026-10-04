@@ -467,7 +467,14 @@ fn muxer_raw(args: &[&str]) -> Result<String, String> {
         .output()
         .map_err(|e| format!("Could not run Muxer: {e}"))?;
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        if let Ok(response) = serde_json::from_str::<Value>(stderr)
+            && let Some(error) = response["error"].as_str()
+        {
+            return Err(error.to_string());
+        }
+        return Err(stderr.to_string());
     }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
