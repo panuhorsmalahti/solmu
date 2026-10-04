@@ -51,7 +51,7 @@ final class SolmuClientUITests: XCTestCase {
         XCTAssertEqual(taskPrompt.value as? String, "Review the workspace")
         app.buttons["dismiss-keyboard"].tap()
         app.buttons["save-task"].tap()
-        XCTAssertTrue(app.staticTexts["iOS follow-up"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["task-task-ios"].waitForExistence(timeout: 10))
 
         app.tabBars.buttons["More"].tap()
         app.buttons["Webhooks"].tap()

@@ -421,7 +421,7 @@ private struct TaskRow: View {
         let scheduleStatus = task.bool("enabled") ? "Scheduled" : "Paused"
         let runningStatus = task.bool("running") ? " · Running" : ""
         VStack(alignment: .leading, spacing: 8) {
-            Text(task.string("name")).font(.headline)
+            Text(task.string("name")).font(.headline).accessibilityIdentifier("task-\(task.string("id"))")
             Text(task.string("prompt")).font(.subheadline).foregroundStyle(SolmuPalette.muted)
             Text("\(task.string("schedule_kind")): \(task.string("schedule")) · \(scheduleStatus)\(runningStatus)").font(.caption).foregroundStyle(SolmuPalette.muted)
             HStack {
