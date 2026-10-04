@@ -31,7 +31,8 @@ done
 
 # Send a command through the GUI input and verify it reaches the real shell pane.
 xdotool windowfocus --sync "$window"
-xdotool mousemove --window "$window" 650 732 click 1
+xdotool getwindowgeometry --shell "$window"
+xdotool mousemove --window "$window" 650 720 click 1
 xdotool type --clearmodifiers 'echo SOLMU_MUXER_GUI_E2E'
 xdotool key Return
 pane=$(target/debug/muxer status --session gui-e2e --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["active_pane"])')
