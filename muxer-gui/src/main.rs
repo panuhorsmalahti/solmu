@@ -15,7 +15,7 @@ pub fn main() -> iced::Result {
         .title("Muxer GUI")
         .theme(theme)
         .subscription(subscription)
-        .window_size((1180.0, 760.0))
+        .window_size((1320.0, 820.0))
         .run()
 }
 
@@ -304,35 +304,108 @@ impl MuxerGui {
             .unwrap_or_default();
         let active_space = self.snapshot["active_space"].as_u64();
         let active_tab = self.snapshot["active_tab"].as_u64();
-        let mut sidebar = column![
-            text("MUXER").size(17),
-            text("Spaces").size(13),
-            button("＋  New space").on_press(Message::NewSpace)
+        let brand = row![
+            container(text("M").size(15).color(iced::Color::WHITE))
+                .padding([5, 10])
+                .style(|_| container::Style {
+                    background: Some(appearance::PRIMARY.into()),
+                    border: iced::Border {
+                        radius: 9.0.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }),
+            column![
+                text("muxer").size(20),
+                text("WORKSPACE CONTROL").size(9).color(appearance::MUTED)
+            ]
+            .spacing(1)
         ]
         .spacing(10)
-        .padding(14)
-        .width(Length::Fixed(245.0));
+        .align_y(Alignment::Center);
+
+        let status = row![
+            text("●").size(11).color(if self.snapshot.is_null() {
+                appearance::MUTED
+            } else {
+                appearance::PRIMARY
+            }),
+            column![
+                text(if self.snapshot.is_null() {
+                    "Not connected"
+                } else {
+                    "Session active"
+                })
+                .size(12),
+                text(format!("{} · local", self.session))
+                    .size(10)
+                    .color(appearance::MUTED),
+            ]
+            .spacing(2),
+            iced::widget::Space::new().width(Length::Fill),
+            text("⌄").size(14).color(appearance::MUTED),
+        ]
+        .spacing(8)
+        .align_y(Alignment::Center);
+
+        let mut spaces_section = column![
+            row![
+                text("SPACES").size(10).color(appearance::MUTED),
+                iced::widget::Space::new().width(Length::Fill),
+                button(text("＋").size(16))
+                    .on_press(Message::NewSpace)
+                    .style(appearance::ghost)
+                    .padding([3, 8])
+            ]
+            .align_y(Alignment::Center),
+        ]
+        .spacing(6);
         for space in &spaces {
             let id = space["id"].as_u64().unwrap_or_default();
-            let label = format!(
-                "{}  ·  {}",
-                space["name"].as_str().unwrap_or("Workspace"),
-                space["cwd"].as_str().unwrap_or("")
-            );
-            sidebar = sidebar.push(
-                button(text(label).size(13))
-                    .on_press(Message::FocusSpace(id))
-                    .width(Length::Fill),
+            let selected = Some(id) == active_space;
+            let name = space["name"].as_str().unwrap_or("Workspace").to_string();
+            let cwd = space["cwd"].as_str().unwrap_or("").to_string();
+            spaces_section = spaces_section.push(
+                button(
+                    column![
+                        row![
+                            text("▰").size(12).color(if selected {
+                                appearance::PRIMARY
+                            } else {
+                                appearance::MUTED
+                            }),
+                            text(name).size(13)
+                        ]
+                        .spacing(8)
+                        .align_y(Alignment::Center),
+                        text(cwd).size(10).color(appearance::MUTED),
+                    ]
+                    .spacing(3),
+                )
+                .on_press(Message::FocusSpace(id))
+                .style(move |theme, state| appearance::navigation(theme, state, selected))
+                .padding([9, 10])
+                .width(Length::Fill),
             );
             if Some(id) == active_space {
                 for tab in tabs.iter().filter(|tab| tab["space"].as_u64() == Some(id)) {
                     let tab_id = tab["id"].as_u64().unwrap_or_default();
-                    sidebar = sidebar.push(
-                        button(text(format!(
-                            "    {}",
-                            tab["name"].as_str().unwrap_or("Tab")
-                        )))
+                    let tab_selected = Some(tab_id) == active_tab;
+                    let tab_name = tab["name"].as_str().unwrap_or("Tab").to_string();
+                    spaces_section = spaces_section.push(
+                        button(
+                            row![
+                                text("▸").size(11).color(appearance::MUTED),
+                                text(tab_name).size(12)
+                            ]
+                            .spacing(8)
+                            .align_y(Alignment::Center),
+                        )
                         .on_press(Message::FocusTab(tab_id))
+                        .style(move |theme, state| {
+                            appearance::navigation(theme, state, tab_selected)
+                        })
+                        .padding([7, 10])
                         .width(Length::Fill),
                     );
                     if Some(tab_id) == active_tab {
@@ -344,75 +417,201 @@ impl MuxerGui {
                             let name = pane["name"]
                                 .as_str()
                                 .or_else(|| pane["launch"].as_str())
-                                .unwrap_or("Pane");
-                            let label = format!(
-                                "{}  ·  {}",
-                                name,
-                                pane["state"].as_str().unwrap_or("idle")
-                            );
-                            let item = button(text(label))
-                                .on_press(Message::SelectPane(pane_id))
-                                .width(Length::Fill);
-                            sidebar = sidebar.push(item);
+                                .unwrap_or("Pane")
+                                .to_string();
+                            let pane_selected = self.selected_pane == Some(pane_id);
+                            let pane_state = pane["state"].as_str().unwrap_or("idle").to_string();
+                            let item = button(
+                                row![
+                                    text("›").size(15).color(appearance::MUTED),
+                                    text(name).size(12),
+                                    iced::widget::Space::new().width(Length::Fill),
+                                    text(pane_state).size(9).color(appearance::MUTED),
+                                ]
+                                .align_y(Alignment::Center),
+                            )
+                            .on_press(Message::SelectPane(pane_id))
+                            .style(move |theme, state| {
+                                appearance::navigation(theme, state, pane_selected)
+                            })
+                            .padding([7, 10])
+                            .width(Length::Fill);
+                            spaces_section = spaces_section.push(item);
                         }
                     }
                 }
             }
         }
-        sidebar = sidebar.push(text("Session").size(13));
-        sidebar =
-            sidebar.push(text_input("default", &self.session).on_input(Message::SessionChanged));
-        sidebar = sidebar.push(
-            text_input("Workspace path", &self.workspace).on_input(Message::WorkspaceChanged),
-        );
+        let session_fields = column![
+            text("SESSION").size(10).color(appearance::MUTED),
+            text_input("Session name", &self.session)
+                .on_input(Message::SessionChanged)
+                .style(appearance::input),
+            text("WORKSPACE").size(10).color(appearance::MUTED),
+            text_input("Project folder", &self.workspace)
+                .on_input(Message::WorkspaceChanged)
+                .style(appearance::input),
+        ]
+        .spacing(7);
+        let mut sidebar = column![
+            brand,
+            container(status).padding(11).style(appearance::panel),
+            button(
+                row![text("＋").size(15), text("New space").size(12)]
+                    .spacing(8)
+                    .align_y(Alignment::Center)
+            )
+            .on_press(Message::NewSpace)
+            .style(appearance::primary_button)
+            .padding([10, 12])
+            .width(Length::Fill),
+            spaces_section,
+            iced::widget::Space::new().height(Length::Fill),
+            container(session_fields)
+                .padding(11)
+                .style(appearance::panel),
+        ]
+        .spacing(16)
+        .padding(18)
+        .width(Length::Fixed(276.0))
+        .height(Length::Fill);
         if self.snapshot.is_null() {
-            sidebar = sidebar.push(button("Start Muxer session").on_press(Message::Start));
+            sidebar = sidebar.push(
+                button(text("Start Muxer session").size(12))
+                    .on_press(Message::Start)
+                    .style(appearance::primary_button)
+                    .padding([10, 12])
+                    .width(Length::Fill),
+            );
         }
+        let active_space_name = spaces
+            .iter()
+            .find(|space| space["id"].as_u64() == active_space)
+            .and_then(|space| space["name"].as_str())
+            .unwrap_or("Workspace")
+            .to_string();
         let toolbar = row![
-            button("＋ Space").on_press(Message::NewSpace),
-            button("＋ Tab").on_press(Message::NewTab),
-            button("Split right").on_press(Message::Split),
-            button("Close pane").on_press_maybe(self.selected_pane.map(Message::ClosePane)),
-            text(&self.notice).size(13),
+            column![
+                row![
+                    text("Muxer").size(11).color(appearance::MUTED),
+                    text("/ ").size(11).color(appearance::MUTED),
+                    text(active_space_name).size(12),
+                    text("/ ").size(11).color(appearance::MUTED),
+                    text("Terminal").size(12)
+                ]
+                .spacing(4)
+                .align_y(Alignment::Center),
+                text("Your workspace, organized into focused terminal panes.")
+                    .size(11)
+                    .color(appearance::MUTED),
+            ]
+            .spacing(5),
+            iced::widget::Space::new().width(Length::Fill),
+            button(text("＋  Tab").size(11))
+                .on_press(Message::NewTab)
+                .style(appearance::ghost)
+                .padding([8, 10]),
+            button(text("Split pane").size(11))
+                .on_press(Message::Split)
+                .style(appearance::ghost)
+                .padding([8, 10]),
+            button(text("Close").size(11))
+                .on_press_maybe(self.selected_pane.map(Message::ClosePane))
+                .style(appearance::ghost)
+                .padding([8, 10]),
         ]
         .spacing(8)
         .align_y(Alignment::Center);
+        let panes_title = panes
+            .iter()
+            .find(|pane| pane["id"].as_u64() == self.selected_pane)
+            .and_then(|pane| pane["name"].as_str().or_else(|| pane["launch"].as_str()))
+            .unwrap_or("Terminal")
+            .to_string();
+        let pane_header = row![
+            column![
+                text(panes_title).size(14),
+                text(if self.snapshot.is_null() {
+                    "Waiting for a Muxer session"
+                } else {
+                    &self.notice
+                })
+                .size(10)
+                .color(appearance::MUTED)
+            ]
+            .spacing(4),
+            iced::widget::Space::new().width(Length::Fill),
+            text("●").size(10).color(if self.snapshot.is_null() {
+                appearance::MUTED
+            } else {
+                appearance::PRIMARY
+            }),
+            text(if self.snapshot.is_null() {
+                "OFFLINE"
+            } else {
+                "LIVE"
+            })
+            .size(9)
+            .color(appearance::MUTED),
+        ]
+        .align_y(Alignment::Center)
+        .spacing(7);
+        let terminal_text = if self.screen.is_empty() {
+            "Choose a pane to see its live terminal output.\n\nCreate a space or start a session to begin."
+        } else {
+            &self.screen
+        };
         let screen = container(
             scrollable(
-                text(if self.screen.is_empty() {
-                    "Select a pane to view its live terminal screen."
-                } else {
-                    &self.screen
-                })
-                .font(iced::Font::MONOSPACE)
-                .size(14),
+                text(terminal_text)
+                    .font(iced::Font::MONOSPACE)
+                    .size(13)
+                    .color(iced::color!(0xd5e0dc)),
             )
             .height(Length::Fill),
         )
-        .padding(16)
+        .padding(18)
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(|_| container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgb(
-                0.07, 0.08, 0.1,
-            ))),
-            ..Default::default()
-        });
+        .style(appearance::terminal);
         let input = row![
-            text_input("Type into selected pane…", &self.input)
+            text("›").size(20).color(appearance::PRIMARY),
+            text_input("Send a command to the selected pane…", &self.input)
                 .on_input(Message::InputChanged)
                 .on_submit(Message::Send)
+                .style(appearance::input)
                 .width(Length::Fill),
-            button("Send ↵").on_press(Message::Send)
+            button(text("Send  ↵").size(11))
+                .on_press(Message::Send)
+                .style(appearance::primary_button)
+                .padding([9, 13])
         ]
-        .spacing(8);
-        let content = column![toolbar, screen, input]
-            .spacing(12)
-            .padding(18)
-            .width(Length::Fill)
-            .height(Length::Fill);
+        .spacing(10)
+        .align_y(Alignment::Center);
+        let terminal_panel = container(
+            column![pane_header, screen, input]
+                .spacing(14)
+                .padding(16)
+                .height(Length::Fill),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(appearance::panel);
+        let content = column![
+            toolbar,
+            terminal_panel,
+            text("MUXER CONTROL  ·  session state refreshes automatically")
+                .size(9)
+                .color(appearance::MUTED)
+        ]
+        .spacing(16)
+        .padding([22, 24])
+        .width(Length::Fill)
+        .height(Length::Fill);
         row![
-            container(scrollable(sidebar).height(Length::Fill)).height(Length::Fill),
+            container(scrollable(sidebar).height(Length::Fill))
+                .height(Length::Fill)
+                .style(appearance::sidebar),
             content
         ]
         .height(Length::Fill)

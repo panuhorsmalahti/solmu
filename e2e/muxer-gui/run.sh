@@ -42,8 +42,8 @@ import -window "$window" docs/screenshots/muxer-gui.png
 
 # Send a command through the GUI input and verify it reaches the real shell pane.
 xdotool windowfocus --sync "$window"
-xdotool getwindowgeometry --shell "$window"
-xdotool mousemove --window "$window" 650 720 click 1
+eval "$(xdotool getwindowgeometry --shell "$window")"
+xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT - 58))" click 1
 xdotool type --clearmodifiers 'echo SOLMU_MUXER_GUI_E2E'
 xdotool key Return
 seen=''
