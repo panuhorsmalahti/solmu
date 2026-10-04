@@ -247,7 +247,10 @@ final class SolmuStore: ObservableObject {
     func rename(_ title: String) async {
         guard let id = current?.string("id") else { return }
         await perform {
-            let updated = try await self.request("PATCH", "/threads/\(id)", body: ["title": title])
+            let response = try await self.request("PATCH", "/threads/\(id)", body: ["title": title])
+            var updated = self.current ?? [:]
+            updated.merge(response) { _, value in value }
+            updated["title"] = title
             self.current = updated
             self.threads = self.threads.map { $0.string("id") == id ? updated : $0 }
         }
