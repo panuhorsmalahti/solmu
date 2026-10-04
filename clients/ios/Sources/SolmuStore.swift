@@ -251,10 +251,10 @@ final class SolmuStore: ObservableObject {
     }
 
     func saveProfile() async {
-        await perform {
-            profile = try await request("PUT", "/profile", body: ["system_prompt": profilePrompt, "model": profileModel.isEmpty ? NSNull() : profileModel as Any])
-            try await loadProfile()
-            notice = "Profile saved"
+        await perform { [self] in
+            self.profile = try await self.request("PUT", "/profile", body: ["system_prompt": self.profilePrompt, "model": self.profileModel.isEmpty ? NSNull() : self.profileModel as Any])
+            try await self.loadProfile()
+            self.notice = "Profile saved"
         }
     }
 
