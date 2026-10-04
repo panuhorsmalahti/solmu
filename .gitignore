@@ -10,6 +10,9 @@
 **/.gradle/
 **/build/
 clients/android/local.properties
+clients/ios/Solmu.xcodeproj/
+clients/ios/xcuserdata/
+*.xcuserstate
 /test-results/
 /playwright-report/
 /artifacts/

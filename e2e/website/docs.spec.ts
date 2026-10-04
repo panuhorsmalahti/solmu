@@ -45,6 +45,14 @@ test('Audit guide is published and links client screenshots', async ({ page }) =
   await expect(page.locator('article img[alt="Web Audit"]')).toBeVisible()
 })
 
+test('iOS guide is published with native build and screenshot details', async ({ page }) => {
+  await page.goto(`${home}docs/ios/`)
+  await expect(page.getByRole('heading', { name: 'iOS', exact: true })).toBeVisible()
+  await expect(page.locator('article')).toContainText('native SwiftUI client')
+  await expect(page.locator('article')).toContainText('XcodeGen')
+  await expect(page.locator('article img[alt="Solmu native iOS client"]')).toBeVisible()
+})
+
 test('multi-client guides label each screenshot with its client', async ({ page }) => {
   for (const guide of ['audit', 'mcp', 'plugins', 'skills', 'tasks']) {
     await page.goto(`${home}docs/${guide}/`)

@@ -18,7 +18,7 @@ npm run test:e2e
 Build the binaries before e2e tests. Tests launch a real Solmu backend with
 temporary SQLite files and a local provider fixture; they never use your keys
 or make paid model requests. Tests live in `e2e/api`, `e2e/cli`, `e2e/desktop`,
-`e2e/web`, `e2e/website`, `e2e/boxer`, `e2e/muxer`, and `e2e/muxer-gui`.
+`e2e/web`, `e2e/ios`, `e2e/website`, `e2e/boxer`, `e2e/muxer`, and `e2e/muxer-gui`.
 Release automation tests under `e2e/releases` use local Git repositories and
 release metadata fixtures; they do not publish tags, images, or releases.
 Within each client, keep feature tests in separate files such as `conversations`,
@@ -39,7 +39,10 @@ See [sandbox setup](boxer.md) if user delegation is unavailable.
 Browser tests use the published web build served by the real backend, including
 its API, streaming, and WebSocket connections; they do not use Vite as a proxy.
 Desktop tests exercise Iced widgets and real
-network tasks in its headless runtime. Browser tests use Playwright.
+network tasks in its headless runtime. Browser tests use Playwright. iOS tests
+run the native SwiftUI client in an iPhone simulator on macOS and exercise
+conversation streaming, Profile, Audit, Tasks, and Webhooks against an
+in-process HTTP fixture. CI captures the iOS screenshot from the simulator.
 On Linux, install `libxkbcommon-dev`, `libwayland-dev`, and
 `libfontconfig1-dev` for desktop builds and `bubblewrap` for Linux sandbox tests;
 enable unprivileged user namespaces for those isolation tests.

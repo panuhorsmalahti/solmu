@@ -18,7 +18,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByRole('link', { name: 'Install or update individual modules' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Bundle setup' })).toBeVisible()
   await expect(page.getByText(/starts the backend in the background/)).toBeVisible()
-  for (const client of ['Terminal', 'Desktop', 'Web']) await expect(page.getByRole('link').filter({ has: page.getByRole('heading', { name: client }) })).toHaveAttribute('href', /github\.com\/panuhorsmalahti\/solmu\/tree\/main\/clients\//)
+  for (const client of ['Terminal', 'Desktop', 'Android', 'iOS', 'Web']) await expect(page.getByRole('link').filter({ has: page.getByRole('heading', { name: client }) })).toHaveAttribute('href', /github\.com\/panuhorsmalahti\/solmu\/tree\/main\/clients\//)
   await expect(page.getByRole('link', { name: 'Solmu Muxer ↗', exact: true })).toHaveAttribute('href', 'https://github.com/panuhorsmalahti/solmu/tree/main/muxer')
   await expect(page.getByText(/Group real terminal tabs into project spaces/)).toBeVisible()
   await expect(page.getByText(/Keep interactive shells and project commands beside Solmu/)).toBeVisible()
@@ -52,7 +52,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByText('Check that your OS can apply them before launching.', { exact: false })).toBeVisible()
   await expect(page.getByText('explicit network routes for your provider and backend', { exact: false })).toBeVisible()
   for (const script of ['install-bundle.sh', 'install-bundle.ps1']) await expect(page.locator('#install pre').filter({ hasText: `https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/${script}` })).toBeVisible()
-  for (const client of ['cli', 'desktop', 'web', 'muxer']) {
+  for (const client of ['cli', 'desktop', 'android', 'ios', 'web', 'muxer']) {
     const image = page.locator(`img[src="screenshots/${client}.png"]`)
     await image.scrollIntoViewIfNeeded()
     await expect(image).toBeVisible()

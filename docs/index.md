@@ -1,6 +1,6 @@
 # Solmu documentation
 
-Solmu is an autonomous agent with terminal, desktop, and web clients.
+Solmu is an autonomous agent with terminal, desktop, mobile, and web clients.
 Use your choice of model to work on conversations and files in a workspace.
 
 ## Get started
@@ -17,6 +17,8 @@ tools. The backend must be running before you open a client.
 - [Terminal](cli.md): run `solmu` in your project folder.
 - [Desktop](desktop.md): open `solmu-desktop`.
 - [Web](web.md): open `http://127.0.0.1:3000`.
+- [Android](android.md): build the native app with Android Studio or Gradle.
+- [iOS](ios.md): build the native SwiftUI app with Xcode on a Mac.
 - [Muxer](muxer.md): keep Solmu, shells, and commands together in terminal spaces.
 - [Muxer GUI](muxer-gui.md): manage a Muxer session in a native window.
 

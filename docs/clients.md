@@ -1,11 +1,12 @@
 # Solmu clients
 
-The Android client is a native Kotlin and Jetpack Compose app. It uses the same
-backend APIs and live events as the other clients; see the [Android guide](android.md).
+Android and iOS are native mobile apps. Android uses Kotlin and Jetpack Compose;
+iOS uses SwiftUI. Both use the same backend APIs and live events as the other
+clients; see the [Android](android.md) and [iOS](ios.md) guides.
 
 Use `/skills` in the CLI or **Skills** in desktop and web to see the current
 workspace's installed skills. Lists update automatically. See [skills](skills.md).
-Use `/plugins` in CLI or Muxer, or **Plugins** in desktop, Android, and web, to see
+Use `/plugins` in CLI or Muxer, or **Plugins** in desktop, Android, iOS, and web, to see
 installed [Agent Plugins](plugins.md) and any loading errors.
 
 All clients connect to the same backend and share saved conversations.
@@ -23,7 +24,7 @@ The CLI and desktop show **Ready** when available, with progress and errors
 shown as needed.
 
 Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
-[Android](screenshots/android.png) | [Web](screenshots/web.png) ·
+[Android](screenshots/android.png) · [iOS](screenshots/ios.png) | [Web](screenshots/web.png) ·
 [Muxer](screenshots/muxer.png) · [Muxer GUI](screenshots/muxer-gui.png).
 
 | Client | Start after installation | Guide |
@@ -33,6 +34,7 @@ Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
 | Muxer GUI (native window) | `muxer-gui` | [Graphical workspace](muxer-gui.md) |
 | Desktop | `solmu-desktop` | [Desktop client](desktop.md) |
 | Android | Install from Android Studio or build with Gradle | [Android client](android.md) |
+| iOS | Build and install with Xcode on a Mac | [iOS client](ios.md) |
 | Web | Open `http://127.0.0.1:3000` | [Web client](web.md) |
 
 These guides assume the backend is already running. Its [installer](services.md)

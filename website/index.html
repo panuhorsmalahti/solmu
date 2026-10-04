@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <meta name="description" content="Solmu brings your ideas together. An open-source agent with terminal, desktop, Android, and web clients, your choice of model, and conversations that stay with you."/>
+  <meta name="description" content="Solmu brings your ideas together. An open-source agent with terminal, desktop, Android, iOS, and web clients, your choice of model, and conversations that stay with you."/>
   <meta name="theme-color" content="#f5f2e9"/>
   <meta property="og:title" content="Solmu — your ideas, connected"/>
   <meta property="og:description" content="A little space for your next big idea. Terminal, desktop, and web — one conversation, wherever you think best."/>
@@ -54,15 +54,17 @@
         <figure><a href="screenshots/cli.png"><img src="screenshots/cli.png" alt="Solmu terminal client showing a conversation" loading="lazy" width="1000" height="688"/></a><figcaption>Terminal · stay in your flow</figcaption></figure>
         <figure><a href="screenshots/desktop.png"><img src="screenshots/desktop.png" alt="Solmu desktop client with saved conversations and a reply" loading="lazy" width="1120" height="760"/></a><figcaption>Desktop · a place for your ideas</figcaption></figure>
         <figure><a href="screenshots/android.png"><img src="screenshots/android.png" alt="Solmu native Android client with a streamed conversation" loading="lazy" width="1080" height="2400"/></a><figcaption>Android · your conversations, in hand</figcaption></figure>
+        <figure><a href="screenshots/ios.png"><img src="screenshots/ios.png" alt="Solmu native iOS client with a streamed conversation" loading="lazy" width="1080" height="2400"/></a><figcaption>iOS · a native space for your ideas</figcaption></figure>
         <figure><a href="screenshots/web.png"><img src="screenshots/web.png" alt="Solmu web client with a conversation sidebar" loading="lazy" width="1440" height="1000"/></a><figcaption>Web · pick up the thread anywhere</figcaption></figure>
       </div>
     </section>
     <section id="your-space" class="spaces wrap" aria-labelledby="spaces-title">
-      <div class="section-heading"><span class="eyebrow">ONE SOLMU. FOUR WAYS IN.</span><h2 id="spaces-title">Think where you feel at home.</h2></div>
+      <div class="section-heading"><span class="eyebrow">ONE SOLMU. FIVE WAYS IN.</span><h2 id="spaces-title">Think where you feel at home.</h2></div>
       <div class="clients">
         <a class="client" href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/cli"><span class="client-icon" aria-hidden="true">&gt;_</span><h3>Terminal <span aria-hidden="true">↗</span></h3><p>A quiet, keyboard-first space.<br/>One command, and you’re in.</p><span class="client-caption">FOR YOUR FLOW STATE</span></a>
         <a class="client" href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/desktop"><span class="client-icon" aria-hidden="true">▣</span><h3>Desktop <span aria-hidden="true">↗</span></h3><p>A native window for your ideas.<br/>Your threads, always within reach.</p><span class="client-caption">A PLACE ON YOUR DESK</span></a>
         <a class="client" href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/android"><span class="client-icon" aria-hidden="true">◉</span><h3>Android <span aria-hidden="true">↗</span></h3><p>A native app for your phone.<br/>Your conversations on the move.</p><span class="client-caption">SOLMU IN YOUR HAND</span></a>
+        <a class="client" href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/ios"><span class="client-icon" aria-hidden="true">◉</span><h3>iOS <span aria-hidden="true">↗</span></h3><p>A native SwiftUI app for iPhone.<br/>Your conversations on the move.</p><span class="client-caption">SOLMU ON IPHONE</span></a>
         <a class="client" href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/web"><span class="client-icon" aria-hidden="true">◎</span><h3>Web <span aria-hidden="true">↗</span></h3><p>Open a tab. Open a possibility.<br/>The same conversations, in your browser.</p><span class="client-caption">A FRESH WAY TO CONNECT</span></a>
       </div>
       <div class="closing"><p>Start small.<br/><em>See where the thread takes you.</em></p><a class="primary" href="https://github.com/panuhorsmalahti/solmu#install">Get started <span aria-hidden="true">↗</span></a></div>
@@ -81,7 +83,7 @@
         <article><h3>Linux &amp; macOS</h3><pre><code>curl -fsSL https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-bundle.sh | sh</code></pre></article>
         <article><h3>Windows PowerShell</h3><pre><code>irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-bundle.ps1 | iex</code></pre></article>
       </div>
-      <p class="footnote">The optional bundle installs the backend, terminal and desktop clients, Boxer, Muxer, and Muxer GUI from the latest production release and starts the backend in the background. Build the native <a href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/android">Android app</a> in Android Studio. The latest installers register installed modules for daily updates; rerun each installer once for existing installs. Run a module installer again to update it immediately. Add your provider key in ~/.solmu/.env and restart the background backend. Run solmu, solmu-desktop, muxer, or muxer-gui; open http://127.0.0.1:3000 for the web client. <a href="docs/releases/#individual-components">Install or update individual modules</a> if you only need one. <a href="docs/bundle/">Bundle setup</a> includes service management.</p>
+      <p class="footnote">The optional bundle installs the backend, terminal and desktop clients, Boxer, Muxer, and Muxer GUI from the latest production release and starts the backend in the background. Build the native <a href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/android">Android app</a> in Android Studio or the native <a href="https://github.com/panuhorsmalahti/solmu/tree/main/clients/ios">iOS app</a> in Xcode on a Mac. The latest installers register installed modules for daily updates; rerun each installer once for existing installs. Run a module installer again to update it immediately. Add your provider key in ~/.solmu/.env and restart the background backend. Run solmu, solmu-desktop, muxer, or muxer-gui; open http://127.0.0.1:3000 for the web client. <a href="docs/releases/#individual-components">Install or update individual modules</a> if you only need one. <a href="docs/bundle/">Bundle setup</a> includes service management.</p>
     </section>
   </main>
   <footer class="footer wrap"><span class="wordmark">solmu</span><span>YOUR IDEAS, CONNECTED.</span><a href="docs/">Read the guide <span aria-hidden="true">↗</span></a></footer>

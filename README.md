@@ -1,7 +1,7 @@
 # Solmu
 
 An open-source autonomous agent. A Rust backend with terminal,
-native desktop, Android, and web clients that share your conversations.
+native desktop, Android, iOS, and web clients that share your conversations.
 
 [Website](https://panuhorsmalahti.github.io/solmu/) · [Docs](https://panuhorsmalahti.github.io/solmu/docs/) · [Client guide](docs/clients.md) · [Configuration](docs/configuration.md) · [Releases](https://github.com/panuhorsmalahti/solmu/releases)
 
@@ -50,13 +50,15 @@ See [update details](docs/releases.md).
 Prefer individual modules? Install the [backend](docs/services.md#install),
 then only the clients you need: [CLI](clients/cli/README.md#install),
 [Desktop](clients/desktop/README.md#install), [Android](clients/android/README.md),
-[Web](clients/web/README.md#install), or [Muxer](muxer/README.md#install).
+[iOS](clients/ios/README.md), [Web](clients/web/README.md#install), or
+[Muxer](muxer/README.md#install).
 [Boxer](boxer/README.md#install) is separate too.
 
 Add your provider key to `~/.solmu/.env` (Windows: `%USERPROFILE%\.solmu\.env`),
 then restart the backend service. Run `solmu`, `solmu-desktop`, or `muxer`,
 open **http://127.0.0.1:3000** for the web client, or build the Android app
-from [Android Studio](clients/android/README.md). The backend serves the web client directly.
+from [Android Studio](clients/android/README.md) or build the native
+[iOS app](clients/ios/README.md) with Xcode on a Mac. The backend serves the web client directly.
 See [configuration](docs/configuration.md) for model choices.
 
 ## From source
@@ -118,6 +120,15 @@ provides conversations, streaming, Profile, Audit, Tasks, and workspace tools.
 [Build and run the Android client](clients/android/README.md).
 
 ![Solmu Android client](docs/screenshots/android.png)
+
+### iOS
+
+A native SwiftUI app for iPhone. Connects to the same backend and includes
+conversations, streaming, Profile, Audit, Tasks, Skills, MCP, Plugins, and
+webhooks. Build and run with Xcode on a Mac.
+[Build the iOS client](clients/ios/README.md).
+
+![Solmu iOS client](docs/screenshots/ios.png)
 
 ### Congregator
 
