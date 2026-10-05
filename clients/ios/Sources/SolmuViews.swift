@@ -561,6 +561,8 @@ private struct WebhookRow: View {
 }
 
 private struct WebhookEditor: View {
+    private enum Field: Hashable { case name, secret, instructions }
+
     @ObservedObject var store: SolmuStore
     let hook: SolmuJSON?
     @Environment(\.dismiss) private var dismiss
@@ -568,7 +570,7 @@ private struct WebhookEditor: View {
     @State private var secret = ""
     @State private var instructions: String
     @State private var authType: String
-    @FocusState private var formFocused: Bool
+    @FocusState private var focusedField: Field?
 
     init(store: SolmuStore, hook: SolmuJSON?) {
         self.store = store; self.hook = hook
@@ -580,11 +582,11 @@ private struct WebhookEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Name", text: $name).focused($formFocused).accessibilityIdentifier("webhook-name")
-                if hook == nil || hook?.bool("secret_configured") == false { SecureField("Secret (16 characters minimum)", text: $secret).focused($formFocused) }
-                else { SecureField("Replace secret (optional)", text: $secret).focused($formFocused); Text("Secret is stored. Leave blank to keep it.").font(.caption).foregroundStyle(SolmuPalette.muted) }
+                TextField("Name", text: $name).focused($focusedField, equals: .name).accessibilityIdentifier("webhook-name")
+                if hook == nil || hook?.bool("secret_configured") == false { SecureField("Secret (16 characters minimum)", text: $secret).focused($focusedField, equals: .secret) }
+                else { SecureField("Replace secret (optional)", text: $secret).focused($focusedField, equals: .secret); Text("Secret is stored. Leave blank to keep it.").font(.caption).foregroundStyle(SolmuPalette.muted) }
                 Picker("Authentication", selection: $authType) { Text("GitHub HMAC").tag("github-hmac-sha256"); Text("Bearer").tag("bearer") }
-                TextField("Instructions for Solmu", text: $instructions, axis: .vertical).focused($formFocused).lineLimit(2...6)
+                TextField("Instructions for Solmu", text: $instructions, axis: .vertical).focused($focusedField, equals: .instructions).lineLimit(2...6)
                 Button(hook == nil ? "Create webhook" : "Save changes") {
                     var body: SolmuJSON = ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "instructions": instructions, "auth_type": authType]
                     if hook == nil || !secret.isEmpty { body["secret"] = secret }
@@ -593,7 +595,7 @@ private struct WebhookEditor: View {
             }.navigationTitle(hook == nil ? "Add webhook" : "Edit webhook")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                    ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { formFocused = false }.accessibilityIdentifier("dismiss-keyboard") }
+                    ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { focusedField = nil }.accessibilityIdentifier("dismiss-keyboard") }
                 }
         }
     }
