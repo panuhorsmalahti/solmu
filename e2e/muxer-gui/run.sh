@@ -13,6 +13,8 @@ trap cleanup EXIT
 
 export SOLMU_MUXER_DIR="$state/sessions"
 export SOLMU_MUXER_CONFIG="$state/config.toml"
+export SOLMU_CLI_PATH="$root/target/debug/solmu"
+export PATH="$root/target/debug:$PATH"
 cat > "$SOLMU_MUXER_CONFIG" <<'EOF'
 [terminal]
 new_pane = "shell"
@@ -53,5 +55,27 @@ for _ in $(seq 1 30); do
   sleep 0.5
 done
 [[ "$seen" == *SOLMU_MUXER_GUI_E2E* ]] || { echo 'GUI input did not reach the selected Muxer pane' >&2; exit 1; }
+
+# Create a Terminal space from the type dropdown, then switch the dropdown to
+# Solmu and verify that the GUI creates a Solmu space as well.
+xdotool mousemove --window "$window" 190 210 click 1 key Down Return
+xdotool mousemove --window "$window" 140 160 click 1
+created=''
+for _ in $(seq 1 30); do
+  created=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; result=json.load(sys.stdin)["result"]; space=next((space for space in result["spaces"] if space["id"] == result["active_space"]), {}); print(space.get("kind", ""))')
+  [ "$created" = terminal ] && break
+  sleep 0.5
+done
+[ "$created" = terminal ] || { echo 'GUI did not create the selected Terminal space' >&2; exit 1; }
+
+xdotool mousemove --window "$window" 190 210 click 1 key Up Return
+xdotool mousemove --window "$window" 140 160 click 1
+created=''
+for _ in $(seq 1 30); do
+  created=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; result=json.load(sys.stdin)["result"]; space=next((space for space in result["spaces"] if space["id"] == result["active_space"]), {}); print(space.get("kind", ""))')
+  [ "$created" = solmu ] && break
+  sleep 0.5
+done
+[ "$created" = solmu ] || { echo 'GUI did not create the selected Solmu space' >&2; exit 1; }
 
 test -s docs/screenshots/muxer-gui.png

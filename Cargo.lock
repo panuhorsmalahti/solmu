@@ -5189,6 +5189,8 @@ version = "0.1.0"
 dependencies = [
  "iced",
  "serde_json",
+ "solmu-client",
+ "solmu-desktop",
  "tokio",
 ]
 

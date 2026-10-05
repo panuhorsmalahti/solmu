@@ -40,9 +40,35 @@ struct Space {
     id: u64,
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    kind: Option<SpaceKind>,
     directory: PathBuf,
     tabs: Vec<Tab>,
     selected: u64,
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SpaceKind {
+    Solmu,
+    Terminal,
+}
+
+impl SpaceKind {
+    fn from_launch(launch: &crate::launch::Launch) -> Self {
+        if launch.solmu() {
+            Self::Solmu
+        } else {
+            Self::Terminal
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Solmu => "solmu",
+            Self::Terminal => "terminal",
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -617,6 +643,7 @@ impl App {
         self.spaces.push(Space {
             id: pane.id,
             name: None,
+            kind: Some(SpaceKind::from_launch(&pane.launch)),
             directory,
             tabs: vec![Tab {
                 id: pane.id,

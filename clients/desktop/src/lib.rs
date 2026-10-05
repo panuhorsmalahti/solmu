@@ -122,11 +122,7 @@ pub fn application(
     )
     .title("Solmu")
     .theme(theme())
-    .subscription(|state| {
-        iced::Subscription::run_with(state.session.api.base(), |base| {
-            Api::new(base).changes().map(Event::Connection)
-        })
-    })
+    .subscription(|state| state.subscription())
     .window_size((1120.0, 760.0))
 }
 
@@ -166,6 +162,14 @@ fn conversation_markdown(session: &Session) -> String {
 
 impl Desktop {
     pub fn new(api: Api) -> (Self, Task<Event>) {
+        Self::build(api, Action::New("New conversation".into()))
+    }
+
+    pub fn new_with_thread(api: Api, thread: Option<String>) -> (Self, Task<Event>) {
+        Self::build(api, thread.map_or(Action::List, Action::Open))
+    }
+
+    fn build(api: Api, initial: Action) -> (Self, Task<Event>) {
         let mut desktop = Self {
             session: Session::new(api),
             draft: String::new(),
@@ -214,8 +218,14 @@ impl Desktop {
             export_path: String::new(),
             info_notice: String::new(),
         };
-        let task = desktop.act(Action::New("New conversation".into()));
+        let task = desktop.act(initial);
         (desktop, task)
+    }
+
+    pub fn subscription(&self) -> iced::Subscription<Event> {
+        iced::Subscription::run_with(self.session.api.base(), |base| {
+            Api::new(base).changes().map(Event::Connection)
+        })
     }
 
     fn act(&mut self, action: Action) -> Task<Event> {

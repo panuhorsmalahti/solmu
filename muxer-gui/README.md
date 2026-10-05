@@ -33,4 +33,9 @@ Use the session and workspace fields to select or start another session. Set
 `SOLMU_MUXER_PATH` if the Muxer executable is installed outside `PATH` and is
 not next to the GUI executable.
 
+Choose **Solmu** or **Terminal** from the space-type dropdown before creating a
+space. Solmu spaces show Solmu's shared native desktop interface; Terminal
+spaces show the terminal for shells and other command-line clients such as
+Claude Code.
+
 Read the [Muxer GUI guide](../docs/muxer-gui.md) and the [Muxer guide](../docs/muxer.md).

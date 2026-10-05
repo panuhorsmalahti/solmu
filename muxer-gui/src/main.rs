@@ -1,9 +1,13 @@
 use iced::{
     Alignment, Element, Length, Subscription, Task, Theme,
-    widget::{button, column, container, row, scrollable, text, text_input},
+    widget::{button, column, container, pick_list, row, scrollable, text, text_input},
 };
 use serde_json::{Value, json};
+use solmu_client::{Action, Api};
+use solmu_desktop::{Desktop, Event as DesktopEvent};
 use std::{
+    collections::HashMap,
+    fmt,
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -27,6 +31,34 @@ struct MuxerGui {
     screen: String,
     input: String,
     notice: String,
+    new_space_type: SpaceType,
+    desktops: HashMap<u64, Desktop>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpaceType {
+    Solmu,
+    Terminal,
+}
+
+impl SpaceType {
+    const ALL: [Self; 2] = [Self::Solmu, Self::Terminal];
+
+    fn launch(self) -> Value {
+        match self {
+            Self::Solmu => json!({"kind":"solmu"}),
+            Self::Terminal => json!({"kind":"shell","argv":[]}),
+        }
+    }
+}
+
+impl fmt::Display for SpaceType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Solmu => "Solmu",
+            Self::Terminal => "Terminal",
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +66,7 @@ enum Message {
     Tick,
     SessionChanged(String),
     WorkspaceChanged(String),
+    NewSpaceTypeChanged(SpaceType),
     InputChanged(String),
     Start,
     NewSpace,
@@ -42,8 +75,10 @@ enum Message {
     SelectPane(u64),
     FocusSpace(u64),
     FocusTab(u64),
+    CloseTab(u64),
     Send,
     ClosePane(u64),
+    Desktop(u64, DesktopEvent),
     SnapshotLoaded(Result<Value, String>),
     ScreenLoaded(u64, Result<String, String>),
     OperationFinished(String, Result<(), String>),
@@ -62,6 +97,8 @@ impl MuxerGui {
             screen: String::new(),
             input: String::new(),
             notice: "Connect to a running Muxer session, or start one here.".into(),
+            new_space_type: SpaceType::Solmu,
+            desktops: HashMap::new(),
         };
         let task = state.snapshot_task();
         (state, task)
@@ -81,6 +118,10 @@ impl MuxerGui {
                 self.workspace = value;
                 Task::none()
             }
+            Message::NewSpaceTypeChanged(space_type) => {
+                self.new_space_type = space_type;
+                Task::none()
+            }
             Message::InputChanged(value) => {
                 self.input = value;
                 Task::none()
@@ -97,12 +138,16 @@ impl MuxerGui {
                 )
             }
             Message::NewSpace => {
-                let (session, cwd) = (self.session.clone(), self.workspace.clone());
+                let (session, cwd, launch) = (
+                    self.session.clone(),
+                    self.workspace.clone(),
+                    self.new_space_type.launch(),
+                );
                 perform(
                     move || {
                         request(
                             &session,
-                            json!({"method":"create_space","params":{"cwd":cwd,"focus":true}}),
+                            json!({"method":"create_space","params":{"cwd":cwd,"launch":launch,"focus":true}}),
                         )
                         .map(|_| ())
                     },
@@ -110,12 +155,15 @@ impl MuxerGui {
                 )
             }
             Message::NewTab => {
-                let (session, space) =
-                    (self.session.clone(), self.snapshot["active_space"].as_u64());
+                let (session, space, launch) = (
+                    self.session.clone(),
+                    self.snapshot["active_space"].as_u64(),
+                    self.active_space_type().launch(),
+                );
                 if let Some(space) = space {
                     perform(
                         move || {
-                            request(&session, json!({"method":"create_tab","params":{"space":space,"focus":true}})).map(|_| ())
+                            request(&session, json!({"method":"create_tab","params":{"space":space,"launch":launch,"focus":true}})).map(|_| ())
                         },
                         "Tab created".into(),
                     )
@@ -128,10 +176,11 @@ impl MuxerGui {
                     .selected_pane
                     .or_else(|| self.snapshot["active_pane"].as_u64())
                 {
-                    let session = self.session.clone();
+                    let (session, launch) =
+                        (self.session.clone(), self.active_space_type().launch());
                     perform(
                         move || {
-                            request(&session, json!({"method":"split_pane","params":{"pane":pane,"axis":"right","focus":true}})).map(|_| ())
+                            request(&session, json!({"method":"split_pane","params":{"pane":pane,"axis":"right","launch":launch,"focus":true}})).map(|_| ())
                         },
                         "Pane split".into(),
                     )
@@ -163,6 +212,19 @@ impl MuxerGui {
                         .map(|_| ())
                     },
                     "Tab selected".into(),
+                )
+            }
+            Message::CloseTab(id) => {
+                let session = self.session.clone();
+                perform(
+                    move || {
+                        request(
+                            &session,
+                            json!({"method":"close","params":{"target":"tab","id":id}}),
+                        )
+                        .map(|_| ())
+                    },
+                    "Tab closed".into(),
                 )
             }
             Message::SelectPane(id) => {
@@ -236,7 +298,11 @@ impl MuxerGui {
                         if selected != self.selected_pane {
                             self.selected_pane = selected;
                         }
-                        return selected.map_or(Task::none(), |id| self.read_pane(id));
+                        let mut tasks = vec![self.ensure_embedded_desktop()];
+                        if let Some(id) = selected {
+                            tasks.push(self.read_pane(id));
+                        }
+                        return Task::batch(tasks);
                     }
                     Err(error) => self.notice = error,
                 }
@@ -252,7 +318,69 @@ impl MuxerGui {
                 self.notice = result.map_or_else(|e| e, |_| label);
                 self.snapshot_task()
             }
+            Message::Desktop(pane, event) => {
+                self.desktops
+                    .get_mut(&pane)
+                    .map_or_else(Task::none, |desktop| {
+                        desktop
+                            .update(event)
+                            .map(move |event| Message::Desktop(pane, event))
+                    })
+            }
         }
+    }
+
+    fn active_space_type(&self) -> SpaceType {
+        if self.snapshot["spaces"]
+            .as_array()
+            .and_then(|spaces| {
+                spaces
+                    .iter()
+                    .find(|space| space["id"].as_u64() == self.snapshot["active_space"].as_u64())
+            })
+            .and_then(|space| space["kind"].as_str())
+            == Some("solmu")
+        {
+            SpaceType::Solmu
+        } else {
+            SpaceType::Terminal
+        }
+    }
+
+    fn ensure_embedded_desktop(&mut self) -> Task<Message> {
+        if self.active_space_type() != SpaceType::Solmu {
+            return Task::none();
+        }
+        let Some(pane_id) = self.snapshot["active_pane"].as_u64() else {
+            return Task::none();
+        };
+        let panes = self.snapshot["panes"].as_array();
+        let pane = panes.and_then(|panes| {
+            panes
+                .iter()
+                .find(|pane| pane["id"].as_u64() == Some(pane_id))
+        });
+        let workspace = pane
+            .and_then(|pane| pane["cwd"].as_str())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(&self.workspace));
+        let thread = pane
+            .and_then(|pane| pane["thread"].as_str())
+            .map(str::to_owned);
+        if let Some(desktop) = self.desktops.get_mut(&pane_id) {
+            if desktop.session.current.is_none()
+                && let Some(thread) = thread
+            {
+                return desktop
+                    .update(DesktopEvent::Action(Action::Open(thread)))
+                    .map(move |event| Message::Desktop(pane_id, event));
+            }
+            return Task::none();
+        }
+        let (desktop, task) =
+            Desktop::new_with_thread(Api::from_env().with_workspace(workspace), thread);
+        self.desktops.insert(pane_id, desktop);
+        task.map(move |event| Message::Desktop(pane_id, event))
     }
 
     fn snapshot_task(&self) -> Task<Message> {
@@ -352,6 +480,12 @@ impl MuxerGui {
             row![
                 text("SPACES").size(10).color(appearance::MUTED),
                 iced::widget::Space::new().width(Length::Fill),
+                pick_list(
+                    SpaceType::ALL,
+                    Some(self.new_space_type),
+                    Message::NewSpaceTypeChanged,
+                )
+                .width(Length::Fixed(104.0)),
                 button(text("＋").size(16))
                     .on_press(Message::NewSpace)
                     .style(appearance::ghost)
@@ -365,6 +499,11 @@ impl MuxerGui {
             let selected = Some(id) == active_space;
             let name = space["name"].as_str().unwrap_or("Workspace").to_string();
             let cwd = space["cwd"].as_str().unwrap_or("").to_string();
+            let kind = if space["kind"].as_str() == Some("solmu") {
+                "Solmu"
+            } else {
+                "Terminal"
+            };
             spaces_section = spaces_section.push(
                 button(
                     column![
@@ -374,7 +513,9 @@ impl MuxerGui {
                             } else {
                                 appearance::MUTED
                             }),
-                            text(name).size(13)
+                            text(name).size(13),
+                            iced::widget::Space::new().width(Length::Fill),
+                            text(kind).size(9).color(appearance::MUTED)
                         ]
                         .spacing(8)
                         .align_y(Alignment::Center),
@@ -490,14 +631,16 @@ impl MuxerGui {
             .and_then(|space| space["name"].as_str())
             .unwrap_or("Workspace")
             .to_string();
+        let active_space_type = self.active_space_type();
+        let active_solmu = active_space_type == SpaceType::Solmu;
         let toolbar = row![
             column![
                 row![
                     text("Muxer").size(11).color(appearance::MUTED),
                     text("/ ").size(11).color(appearance::MUTED),
-                    text(active_space_name).size(12),
+                    text(active_space_name.clone()).size(12),
                     text("/ ").size(11).color(appearance::MUTED),
-                    text("Terminal").size(12)
+                    text(active_space_type.to_string()).size(12)
                 ]
                 .spacing(4)
                 .align_y(Alignment::Center),
@@ -608,6 +751,48 @@ impl MuxerGui {
         .padding([22, 24])
         .width(Length::Fill)
         .height(Length::Fill);
+        let terminal_content = content;
+        let content: Element<'_, Message> = if active_solmu {
+            if let Some(pane) = self.snapshot["active_pane"].as_u64()
+                && let Some(desktop) = self.desktops.get(&pane)
+            {
+                let solmu_content = column![
+                    row![
+                        text(format!("{} · Solmu", active_space_name)).size(12),
+                        iced::widget::Space::new().width(Length::Fill),
+                        button(text("New tab").size(11))
+                            .on_press(Message::NewTab)
+                            .style(appearance::ghost)
+                            .padding([8, 10]),
+                        button(text("Close tab").size(11))
+                            .on_press_maybe(
+                                self.snapshot["active_tab"].as_u64().map(Message::CloseTab)
+                            )
+                            .style(appearance::ghost)
+                            .padding([8, 10]),
+                    ]
+                    .align_y(Alignment::Center)
+                    .spacing(8),
+                    desktop
+                        .view()
+                        .map(move |event| Message::Desktop(pane, event)),
+                ]
+                .spacing(10)
+                .padding([12, 18])
+                .width(Length::Fill)
+                .height(Length::Fill);
+                solmu_content.into()
+            } else {
+                container(text("Opening Solmu…").size(18).color(appearance::MUTED))
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .into()
+            }
+        } else {
+            terminal_content.into()
+        };
         row![
             container(scrollable(sidebar).height(Length::Fill))
                 .height(Length::Fill)
@@ -623,8 +808,20 @@ fn theme(_: &MuxerGui) -> Theme {
     appearance::theme()
 }
 
-fn subscription(_: &MuxerGui) -> Subscription<Message> {
-    iced::time::every(std::time::Duration::from_millis(1200)).map(|_| Message::Tick)
+fn subscription(state: &MuxerGui) -> Subscription<Message> {
+    let mut subscriptions =
+        vec![iced::time::every(std::time::Duration::from_millis(1200)).map(|_| Message::Tick)];
+    if state.active_space_type() == SpaceType::Solmu
+        && let Some(pane) = state.snapshot["active_pane"].as_u64()
+        && let Some(desktop) = state.desktops.get(&pane)
+    {
+        subscriptions.push(
+            desktop
+                .subscription()
+                .map(move |event| Message::Desktop(pane, event)),
+        );
+    }
+    Subscription::batch(subscriptions)
 }
 
 fn perform<F>(work: F, label: String) -> Task<Message>

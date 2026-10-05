@@ -55,8 +55,26 @@ impl App {
                     .iter()
                     .find(|space| space.id == id)
                     .ok_or("Space does not exist")?;
+                let kind = space.kind.map(SpaceKind::as_str).unwrap_or_else(|| {
+                    if space
+                        .tabs
+                        .iter()
+                        .flat_map(|tab| tab.layout.ids())
+                        .find_map(|pane_id| {
+                            self.panes
+                                .iter()
+                                .find(|pane| pane.id == pane_id)
+                                .map(|pane| pane.launch.solmu())
+                        })
+                        .unwrap_or(false)
+                    {
+                        "solmu"
+                    } else {
+                        "terminal"
+                    }
+                });
                 Ok(
-                    json!({"id": space.id, "name": space.name, "cwd": space.directory, "selected_tab": space.selected, "tabs": space.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>() }),
+                    json!({"id": space.id, "name": space.name, "cwd": space.directory, "kind": kind, "selected_tab": space.selected, "tabs": space.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>() }),
                 )
             }
             Kind::Tab => {

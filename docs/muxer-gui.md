@@ -21,6 +21,13 @@ panel keeps the selected terminal output and command field together; the toolbar
 lets you add a tab, split the active pane, or close it. Session and workspace
 settings stay in the sidebar, and the connected state updates automatically.
 
+Choose a space type from the dropdown beside **Spaces** when creating a space.
+**Solmu** opens the shared native Solmu desktop interface inside Muxer GUI,
+including its conversation list and Profile, Audit, Tasks, and other pages. It
+uses the same backend and follows the Solmu thread started by the Muxer session.
+**Terminal** keeps the terminal view for shells and command-line clients such as
+Claude Code. Tabs in each space keep the selected type.
+
 The terminal Muxer remains available as `muxer` and includes pane resizing,
 shell and command panes, settings, automation, and direct terminal attachment.
 See [Muxer usage](muxer.md), [installation](releases.md#individual-components),
