@@ -6,7 +6,6 @@ state=$(mktemp -d)
 gui_pid=''
 cleanup() {
   if [ -n "$gui_pid" ]; then kill "$gui_pid" 2>/dev/null || true; fi
-  target/debug/muxer server stop --session default >/dev/null 2>&1 || true
   rm -rf "$state"
 }
 trap cleanup EXIT
@@ -15,20 +14,14 @@ export SOLMU_MUXER_DIR="$state/sessions"
 export SOLMU_MUXER_CONFIG="$state/config.toml"
 export SOLMU_CLI_PATH="$root/target/debug/solmu"
 export PATH="$root/target/debug:$PATH"
+export SOLMU_MUXER_PATH="$state/no-muxer-binary"
 cat > "$SOLMU_MUXER_CONFIG" <<'EOF'
 [terminal]
 new_pane = "shell"
 EOF
 
-target/debug/muxer server start --session default --cwd "$root"
-pane=''
-for _ in $(seq 1 30); do
-  pane=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; panes=json.load(sys.stdin)["result"].get("panes", []); print(panes[0]["id"] if panes else "")')
-  [ -n "$pane" ] && break
-  sleep 1
-done
-[ -n "$pane" ] || { echo 'Muxer shell pane did not start' >&2; exit 1; }
-target/debug/muxer api snapshot --session default --json
+# Launch the GUI with no Muxer executable or daemon. Its embedded engine should
+# create and persist the default workspace itself.
 target/debug/muxer-gui &
 gui_pid=$!
 window=''
@@ -38,25 +31,28 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 [ -n "$window" ] || { echo 'Muxer GUI window did not appear' >&2; exit 1; }
+snapshot="$SOLMU_MUXER_DIR/default.json"
+for _ in $(seq 1 30); do [ -s "$snapshot" ] && break; sleep 0.5; done
+[ -s "$snapshot" ] || { echo 'Embedded GUI did not create a persisted session' >&2; exit 1; }
+python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+assert data["spaces"], "default workspace was not created"
+assert data["panes"], "default terminal pane was not created"
+PY
 mkdir -p docs/screenshots
 
-# Send a command through the GUI input and verify it reaches the real shell pane.
+# Send a shell command through the GUI and verify its file side effect.
+marker="$state/gui-command.txt"
 xdotool windowfocus --sync "$window"
 eval "$(xdotool getwindowgeometry --shell "$window")"
 xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT - 75))" click 1
-xdotool type --clearmodifiers 'echo SOLMU_MUXER_GUI_E2E'
+xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
-seen=''
-for _ in $(seq 1 30); do
-  seen=$(target/debug/muxer pane read "$pane" --session default 2>/dev/null || true)
-  [[ "$seen" == *SOLMU_MUXER_GUI_E2E* ]] && break
-  sleep 0.5
-done
-[[ "$seen" == *SOLMU_MUXER_GUI_E2E* ]] || { echo 'GUI input did not reach the selected Muxer pane' >&2; exit 1; }
+for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
+[ -s "$marker" ] && grep -q SOLMU_MUXER_GUI_E2E "$marker" || { echo 'GUI input did not reach its terminal pane' >&2; exit 1; }
 
-# Create a Terminal space from the type dropdown, then switch the dropdown to
-# Solmu and verify that the GUI creates a Solmu space as well.
-previous=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["active_space"])')
+# Create a Terminal space and confirm it is present in the saved shared state.
 xdotool mousemove --window "$window" 190 210 click 1
 sleep 0.3
 xdotool mousemove --window "$window" 165 272 click 1
@@ -64,15 +60,21 @@ sleep 0.3
 xdotool mousemove --window "$window" 140 160 click 1
 created=''
 for _ in $(seq 1 30); do
-  created=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; result=json.load(sys.stdin)["result"]; space=next((space for space in result["spaces"] if space["id"] == result["active_space"]), {}); print("{}:{}".format(space.get("id", 0), space.get("kind", "empty")))')
-  [ "$created" != "$previous:terminal" ] && [ "$created" != "$previous:solmu" ] && [ "${created#*:}" = terminal ] && break
+  created=$(python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+space = next((item for item in data["spaces"] if item["id"] == data["active"]), {})
+print(space.get("kind", "empty"))
+PY
+)
+  [ "$created" = terminal ] && break
   sleep 0.5
 done
-[ "$created" != "$previous:terminal" ] && [ "$created" != "$previous:solmu" ] && [ "${created#*:}" = terminal ] || { echo "GUI did not create a new Terminal space (active=$created, previous=$previous)" >&2; exit 1; }
+[ "$created" = terminal ] || { echo "GUI did not persist a Terminal space (active=$created)" >&2; exit 1; }
 sleep 1
 import -window "$window" docs/screenshots/muxer-gui.png
 
-previous=${created%%:*}
+# The embedded GUI can create Solmu spaces too, without a Muxer server.
 xdotool mousemove --window "$window" 190 210 click 1
 sleep 0.3
 xdotool mousemove --window "$window" 165 241 click 1
@@ -80,10 +82,16 @@ sleep 0.3
 xdotool mousemove --window "$window" 140 160 click 1
 created=''
 for _ in $(seq 1 30); do
-  created=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; result=json.load(sys.stdin)["result"]; space=next((space for space in result["spaces"] if space["id"] == result["active_space"]), {}); print("{}:{}".format(space.get("id", 0), space.get("kind", "empty")))')
-  [ "${created%%:*}" != "$previous" ] && [ "${created#*:}" = solmu ] && break
+  created=$(python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+space = next((item for item in data["spaces"] if item["id"] == data["active"]), {})
+print(space.get("kind", "empty"))
+PY
+)
+  [ "$created" = solmu ] && break
   sleep 0.5
 done
-[ "${created%%:*}" != "$previous" ] && [ "${created#*:}" = solmu ] || { echo "GUI did not create a new Solmu space (active=$created, previous=$previous)" >&2; exit 1; }
+[ "$created" = solmu ] || { echo "GUI did not persist a Solmu space (active=$created)" >&2; exit 1; }
 
 test -s docs/screenshots/muxer-gui.png

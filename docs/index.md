@@ -20,7 +20,7 @@ tools. The backend must be running before you open a client.
 - [Android](android.md): build the native app with Android Studio or Gradle.
 - [iOS](ios.md): build the native SwiftUI app with Xcode on a Mac.
 - [Muxer](muxer.md): keep Solmu, shells, and commands together in terminal spaces.
-- [Muxer GUI](muxer-gui.md): manage a Muxer session in a native window.
+- [Muxer GUI](muxer-gui.md): manage local spaces and terminals in a native window.
 
 See the [client overview](clients.md) for screenshots and shared features.
 

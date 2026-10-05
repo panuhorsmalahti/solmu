@@ -4,7 +4,7 @@ import path from 'node:path'
 import { releaseFixture } from './support'
 
 const installedModules: Record<string, string[]> = {
-  cli: ['cli'], desktop: ['desktop'], web: ['web'], boxer: ['boxer'], muxer: ['cli', 'muxer'], 'muxer-gui': ['cli', 'muxer', 'muxer-gui'],
+  cli: ['cli'], desktop: ['desktop'], web: ['web'], boxer: ['boxer'], muxer: ['cli', 'muxer'], 'muxer-gui': ['cli', 'muxer-gui'],
 }
 
 for (const [component, modules] of Object.entries(installedModules)) {

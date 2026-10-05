@@ -11,7 +11,7 @@ case "$component" in
   cli) selected=solmu ;;
   desktop) selected=solmu-desktop ;;
   muxer) selected='solmu muxer' ;;
-  muxer-gui) selected='solmu muxer muxer-gui' ;;
+  muxer-gui) selected='solmu muxer-gui' ;;
   boxer) selected=boxer ;;
   web) selected='' ;;
   *) echo 'Unknown Solmu component' >&2; exit 1 ;;
@@ -159,7 +159,7 @@ case "$component" in
   desktop) register_component desktop "$destination" ;;
   boxer) register_component boxer "$destination" ;;
   muxer) register_component cli "$destination"; register_component muxer "$destination" ;;
-  muxer-gui) register_component cli "$destination"; register_component muxer "$destination"; register_component muxer-gui "$destination" ;;
+  muxer-gui) register_component cli "$destination"; register_component muxer-gui "$destination" ;;
   web) register_component web "$destination" ;;
   all)
     for name in cli desktop boxer muxer muxer-gui; do register_component "$name" "$destination"; done

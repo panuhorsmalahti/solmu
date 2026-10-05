@@ -125,7 +125,7 @@ try {
         'cli' { 'solmu.exe' }
         'desktop' { 'solmu-desktop.exe' }
         'muxer' { 'solmu.exe'; 'muxer.exe' }
-        'muxer-gui' { 'solmu.exe'; 'muxer.exe'; 'muxer-gui.exe' }
+        'muxer-gui' { 'solmu.exe'; 'muxer-gui.exe' }
         'boxer' { 'boxer.exe' }
     }
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
@@ -146,7 +146,7 @@ try {
     $moduleNames = switch ($Component) {
         'all' { @('backend', 'cli', 'desktop', 'boxer', 'muxer', 'muxer-gui') }
         'muxer' { @('cli', 'muxer') }
-        'muxer-gui' { @('cli', 'muxer', 'muxer-gui') }
+        'muxer-gui' { @('cli', 'muxer-gui') }
         default { @($Component) }
     }
     if ($NoService -and $Component -eq 'backend') { $moduleNames = @() }

@@ -52,7 +52,7 @@ accepts `-Version`, `-InstallDir`, and `-NoPath`. Unix accepts `SOLMU_NO_PATH=1`
 | Terminal | `solmu` | [CLI](../clients/cli/README.md#install) |
 | Desktop | `solmu-desktop` | [Desktop](../clients/desktop/README.md#install) |
 | Muxer | `muxer` and its required `solmu` | [Muxer](../muxer/README.md#install) |
-| Muxer GUI | `muxer-gui`, `muxer`, and `solmu` | [Muxer GUI](../muxer-gui/README.md#install) |
+| Muxer GUI | `muxer-gui` and `solmu` | [Muxer GUI](../muxer-gui/README.md#install) |
 | Web | Site files in `~/.solmu/web` | [Web](../clients/web/README.md#install) |
 | Boxer | `boxer` | [Boxer](../boxer/README.md#install) |
 

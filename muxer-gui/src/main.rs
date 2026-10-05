@@ -9,7 +9,7 @@ use std::{
     collections::HashMap,
     fmt,
     path::PathBuf,
-    process::{Command, Stdio},
+    sync::{Mutex, OnceLock},
 };
 
 mod appearance;
@@ -68,7 +68,6 @@ enum Message {
     WorkspaceChanged(String),
     NewSpaceTypeChanged(SpaceType),
     InputChanged(String),
-    Start,
     NewSpace,
     NewTab,
     Split,
@@ -96,7 +95,7 @@ impl MuxerGui {
             selected_pane: None,
             screen: String::new(),
             input: String::new(),
-            notice: "Connect to a running Muxer session, or start one here.".into(),
+            notice: "Starting the embedded workspace engine…".into(),
             new_space_type: SpaceType::Solmu,
             desktops: HashMap::new(),
         };
@@ -125,17 +124,6 @@ impl MuxerGui {
             Message::InputChanged(value) => {
                 self.input = value;
                 Task::none()
-            }
-            Message::Start => {
-                let name = self.session.clone();
-                let cwd = self.workspace.clone();
-                perform(
-                    move || {
-                        muxer_raw(&["server", "start", "--session", &name, "--cwd", &cwd])
-                            .map(|_| ())
-                    },
-                    "Muxer session started".into(),
-                )
             }
             Message::NewSpace => {
                 let (session, cwd, launch) = (
@@ -285,7 +273,7 @@ impl MuxerGui {
                         self.snapshot = snapshot;
                         let spaces = self.snapshot["spaces"].as_array().map_or(0, Vec::len);
                         let panes = self.snapshot["panes"].as_array().map_or(0, Vec::len);
-                        self.notice = format!("Connected · {spaces} spaces · {panes} panes");
+                        self.notice = format!("Workspace ready · {spaces} spaces · {panes} panes");
                         let panes = self.snapshot["panes"]
                             .as_array()
                             .cloned()
@@ -385,9 +373,10 @@ impl MuxerGui {
 
     fn snapshot_task(&self) -> Task<Message> {
         let session = self.session.clone();
+        let workspace = PathBuf::from(&self.workspace);
         Task::perform(
             async move {
-                tokio::task::spawn_blocking(move || snapshot(&session))
+                tokio::task::spawn_blocking(move || snapshot(&session, workspace))
                     .await
                     .map_err(|e| e.to_string())?
             },
@@ -400,14 +389,7 @@ impl MuxerGui {
         Task::perform(
             async move {
                 tokio::task::spawn_blocking(move || {
-                    let output = muxer_command(&[
-                        "pane",
-                        "read",
-                        &id.to_string(),
-                        "--json",
-                        "--session",
-                        &session,
-                    ])?;
+                    let output = request(&session, json!({"method":"read","params":{"pane":id}}))?;
                     Ok(output["text"].as_str().unwrap_or_default().to_string())
                 })
                 .await
@@ -594,7 +576,7 @@ impl MuxerGui {
                 .style(appearance::input),
         ]
         .spacing(7);
-        let mut sidebar = column![
+        let sidebar = column![
             brand,
             container(status).padding(11).style(appearance::panel),
             button(
@@ -616,15 +598,6 @@ impl MuxerGui {
         .padding(18)
         .width(Length::Fixed(276.0))
         .height(Length::Fill);
-        if self.snapshot.is_null() {
-            sidebar = sidebar.push(
-                button(text("Start Muxer session").size(12))
-                    .on_press(Message::Start)
-                    .style(appearance::primary_button)
-                    .padding([10, 12])
-                    .width(Length::Fill),
-            );
-        }
         let active_space_name = spaces
             .iter()
             .find(|space| space["id"].as_u64() == active_space)
@@ -675,7 +648,7 @@ impl MuxerGui {
             column![
                 text(panes_title).size(14),
                 text(if self.snapshot.is_null() {
-                    "Waiting for a Muxer session"
+                    "Starting the embedded workspace"
                 } else {
                     &self.notice
                 })
@@ -839,96 +812,52 @@ where
     )
 }
 
-fn snapshot(session: &str) -> Result<Value, String> {
-    muxer_command(&["api", "snapshot", "--session", session, "--json"])
-}
+static SESSION: OnceLock<Mutex<Option<solmu_muxer::gui::GuiSession>>> = OnceLock::new();
 
-fn request(session: &str, request: Value) -> Result<Value, String> {
-    let request = serde_json::to_string(&request).map_err(|e| e.to_string())?;
-    muxer_command(&["api", "request", &request, "--session", session, "--json"])
-}
-
-fn muxer_command(args: &[&str]) -> Result<Value, String> {
-    let stdout = muxer_raw(args)?;
-    parse_response(&stdout)
-}
-
-fn muxer_raw(args: &[&str]) -> Result<String, String> {
-    let binary = muxer_binary()?;
-    let output = Command::new(binary)
-        .args(args)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| format!("Could not run Muxer: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr = stderr.trim();
-        if let Ok(response) = serde_json::from_str::<Value>(stderr)
-            && let Some(error) = response["error"].as_str()
-        {
-            return Err(error.to_string());
-        }
-        return Err(stderr.to_string());
+fn with_session<T>(
+    name: &str,
+    cwd: PathBuf,
+    work: impl FnOnce(&mut solmu_muxer::gui::GuiSession) -> Result<T, String>,
+) -> Result<T, String> {
+    let slot = SESSION.get_or_init(|| Mutex::new(None));
+    let mut slot = slot
+        .lock()
+        .map_err(|_| "Workspace engine lock was poisoned".to_string())?;
+    if slot.as_ref().is_none_or(|session| session.name() != name) {
+        *slot = None;
+        let executable = solmu_binary()?;
+        *slot = Some(
+            solmu_muxer::gui::GuiSession::open(name, executable, cwd)
+                .map_err(|error| error.to_string())?,
+        );
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    work(slot.as_mut().expect("session was initialized"))
 }
 
-fn parse_response(stdout: &str) -> Result<Value, String> {
-    let response: Value =
-        serde_json::from_str(stdout).map_err(|e| format!("Invalid Muxer response: {e}"))?;
-    if response["ok"].as_bool() != Some(true) {
-        return Err(response["error"]
-            .as_str()
-            .unwrap_or("Muxer request failed")
-            .to_string());
-    }
-    Ok(response["result"].clone())
+fn snapshot(name: &str, cwd: PathBuf) -> Result<Value, String> {
+    with_session(name, cwd, |session| session.refresh())
 }
 
-fn muxer_binary() -> Result<PathBuf, String> {
-    if let Some(path) = std::env::var_os("SOLMU_MUXER_PATH") {
+fn request(name: &str, request: Value) -> Result<Value, String> {
+    with_session(
+        name,
+        std::env::current_dir().unwrap_or_default(),
+        |session| session.request(request),
+    )
+}
+
+fn solmu_binary() -> Result<PathBuf, String> {
+    if let Some(path) = std::env::var_os("SOLMU_CLI_PATH") {
         return Ok(PathBuf::from(path));
     }
     let sibling = std::env::current_exe()
-        .map_err(|e| e.to_string())?
-        .with_file_name(format!("muxer{}", std::env::consts::EXE_SUFFIX));
+        .map_err(|error| error.to_string())?
+        .with_file_name(format!("solmu{}", std::env::consts::EXE_SUFFIX));
     if sibling.is_file() {
         return Ok(sibling);
     }
     Ok(PathBuf::from(format!(
-        "muxer{}",
+        "solmu{}",
         std::env::consts::EXE_SUFFIX
     )))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_response;
-    use serde_json::json;
-
-    #[test]
-    fn unwraps_muxer_control_response() {
-        let result =
-            parse_response(r#"{"ok":true,"result":{"active_pane":7,"panes":[{"id":7}]}}"#).unwrap();
-        assert_eq!(result["active_pane"], 7);
-        assert_eq!(result["panes"][0]["id"], 7);
-    }
-
-    #[test]
-    fn reports_muxer_errors() {
-        assert_eq!(
-            parse_response(r#"{"ok":false,"error":"Session is not running"}"#),
-            Err("Session is not running".into())
-        );
-    }
-
-    #[test]
-    fn rejects_invalid_control_output() {
-        assert!(
-            parse_response("not json")
-                .unwrap_err()
-                .starts_with("Invalid Muxer response:")
-        );
-        assert_eq!(parse_response(r#"{"ok":true}"#).unwrap(), json!(null));
-    }
 }

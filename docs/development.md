@@ -73,8 +73,9 @@ Plugin tests capture `artifacts/cli-plugins.html` and
 Audit tests capture `artifacts/cli-audit.html` and `artifacts/muxer-audit.html`;
 render them with `node scripts/capture-cli.mjs cli-audit` and
 `node scripts/capture-cli.mjs muxer-audit`.
-The Muxer GUI E2E launches a native window under Xvfb, sends input to a real
-Muxer shell pane, and captures `docs/screenshots/muxer-gui.png` in CI.
+The Muxer GUI E2E launches a native window under Xvfb without a Muxer process,
+sends input to its embedded terminal engine, verifies saved workspace state,
+and captures `docs/screenshots/muxer-gui.png` in CI.
 Installer tests under `e2e/install` use local release archives and temporary
 directories; they do not change your PATH or installed applications. Background
 service tests replace OS service commands with recorders, so no real service is

@@ -1,8 +1,10 @@
 # Solmu Muxer GUI
 
-Native Rust desktop companion for Muxer, built with Iced.
-
 ![Muxer GUI](../docs/screenshots/muxer-gui.png)
+
+Muxer GUI is a standalone native workspace app. It embeds the Muxer engine and
+shares Muxer's local session files, so you can use the same spaces and tabs
+with either app. Only one of the two apps should own a session at a time.
 
 ## Install
 
@@ -18,9 +20,28 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/install-muxer-gui.ps1 | iex
 ```
 
-This installs Muxer GUI and its `muxer` and `solmu` runtimes from the latest
-release. It assumes the Solmu backend is already running. Rerun the command to
-update it manually; automatic daily updates are enabled by default.
+This installs Muxer GUI and the `solmu` runtime. It does not install or start
+the Muxer terminal app. Solmu spaces require the Solmu backend to be running;
+Terminal spaces launch local shells. Rerun the install command to update
+manually. Automatic daily updates are enabled by default.
+
+## Build locally
+
+From the repository root, build the GUI and its Solmu runtime:
+
+```sh
+cargo build --locked -p solmu-cli -p solmu-muxer-gui
+```
+
+Then run it from the project folder you want to use as the initial workspace:
+
+```sh
+cargo run --locked -p solmu-muxer-gui
+```
+
+Start the backend separately if you want to use Solmu spaces. Terminal spaces
+work without the backend. The build places `solmu` beside `muxer-gui`, so the
+GUI can launch Solmu panes locally.
 
 ## Run
 
@@ -28,14 +49,9 @@ update it manually; automatic daily updates are enabled by default.
 muxer-gui
 ```
 
-The app connects to the local `default` Muxer session and updates automatically.
-Use the session and workspace fields to select or start another session. Set
-`SOLMU_MUXER_PATH` if the Muxer executable is installed outside `PATH` and is
-not next to the GUI executable.
-
-Choose **Solmu** or **Terminal** from the space-type dropdown before creating a
-space. Solmu spaces show Solmu's shared native desktop interface; Terminal
-spaces show the terminal for shells and other command-line clients such as
-Claude Code.
+The app opens the local `default` session or creates it from the current
+folder. Choose **Solmu** or **Terminal** when creating a space. Solmu spaces
+show Solmu's shared native desktop interface; Terminal spaces show a shell or
+another command-line client such as Claude Code.
 
 Read the [Muxer GUI guide](../docs/muxer-gui.md) and the [Muxer guide](../docs/muxer.md).
