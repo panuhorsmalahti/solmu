@@ -21,10 +21,13 @@ test('webhooks can be authenticated, enabled, edited live, and trigger a streame
   }
 
   await page.getByLabel('Enable GitHub E2E').check()
-  await expect(hook).toContainText('Enabled')
   const id = endpoint.split('/').at(-1)!
+  await expect.poll(async () => {
+    const config = await (await request.get('/api/v1/webhooks')).json()
+    return config.find((item: { id: string }) => item.id === id)?.enabled
+  }).toBe(true)
+  await expect(hook.locator('.webhook-state')).toHaveText('Enabled')
   const config = await (await request.get(`/api/v1/webhooks`)).json()
-  expect(config.find((item: { id: string }) => item.id === id).enabled).toBe(true)
   expect(JSON.stringify(config)).not.toContain('github-e2e-secret-with-entropy')
 
   await hook.getByLabel('Instructions for Solmu').fill('Keep my unsaved change.')
