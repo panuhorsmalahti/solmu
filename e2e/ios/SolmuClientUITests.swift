@@ -3,6 +3,11 @@ import XCTest
 final class SolmuClientUITests: XCTestCase {
     private var app: XCUIApplication!
 
+    private func dismissKeyboardIfVisible() {
+        let dismiss = app.buttons["dismiss-keyboard"]
+        if dismiss.waitForExistence(timeout: 2), dismiss.isHittable { dismiss.tap() }
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
@@ -28,7 +33,7 @@ final class SolmuClientUITests: XCTestCase {
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         prompt.tap()
         prompt.typeText("\nBe concise.")
-        app.buttons["dismiss-keyboard"].tap()
+        dismissKeyboardIfVisible()
         app.buttons["save-profile"].tap()
         XCTAssertTrue(app.staticTexts["Edited on 2026-10-03T00:00:00Z"].waitForExistence(timeout: 10))
         if app.alerts.firstMatch.exists { app.alerts.buttons["OK"].tap() }
@@ -48,7 +53,7 @@ final class SolmuClientUITests: XCTestCase {
         taskPrompt.tap(); taskPrompt.typeText("Review the workspace")
         XCTAssertEqual(taskName.value as? String, "iOS follow-up")
         XCTAssertEqual(taskPrompt.value as? String, "Review the workspace")
-        app.buttons["dismiss-keyboard"].tap()
+        dismissKeyboardIfVisible()
         app.buttons["save-task"].tap()
         XCTAssertTrue(app.staticTexts["task-task-ios"].waitForExistence(timeout: 10))
 
@@ -60,7 +65,7 @@ final class SolmuClientUITests: XCTestCase {
         webhookName.tap(); webhookName.typeText("iOS test")
         let secret = app.secureTextFields.firstMatch
         secret.tap(); secret.typeText("ios-test-secret-123")
-        app.buttons["dismiss-keyboard"].tap()
+        dismissKeyboardIfVisible()
         app.buttons["save-webhook"].tap()
         XCTAssertTrue(app.staticTexts["webhook-hook-ios"].waitForExistence(timeout: 10))
 
