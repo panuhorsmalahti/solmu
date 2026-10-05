@@ -90,7 +90,7 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: false
           script: |
-            set -euo pipefail
+            set -eu
             gradle -p clients/android connectedDebugAndroidTest
             mkdir -p docs/screenshots
             adb exec-out screencap -p > docs/screenshots/android.png
