@@ -92,6 +92,9 @@ jobs:
           script: |
             set -eu
             gradle -p clients/android connectedDebugAndroidTest
+            adb install -r clients/android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -n com.solmu.android/.MainActivity
+            sleep 3
             mkdir -p docs/screenshots
             adb exec-out screencap -p > docs/screenshots/android.png
             test -s docs/screenshots/android.png
