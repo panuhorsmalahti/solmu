@@ -818,7 +818,8 @@ fn subscription(state: &MuxerGui) -> Subscription<Message> {
         subscriptions.push(
             desktop
                 .subscription()
-                .map(move |event| Message::Desktop(pane, event)),
+                .with(pane)
+                .map(|(pane, event)| Message::Desktop(pane, event)),
         );
     }
     Subscription::batch(subscriptions)
