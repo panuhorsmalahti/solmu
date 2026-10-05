@@ -90,9 +90,11 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: false
           script: |
+            set -euo pipefail
             gradle -p clients/android connectedDebugAndroidTest
             mkdir -p docs/screenshots
-            adb exec-out run-as com.solmu.android cat files/android-e2e.png > docs/screenshots/android.png
+            adb exec-out screencap -p > docs/screenshots/android.png
+            test -s docs/screenshots/android.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
