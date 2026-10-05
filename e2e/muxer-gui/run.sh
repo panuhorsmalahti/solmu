@@ -59,6 +59,7 @@ done
 previous=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["active_space"])')
 xdotool mousemove --window "$window" 190 210 click 1
 sleep 0.3
+import -window "$window" docs/screenshots/muxer-gui.png
 xdotool key Down Return
 sleep 0.3
 xdotool mousemove --window "$window" 140 160 click 1
