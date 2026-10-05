@@ -35,15 +35,19 @@ function fixture() {
 test('daily release skips unchanged main and increments the patch after new commits', () => {
   const repo = fixture()
   try {
+    const initialVersion = readFileSync(join(root, 'backend/Cargo.toml'), 'utf8').match(/^version\s*=\s*"([^"]+)"/m)![1]
+    const [major, minor, patch] = initialVersion.split('.').map(Number)
+    const nextPatch = `${major}.${minor}.${patch + 1}`
+    const initialTag = `v${initialVersion}`
     repo.releases()
-    expect(JSON.parse(repo.run('plan'))).toEqual({ release: true, version: '0.1.0', previous: '' })
-    repo.git('tag', 'v0.1.0')
-    repo.releases('v0.1.0')
+    expect(JSON.parse(repo.run('plan'))).toEqual({ release: true, version: initialVersion, previous: '' })
+    repo.git('tag', initialTag)
+    repo.releases(initialTag)
     expect(JSON.parse(repo.run('plan')).release).toBe(false)
     writeFileSync(join(repo.directory, 'feature.txt'), 'A new user feature')
     repo.commit('Add a new feature')
-    expect(JSON.parse(repo.run('plan'))).toEqual({ release: true, version: '0.1.1', previous: 'v0.1.0' })
-    repo.run('notes', { PREVIOUS_TAG: 'v0.1.0' })
+    expect(JSON.parse(repo.run('plan'))).toEqual({ release: true, version: nextPatch, previous: initialTag })
+    repo.run('notes', { PREVIOUS_TAG: initialTag })
     const notes = readFileSync(join(repo.directory, 'artifacts/release-notes.md'), 'utf8')
     expect(notes).toContain('Add a new feature')
     expect(notes).not.toContain('Initial Solmu')
