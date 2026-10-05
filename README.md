@@ -119,7 +119,7 @@ A native Kotlin and Jetpack Compose app. It connects to the same backend and
 provides conversations, streaming, Profile, Audit, Tasks, and workspace tools.
 [Build and run the Android client](clients/android/README.md).
 
-![Solmu Android client](docs/screenshots/android.png)
+<a href="docs/screenshots/android.png"><img src="docs/screenshots/android.png" alt="Solmu Android client" width="240"></a>
 
 ### iOS
 
@@ -128,7 +128,7 @@ conversations, streaming, Profile, Audit, Tasks, Skills, MCP, Plugins, and
 webhooks. Build and run with Xcode on a Mac.
 [Build the iOS client](clients/ios/README.md).
 
-![Solmu iOS client](docs/screenshots/ios.png)
+<a href="docs/screenshots/ios.png"><img src="docs/screenshots/ios.png" alt="Solmu iOS client" width="240"></a>
 
 ### Congregator
 
