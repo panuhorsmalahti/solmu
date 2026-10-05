@@ -45,4 +45,9 @@ The repository's Android end-to-end test runs the native app in an emulator
 against a local API fixture. See [development](development.md) for the other
 client test commands.
 
+To install a published Android build, download the signed
+`solmu-v<version>-android.apk` from [GitHub Releases](https://github.com/panuhorsmalahti/solmu/releases)
+and open it on your device. See [release installation](releases.md#install) for
+the first-time Android signing setup used by the release workflow.
+
 ![Solmu native Android client](screenshots/android.png)

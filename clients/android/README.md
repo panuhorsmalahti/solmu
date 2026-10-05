@@ -13,6 +13,12 @@ the computer's LAN address, for example `http://192.168.1.20:3000`. The backend
 must listen on that interface. See the [Android setup guide](../../docs/android.md)
 for the network settings and security details.
 
+To install a published build, download the separately packaged
+`solmu-v<version>-android.apk` from [GitHub Releases](https://github.com/panuhorsmalahti/solmu/releases),
+open it on the device, and approve installation if Android prompts you. The APK
+is signed for updates across releases; Android signing setup is documented in
+[release and installation docs](../../docs/releases.md#install).
+
 The app shares threads, Profile settings, tool history, tasks, webhooks, skills,
 MCP connections, and plugins with the other Solmu clients. Its interface uses
 native Android controls, streams responses, and updates from backend events.

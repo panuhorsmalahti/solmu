@@ -17,9 +17,30 @@ android {
         applicationId = "com.solmu.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.gradleProperty("solmuVersionCode").orElse("1").get().toInt()
+        versionName = providers.gradleProperty("solmuVersionName").orElse("0.1.0").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            val keystoreFile = providers.environmentVariable("SOLMU_ANDROID_KEYSTORE_FILE")
+            val keyAlias = providers.environmentVariable("SOLMU_ANDROID_KEY_ALIAS")
+            val keyPassword = providers.environmentVariable("SOLMU_ANDROID_KEY_PASSWORD")
+            val storePassword = providers.environmentVariable("SOLMU_ANDROID_STORE_PASSWORD")
+            if (keystoreFile.isPresent && keyAlias.isPresent && keyPassword.isPresent && storePassword.isPresent) {
+                storeFile = file(keystoreFile.get())
+                this.keyAlias = keyAlias.get()
+                this.keyPassword = keyPassword.get()
+                this.storePassword = storePassword.get()
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     buildFeatures {
