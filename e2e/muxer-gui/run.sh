@@ -56,32 +56,34 @@ done
 
 # Create a Terminal space from the type dropdown, then switch the dropdown to
 # Solmu and verify that the GUI creates a Solmu space as well.
+previous=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["active_space"])')
 xdotool mousemove --window "$window" 190 210 click 1
 sleep 0.3
 xdotool key Down Return
 sleep 0.3
-xdotool mousemove --window "$window" 242 210 click 1
+xdotool mousemove --window "$window" 140 160 click 1
 created=''
 for _ in $(seq 1 30); do
-  created=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; result=json.load(sys.stdin)["result"]; space=next((space for space in result["spaces"] if space["id"] == result["active_space"]), {}); print(space.get("kind", ""))')
-  [ "$created" = terminal ] && break
+  created=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; result=json.load(sys.stdin)["result"]; space=next((space for space in result["spaces"] if space["id"] == result["active_space"]), {}); print("{}:{}".format(space.get("id", 0), space.get("kind", "empty")))')
+  [ "$created" != "$previous:terminal" ] && [ "$created" != "$previous:solmu" ] && [ "${created#*:}" = terminal ] && break
   sleep 0.5
 done
-[ "$created" = terminal ] || { echo 'GUI did not create the selected Terminal space' >&2; exit 1; }
+[ "$created" != "$previous:terminal" ] && [ "$created" != "$previous:solmu" ] && [ "${created#*:}" = terminal ] || { echo "GUI did not create a new Terminal space (active=$created, previous=$previous)" >&2; exit 1; }
 sleep 1
 import -window "$window" docs/screenshots/muxer-gui.png
 
+previous=${created%%:*}
 xdotool mousemove --window "$window" 190 210 click 1
 sleep 0.3
 xdotool key Up Return
 sleep 0.3
-xdotool mousemove --window "$window" 242 210 click 1
+xdotool mousemove --window "$window" 140 160 click 1
 created=''
 for _ in $(seq 1 30); do
-  created=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; result=json.load(sys.stdin)["result"]; space=next((space for space in result["spaces"] if space["id"] == result["active_space"]), {}); print(space.get("kind", ""))')
-  [ "$created" = solmu ] && break
+  created=$(target/debug/muxer status --session default --json | python3 -c 'import json,sys; result=json.load(sys.stdin)["result"]; space=next((space for space in result["spaces"] if space["id"] == result["active_space"]), {}); print("{}:{}".format(space.get("id", 0), space.get("kind", "empty")))')
+  [ "${created%%:*}" != "$previous" ] && [ "${created#*:}" = solmu ] && break
   sleep 0.5
 done
-[ "$created" = solmu ] || { echo 'GUI did not create the selected Solmu space' >&2; exit 1; }
+[ "${created%%:*}" != "$previous" ] && [ "${created#*:}" = solmu ] || { echo "GUI did not create a new Solmu space (active=$created, previous=$previous)" >&2; exit 1; }
 
 test -s docs/screenshots/muxer-gui.png
