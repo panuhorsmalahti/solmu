@@ -16,15 +16,18 @@ binary, daemon, or local control server is needed. The GUI installer includes
 the `solmu` runtime for Solmu spaces; start the Solmu backend before using
 those spaces. Terminal spaces launch local shells and command-line clients.
 
-The sidebar shows spaces. When a tab has multiple panes,
+Terminal spaces use the sidebar to show spaces. Solmu spaces use the full
+window width for Solmu's desktop interface; switch spaces with the compact
+**Spaces** picker above it. When a tab has multiple panes,
 they appear under **PANES** so you can switch between them; a lone pane needs
 no extra sidebar entry. Tabs appear in a browser-style strip along the top of
 the workspace. Select a tab to switch to it, use **+** to add one, or click its
 **x** to close it. Split panes and send terminal input from the workspace. Click **+** beside
 **Spaces** to choose a new **Terminal** or **Solmu** space. Right-click a space
-and choose **Delete space** to remove it. Solmu opens the shared native desktop
-interface, including its conversation list and Profile, Audit, Tasks, and
-other pages. Choosing **Terminal** opens a full interactive system shell
+in the sidebar or Spaces picker and choose **Delete space** to remove it.
+Solmu opens the shared native desktop interface, including its conversation
+list and Profile, Audit, Tasks, and other pages. Choosing **Terminal** opens a
+full interactive system shell
 directly; it does not start the Solmu CLI. Click inside the terminal to type
 and use shell shortcuts. Press **Ctrl+C** (or **Cmd+C** on macOS) to close its
 terminal pane. You can run command-line clients such as Claude Code from that

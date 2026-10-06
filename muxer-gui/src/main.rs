@@ -36,6 +36,7 @@ struct MuxerGui {
     terminal_focused: bool,
     notice: String,
     show_space_types: bool,
+    show_space_picker: bool,
     context_space: Option<u64>,
     desktops: HashMap<u64, Desktop>,
 }
@@ -70,6 +71,7 @@ enum Message {
     TerminalFocus,
     TerminalKey(KeyboardEvent),
     ToggleSpaceMenu,
+    ToggleSpacePicker,
     SpaceContextMenu(u64),
     DeleteSpace(u64),
     CreateSpace(SpaceType),
@@ -100,6 +102,7 @@ impl MuxerGui {
             terminal_focused: false,
             notice: "Starting the embedded workspace engine…".into(),
             show_space_types: false,
+            show_space_picker: false,
             context_space: None,
             desktops: HashMap::new(),
         };
@@ -112,6 +115,12 @@ impl MuxerGui {
             Message::Tick => self.snapshot_task(),
             Message::ToggleSpaceMenu => {
                 self.show_space_types = !self.show_space_types;
+                self.show_space_picker = false;
+                Task::none()
+            }
+            Message::ToggleSpacePicker => {
+                self.show_space_picker = !self.show_space_picker;
+                self.show_space_types = false;
                 Task::none()
             }
             Message::SpaceContextMenu(id) => {
@@ -254,6 +263,7 @@ impl MuxerGui {
             Message::FocusSpace(id) => {
                 self.terminal_focused = false;
                 self.context_space = None;
+                self.show_space_picker = false;
                 self.show_space_types = false;
                 let session = self.session.clone();
                 perform(
@@ -831,13 +841,80 @@ impl MuxerGui {
             if let Some(pane) = self.snapshot["active_pane"].as_u64()
                 && let Some(desktop) = self.desktops.get(&pane)
             {
-                let solmu_content = column![
+                let mut space_selector = column![
                     row![
-                        text(format!("{} · Solmu", active_space_name)).size(12),
+                        button(text(format!("Spaces  ·  {active_space_name}  ▾")).size(12))
+                            .on_press(Message::ToggleSpacePicker)
+                            .style(appearance::ghost)
+                            .padding([8, 10]),
+                        button(text("+").size(16))
+                            .on_press(Message::ToggleSpaceMenu)
+                            .style(appearance::ghost)
+                            .padding([7, 10]),
                         iced::widget::Space::new().width(Length::Fill),
                     ]
                     .align_y(Alignment::Center)
-                    .spacing(8),
+                    .spacing(4),
+                ]
+                .spacing(4);
+                if self.show_space_picker {
+                    let mut choices = column![].spacing(3);
+                    for space in &spaces {
+                        let id = space["id"].as_u64().unwrap_or_default();
+                        let selected = Some(id) == active_space;
+                        let name = space["name"].as_str().unwrap_or("Workspace").to_owned();
+                        choices = choices.push(
+                            mouse_area(
+                                button(text(name).size(12))
+                                    .width(Length::Fill)
+                                    .padding([8, 10])
+                                    .style(move |theme, state| {
+                                        appearance::navigation(theme, state, selected)
+                                    })
+                                    .on_press(Message::FocusSpace(id)),
+                            )
+                            .on_right_press(Message::SpaceContextMenu(id)),
+                        );
+                        if self.context_space == Some(id) {
+                            choices = choices.push(
+                                button(text("Delete space").size(11))
+                                    .on_press(Message::DeleteSpace(id))
+                                    .style(appearance::ghost)
+                                    .padding([7, 10]),
+                            );
+                        }
+                    }
+                    space_selector = space_selector.push(
+                        container(choices)
+                            .padding(5)
+                            .width(Length::Fixed(220.0))
+                            .style(appearance::panel),
+                    );
+                }
+                if self.show_space_types {
+                    space_selector = space_selector.push(
+                        container(
+                            column![
+                                button(text("Terminal").size(12))
+                                    .on_press(Message::CreateSpace(SpaceType::Terminal))
+                                    .style(appearance::ghost)
+                                    .padding([7, 10])
+                                    .width(Length::Fill),
+                                button(text("Solmu").size(12))
+                                    .on_press(Message::CreateSpace(SpaceType::Solmu))
+                                    .style(appearance::ghost)
+                                    .padding([7, 10])
+                                    .width(Length::Fill),
+                            ]
+                            .spacing(3),
+                        )
+                        .padding(4)
+                        .width(Length::Fixed(150.0))
+                        .style(appearance::panel),
+                    );
+                }
+                let solmu_content = column![
+                    space_selector,
                     desktop
                         .view()
                         .map(move |event| Message::Desktop(pane, event)),
@@ -863,14 +940,18 @@ impl MuxerGui {
             .padding([16, 24])
             .width(Length::Fill)
             .height(Length::Fill);
-        row![
+        let navigation: Element<'_, Message> = if active_solmu {
+            iced::widget::Space::new()
+                .width(Length::Fixed(0.0))
+                .height(Length::Fill)
+                .into()
+        } else {
             container(scrollable(sidebar).height(Length::Fill))
                 .height(Length::Fill)
-                .style(appearance::sidebar),
-            content
-        ]
-        .height(Length::Fill)
-        .into()
+                .style(appearance::sidebar)
+                .into()
+        };
+        row![navigation, content].height(Length::Fill).into()
     }
 }
 
