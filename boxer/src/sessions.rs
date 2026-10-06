@@ -20,7 +20,6 @@ use uuid::Uuid;
 
 pub const CHILD_ARGUMENT: &str = "--boxer-session-child";
 const DAEMON_ARGUMENT: &str = "--boxer-session-daemon";
-const ATTACH_ESCAPE: &[u8] = &[0x1d, b'd'];
 const HISTORY_LIMIT: usize = 64 * 1024;
 static SESSION_CHILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -46,20 +45,20 @@ struct Session {
 }
 
 pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
-    let (action, offset) = if arguments.get(1).is_some_and(|arg| arg == "sessions") {
-        (arguments.get(2).and_then(|arg| arg.to_str()), 1)
+    let (action, offset) = if arguments.first().is_some_and(|arg| arg == "sessions") {
+        (arguments.get(1).and_then(|arg| arg.to_str()), 1)
     } else {
-        (arguments.get(1).and_then(|arg| arg.to_str()), 0)
+        (arguments.first().and_then(|arg| arg.to_str()), 0)
     };
     match action {
-        Some("list" | "ps") if arguments.len() == 2 + offset => list(),
-        Some("inspect") if arguments.len() == 3 + offset => inspect(text(arguments, 2 + offset)?),
-        Some("stop") if arguments.len() == 3 + offset => stop(text(arguments, 2 + offset)?),
-        Some("logs") if arguments.len() == 3 + offset => logs(text(arguments, 2 + offset)?),
-        Some("prune") if arguments.len() == 2 + offset => prune(),
-        Some("attach") if arguments.len() == 3 + offset => attach(text(arguments, 2 + offset)?),
-        Some("detach") if arguments.len() == 3 + offset => {
-            control(text(arguments, 2 + offset)?, b'D')
+        Some("list" | "ps") if arguments.len() == 1 + offset => list(),
+        Some("inspect") if arguments.len() == 2 + offset => inspect(text(arguments, 1 + offset)?),
+        Some("stop") if arguments.len() == 2 + offset => stop(text(arguments, 1 + offset)?),
+        Some("logs") if arguments.len() == 2 + offset => logs(text(arguments, 1 + offset)?),
+        Some("prune") if arguments.len() == 1 + offset => prune(),
+        Some("attach") if arguments.len() == 2 + offset => attach(text(arguments, 1 + offset)?),
+        Some("detach") if arguments.len() == 2 + offset => {
+            control(text(arguments, 1 + offset)?, b'D')
         }
         _ => Err(io::Error::other(
             "Usage: boxer sessions list | attach <id> | detach <id> | inspect <id> | logs <id> | stop <id> | prune",
@@ -292,6 +291,7 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
         }
         let mut disconnect = false;
         if let Some(stream) = active.as_mut() {
+            flush_output(stream, &mut pending_output);
             if pending_output.len() > HISTORY_LIMIT * 4 {
                 disconnect = true;
             }
@@ -618,7 +618,6 @@ fn attach(id: &str) -> io::Result<i32> {
     }
     let mut stream =
         stream.ok_or_else(|| io::Error::other("Could not connect to the Boxer session"))?;
-    stream.set_nonblocking(true)?;
     send_resize(&root, &session.id, rows, cols)?;
     let mut pending_escape = false;
     let mut buffer = [0u8; 8192];
