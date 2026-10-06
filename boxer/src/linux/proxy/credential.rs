@@ -210,6 +210,7 @@ struct Request {
     expect_continue: bool,
 }
 
+#[derive(Debug)]
 enum RequestError {
     Invalid,
     Unauthorized,
