@@ -1,7 +1,7 @@
 #![cfg(unix)]
 
 use super::*;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use std::{
     io::{Read, Write},
     sync::mpsc,
@@ -21,11 +21,21 @@ fn wait_for_output(
     Ok(())
 }
 
-fn assert_output(output: &mpsc::Receiver<Vec<u8>>, collected: &mut Vec<u8>, needle: &[u8]) {
+fn assert_output(
+    output: &mpsc::Receiver<Vec<u8>>,
+    collected: &mut Vec<u8>,
+    needle: &[u8],
+    child: &mut (dyn Child + Send + Sync),
+    session_dir: &std::path::Path,
+    id: &str,
+) {
     if let Err(error) = wait_for_output(output, collected, needle) {
+        let status = child.try_wait().ok().flatten();
+        let stderr =
+            std::fs::read_to_string(session_dir.join(format!("{id}.err"))).unwrap_or_default();
         panic!(
-            "timed out waiting for attached terminal output ({error}): {}",
-            String::from_utf8_lossy(collected)
+            "timed out waiting for attached terminal output ({error}); attach status: {status:?}; session stderr: {stderr:?}; attach output: {}",
+            String::from_utf8_lossy(collected),
         );
     }
 }
@@ -104,9 +114,23 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         }
     });
     let mut attached_output = Vec::new();
-    assert_output(&output_rx, &mut attached_output, b"session-ready");
+    assert_output(
+        &output_rx,
+        &mut attached_output,
+        b"session-ready",
+        attach_child.as_mut(),
+        directory.path(),
+        id,
+    );
     writer.write_all(b"hello\r").unwrap();
-    assert_output(&output_rx, &mut attached_output, b"received:hello");
+    assert_output(
+        &output_rx,
+        &mut attached_output,
+        b"received:hello",
+        attach_child.as_mut(),
+        directory.path(),
+        id,
+    );
     writer.write_all(&[0x1d]).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(30));
     writer.write_all(b"d").unwrap();
