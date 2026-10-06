@@ -205,6 +205,14 @@ fn init(args: &[OsString]) -> io::Result<i32> {
         }
         None => PathBuf::from("boxer-policy.json"),
     };
+    if let Some(parent) = &extends {
+        let parent = parent
+            .to_str()
+            .ok_or_else(|| io::Error::other("--extends profile must be valid UTF-8"))?;
+        Policy::validate_parent(&output, parent).map_err(|error| {
+            io::Error::other(format!("Cannot extend policy from {parent}: {error}"))
+        })?;
+    }
     let policy = scaffold(extends, full);
     let mut file = std::fs::OpenOptions::new()
         .write(true)

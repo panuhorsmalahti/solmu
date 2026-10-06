@@ -800,6 +800,11 @@ impl Policy {
         Self::from_file_with_path_resolution(path, false)
     }
 
+    pub fn validate_parent(child_path: &Path, parent: &str) -> io::Result<()> {
+        let path = inherited_policy_path(child_path, parent)?;
+        Self::from_file_raw(&path).map(|_| ())
+    }
+
     fn from_file_with_path_resolution(path: &Path, resolve_paths: bool) -> io::Result<Self> {
         let mut ancestors = std::collections::HashSet::new();
         let object = load_policy_chain(path, &mut ancestors, 0, resolve_paths)?;

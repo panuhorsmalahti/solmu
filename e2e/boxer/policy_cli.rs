@@ -113,6 +113,25 @@ fn policy_init_scaffolds_a_named_profile_with_optional_inheritance() {
 }
 
 #[test]
+fn policy_init_rejects_a_missing_parent_without_creating_the_child() {
+    let root = tempfile::tempdir().unwrap();
+    let profiles = root.path().join("profiles");
+    std::fs::create_dir(&profiles).unwrap();
+    let child = root.path().join("child.json");
+
+    let output = Command::new(binary("boxer"))
+        .args(["policy", "init", "--output"])
+        .arg(&child)
+        .args(["--extends", "missing"])
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Cannot extend policy"));
+    assert!(!child.exists());
+}
+
+#[test]
 fn full_policy_scaffold_preserves_inherited_scalar_security_settings() {
     let root = tempfile::tempdir().unwrap();
     let profiles = root.path().join("profiles");
