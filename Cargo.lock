@@ -5509,6 +5509,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-rustls",
+ "toml_edit",
  "url",
  "uuid",
  "walkdir",

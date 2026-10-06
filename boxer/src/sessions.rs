@@ -974,7 +974,51 @@ fn attach(id: &str) -> io::Result<i32> {
 }
 
 fn configured_detach_sequence() -> io::Result<Vec<u8>> {
-    let value = std::env::var("BOXER_DETACH_SEQUENCE").unwrap_or_else(|_| "ctrl-] d".into());
+    let value = match std::env::var("BOXER_DETACH_SEQUENCE") {
+        Ok(value) => value,
+        Err(std::env::VarError::NotPresent) => configured_detach_sequence_from_file()?,
+        Err(error) => return Err(io::Error::other(error)),
+    }
+    .unwrap_or_else(|| "ctrl-] d".into());
+    parse_detach_sequence(&value)
+}
+
+fn configured_detach_sequence_from_file() -> io::Result<Option<String>> {
+    let path = if let Some(path) = std::env::var_os("BOXER_CONFIG") {
+        PathBuf::from(path)
+    } else {
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .ok_or_else(|| io::Error::other("Cannot determine the Boxer config directory"))?;
+        let config_dir = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config"));
+        config_dir.join("boxer").join("config.toml")
+    };
+    let source = match fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let document = source
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(io::Error::other)?;
+    let Some(ui) = document.get("ui") else {
+        return Ok(None);
+    };
+    let ui = ui
+        .as_table()
+        .ok_or_else(|| io::Error::other("The [ui] Boxer config section must be a table"))?;
+    let Some(value) = ui.get("detach_sequence") else {
+        return Ok(None);
+    };
+    let value = value
+        .as_str()
+        .ok_or_else(|| io::Error::other("ui.detach_sequence must be a string"))?;
+    Ok(Some(value.to_owned()))
+}
+
+fn parse_detach_sequence(value: &str) -> io::Result<Vec<u8>> {
     let sequence = value
         .split_ascii_whitespace()
         .map(detach_key)
@@ -1009,6 +1053,28 @@ fn detach_key(key: &str) -> io::Result<u8> {
         _ => return Err(io::Error::other(format!("Invalid detach key: {key}"))),
     };
     Ok(byte)
+}
+
+#[cfg(test)]
+mod detach_sequence_tests {
+    use super::parse_detach_sequence;
+
+    #[test]
+    fn parses_control_and_named_keys() {
+        assert_eq!(parse_detach_sequence("ctrl-] d").unwrap(), [0x1d, b'd']);
+        assert_eq!(parse_detach_sequence("ctrl-a q").unwrap(), [0x01, b'q']);
+        assert_eq!(
+            parse_detach_sequence("esc space x").unwrap(),
+            [0x1b, b' ', b'x']
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_or_ambiguous_sequences() {
+        assert!(parse_detach_sequence("q").is_err());
+        assert!(parse_detach_sequence("ctrl-z unknown").is_err());
+        assert!(parse_detach_sequence("a b c d e f g h i").is_err());
+    }
 }
 
 struct RawTerminal(libc::termios);

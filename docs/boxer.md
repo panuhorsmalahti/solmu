@@ -67,11 +67,20 @@ produced while detached is kept in a short terminal history and in the session
 log. `boxer inspect <session-id>` and `boxer ps` show whether a running session
 is currently attached to a terminal or running detached. Session records and the
 local attach socket are private to your account.
-Set `BOXER_DETACH_SEQUENCE` to change the attach key sequence. Use whitespace
-between keys, such as `ctrl-a q`; supported keys include `ctrl-a` through
+Set `ui.detach_sequence` in `~/.config/boxer/config.toml` to change the attach
+key sequence:
+
+```toml
+[ui]
+detach_sequence = "ctrl-a q"
+```
+
+Use whitespace between keys; supported keys include `ctrl-a` through
 `ctrl-z`, `ctrl-[`, `ctrl-]`, `ctrl-\\`, `ctrl-^`, `ctrl-_`, `ctrl-?`,
 `esc`, `tab`, `enter`, `space`, `backspace`, and single ASCII characters. The
-sequence must contain between two and eight keys.
+sequence must contain between two and eight keys. `XDG_CONFIG_HOME` changes
+the config directory, and `BOXER_CONFIG` selects a specific config file.
+`BOXER_DETACH_SEQUENCE` overrides the file setting.
 
 ## Explain a path decision
 
