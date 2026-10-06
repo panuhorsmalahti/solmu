@@ -1,8 +1,9 @@
 use crate::{
     credential,
     network::{Target, UpstreamProxy},
-    policy::{CredentialProvider, CustomCredential, EndpointRule},
+    policy::{CredentialInjectionMode, CredentialProvider, CustomCredential, EndpointRule},
 };
+use base64::Engine;
 use ring::rand::{SecureRandom, SystemRandom};
 use rustls::{ClientConfig, RootCertStore, pki_types::ServerName};
 use std::{
@@ -20,7 +21,7 @@ use tokio::{
     sync::oneshot,
 };
 use tokio_rustls::TlsConnector;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 const MAX_HEADER: usize = 16_384;
 const MAX_CONTENT_LENGTH: u64 = 32 * 1024 * 1024;
@@ -32,6 +33,10 @@ struct Credential {
     host: String,
     incoming_header: String,
     credential_format: String,
+    inject_mode: CredentialInjectionMode,
+    path_pattern: Option<String>,
+    path_replacement: Option<String>,
+    query_param_name: Option<String>,
     secret: Zeroizing<String>,
     token: Zeroizing<String>,
 }
@@ -63,42 +68,62 @@ impl Broker {
         let mut credentials = HashMap::new();
         let mut session_tokens = Vec::new();
         for name in providers {
-            let (credential_key, token_env, base_path, authority, host, incoming_header, format) =
-                if let Ok(provider) = CredentialProvider::parse(name) {
-                    let (path, header, format) = builtin_route(provider);
-                    (
-                        provider.key_env().to_owned(),
-                        provider.key_env().to_owned(),
-                        path.to_owned(),
-                        provider.host().to_owned(),
-                        provider.host().trim_end_matches(":443").to_owned(),
-                        header.to_owned(),
-                        format.to_owned(),
-                    )
+            let (
+                credential_key,
+                token_env,
+                base_path,
+                authority,
+                host,
+                incoming_header,
+                format,
+                inject_mode,
+                path_pattern,
+                path_replacement,
+                query_param_name,
+            ) = if let Some(custom) = custom_credentials.get(name) {
+                let url = url::Url::parse(&custom.upstream).map_err(io::Error::other)?;
+                let host = url
+                    .host_str()
+                    .ok_or_else(|| io::Error::other("Custom upstream host is missing"))?;
+                let port = url.port_or_known_default().unwrap_or(443);
+                let authority = if port == 443 {
+                    format!("{host}:443")
                 } else {
-                    let custom = custom_credentials.get(name).ok_or_else(|| {
-                        io::Error::other(format!("Custom credential route {name} is not defined"))
-                    })?;
-                    let url = url::Url::parse(&custom.upstream).map_err(io::Error::other)?;
-                    let host = url
-                        .host_str()
-                        .ok_or_else(|| io::Error::other("Custom upstream host is missing"))?;
-                    let port = url.port_or_known_default().unwrap_or(443);
-                    let authority = if port == 443 {
-                        format!("{host}:443")
-                    } else {
-                        format!("{host}:{port}")
-                    };
-                    (
-                        custom.credential_key.clone(),
-                        custom.token_env(name),
-                        url.path().trim_end_matches('/').to_owned(),
-                        authority,
-                        host.to_owned(),
-                        custom.inject_header.clone(),
-                        custom.credential_format.clone(),
-                    )
+                    format!("{host}:{port}")
                 };
+                (
+                    custom.credential_key.clone(),
+                    custom.token_env(name),
+                    url.path().trim_end_matches('/').to_owned(),
+                    authority,
+                    host.to_owned(),
+                    custom.inject_header.clone(),
+                    custom.credential_format.clone(),
+                    custom.inject_mode,
+                    custom.path_pattern.clone(),
+                    custom.path_replacement.clone(),
+                    custom.query_param_name.clone(),
+                )
+            } else if let Ok(provider) = CredentialProvider::parse(name) {
+                let (path, header, format) = builtin_route(provider);
+                (
+                    provider.key_env().to_owned(),
+                    provider.key_env().to_owned(),
+                    path.to_owned(),
+                    provider.host().to_owned(),
+                    provider.host().trim_end_matches(":443").to_owned(),
+                    header.to_owned(),
+                    format.to_owned(),
+                    CredentialInjectionMode::Header,
+                    None,
+                    None,
+                    None,
+                )
+            } else {
+                return Err(io::Error::other(format!(
+                    "Custom credential route {name} is not defined"
+                )));
+            };
             if crate::network::is_denied_domain(&authority, denied_hosts) {
                 return Err(io::Error::other(format!(
                     "Credential route {name} uses a domain denied by the network policy"
@@ -112,6 +137,11 @@ impl Broker {
                     "Credential {credential_key} contains unsupported control characters"
                 )));
             }
+            if inject_mode == CredentialInjectionMode::BasicAuth && !secret.contains(':') {
+                return Err(io::Error::other(format!(
+                    "Credential {credential_key} for basic_auth must be stored as username:password"
+                )));
+            }
             let token = session_token()?;
             let entry = Credential {
                 name: name.clone(),
@@ -119,6 +149,10 @@ impl Broker {
                 host,
                 incoming_header,
                 credential_format: format,
+                inject_mode,
+                path_pattern,
+                path_replacement,
+                query_param_name,
                 secret,
                 token: Zeroizing::new(token.clone()),
             };
@@ -131,7 +165,9 @@ impl Broker {
             session_tokens.push(BrokeredCredential {
                 name: name.clone(),
                 token_env,
-                base_env: if CredentialProvider::parse(name).is_ok() {
+                base_env: if custom_credentials.contains_key(name) {
+                    CustomCredential::base_env(name)
+                } else if CredentialProvider::parse(name).is_ok() {
                     builtin_base_env(CredentialProvider::parse(name).unwrap()).to_owned()
                 } else {
                     CustomCredential::base_env(name)
@@ -369,7 +405,7 @@ fn parse_request(
         .get(route)
         .cloned()
         .ok_or(RequestError::Invalid)?;
-    let upstream_path = format!("/{upstream_path}");
+    let mut upstream_path = Zeroizing::new(format!("/{upstream_path}"));
     let mut headers = Vec::new();
     let mut supplied_token = None;
     let mut content_length = None;
@@ -408,7 +444,11 @@ fn parse_request(
                 return Err(RequestError::Invalid);
             }
             expect_continue = true;
-        } else if name.eq_ignore_ascii_case(&credential.incoming_header) {
+        } else if matches!(
+            credential.inject_mode,
+            CredentialInjectionMode::Header | CredentialInjectionMode::BasicAuth
+        ) && name.eq_ignore_ascii_case(&credential.incoming_header)
+        {
             if supplied_token.replace(value.to_owned()).is_some() {
                 return Err(RequestError::Unauthorized);
             }
@@ -438,17 +478,87 @@ fn parse_request(
     if chunked && content_length.is_some() {
         return Err(RequestError::Invalid);
     }
-    let supplied_token = supplied_token.ok_or(RequestError::Unauthorized)?;
-    let supplied_token = extract_formatted_token(&credential.credential_format, &supplied_token)
-        .ok_or(RequestError::Unauthorized)?;
-    if !bool::from(supplied_token.as_bytes().ct_eq(credential.token.as_bytes())) {
+    let mut supplied_token = match credential.inject_mode {
+        CredentialInjectionMode::Header => {
+            let value = supplied_token.ok_or(RequestError::Unauthorized)?;
+            Zeroizing::new(
+                extract_formatted_token(&credential.credential_format, &value)
+                    .ok_or(RequestError::Unauthorized)?
+                    .as_bytes()
+                    .to_vec(),
+            )
+        }
+        CredentialInjectionMode::BasicAuth => {
+            let value = supplied_token.ok_or(RequestError::Unauthorized)?;
+            let encoded = value
+                .strip_prefix("Basic ")
+                .ok_or(RequestError::Unauthorized)?;
+            Zeroizing::new(
+                base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .map_err(|_| RequestError::Unauthorized)?,
+            )
+        }
+        CredentialInjectionMode::UrlPath => {
+            let pattern = credential
+                .path_pattern
+                .as_deref()
+                .ok_or(RequestError::Invalid)?;
+            Zeroizing::new(
+                extract_path_credential(upstream_path.as_str(), pattern)
+                    .ok_or(RequestError::Unauthorized)?
+                    .as_bytes()
+                    .to_vec(),
+            )
+        }
+        CredentialInjectionMode::QueryParam => {
+            let parameter = credential
+                .query_param_name
+                .as_deref()
+                .ok_or(RequestError::Invalid)?;
+            let token = query_credential(upstream_path.as_str(), parameter, None)?
+                .ok_or(RequestError::Unauthorized)?;
+            Zeroizing::new(token.as_bytes().to_vec())
+        }
+    };
+    if !bool::from(supplied_token.as_slice().ct_eq(credential.token.as_bytes())) {
         return Err(RequestError::Unauthorized);
     }
+    match credential.inject_mode {
+        CredentialInjectionMode::UrlPath => {
+            replace_path_credential(
+                &mut upstream_path,
+                credential
+                    .path_pattern
+                    .as_deref()
+                    .ok_or(RequestError::Invalid)?,
+                credential
+                    .path_replacement
+                    .as_deref()
+                    .or(credential.path_pattern.as_deref())
+                    .ok_or(RequestError::Invalid)?,
+                &credential.secret,
+            )?;
+        }
+        CredentialInjectionMode::QueryParam => {
+            upstream_path = query_credential(
+                upstream_path.as_str(),
+                credential
+                    .query_param_name
+                    .as_deref()
+                    .ok_or(RequestError::Invalid)?,
+                Some(credential.secret.as_str()),
+            )?
+            .ok_or(RequestError::Unauthorized)?;
+        }
+        CredentialInjectionMode::Header | CredentialInjectionMode::BasicAuth => {}
+    }
+    supplied_token.zeroize();
     if !endpoint_rules.is_empty() {
         let path = upstream_path
             .split_once('?')
             .map(|(path, _)| path)
-            .unwrap_or(&upstream_path);
+            .unwrap_or(upstream_path.as_str());
         let path = decode_path(path).ok_or(RequestError::Invalid)?;
         if !endpoint_rules
             .iter()
@@ -459,24 +569,42 @@ fn parse_request(
     }
 
     let host = credential.authority.trim_end_matches(":443");
-    let mut upstream_header = format!("{method} {upstream_path} {version}\r\nHost: {host}\r\n");
+    let mut upstream_header = format!(
+        "{method} {} {version}\r\nHost: {host}\r\n",
+        upstream_path.as_str()
+    );
     for (name, value) in headers {
         upstream_header.push_str(&name);
         upstream_header.push_str(": ");
         upstream_header.push_str(&value);
         upstream_header.push_str("\r\n");
     }
-    let (prefix, suffix) = credential.credential_format.split_once("{}").unwrap();
-    let mut injected = Zeroizing::new(String::with_capacity(
-        prefix.len() + credential.secret.len() + suffix.len(),
-    ));
-    injected.push_str(prefix);
-    injected.push_str(&credential.secret);
-    injected.push_str(suffix);
-    upstream_header.push_str(&credential.incoming_header);
-    upstream_header.push_str(": ");
-    upstream_header.push_str(&injected);
-    upstream_header.push_str("\r\n");
+    match credential.inject_mode {
+        CredentialInjectionMode::Header => {
+            let (prefix, suffix) = credential.credential_format.split_once("{}").unwrap();
+            let mut injected = Zeroizing::new(String::with_capacity(
+                prefix.len() + credential.secret.len() + suffix.len(),
+            ));
+            injected.push_str(prefix);
+            injected.push_str(&credential.secret);
+            injected.push_str(suffix);
+            upstream_header.push_str(&credential.incoming_header);
+            upstream_header.push_str(": ");
+            upstream_header.push_str(&injected);
+            upstream_header.push_str("\r\n");
+        }
+        CredentialInjectionMode::BasicAuth => {
+            let mut encoded = Zeroizing::new(
+                base64::engine::general_purpose::STANDARD.encode(credential.secret.as_bytes()),
+            );
+            upstream_header.push_str(&credential.incoming_header);
+            upstream_header.push_str(": Basic ");
+            upstream_header.push_str(&encoded);
+            upstream_header.push_str("\r\n");
+            encoded.zeroize();
+        }
+        CredentialInjectionMode::UrlPath | CredentialInjectionMode::QueryParam => {}
+    }
     upstream_header.push_str("Connection: close\r\n\r\n");
     let server_name =
         ServerName::try_from(credential.host.clone()).map_err(|_| RequestError::Invalid)?;
@@ -494,6 +622,110 @@ fn extract_formatted_token<'a>(format: &str, value: &'a str) -> Option<&'a str> 
     let (prefix, suffix) = format.split_once("{}")?;
     let token = value.strip_prefix(prefix)?.strip_suffix(suffix)?;
     (!token.is_empty()).then_some(token)
+}
+
+fn extract_path_credential<'a>(path: &'a str, pattern: &str) -> Option<&'a str> {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    let (prefix, suffix) = pattern.split_once("{}")?;
+    let after_prefix = path.strip_prefix(prefix)?;
+    let token_end = if suffix.is_empty() {
+        after_prefix.len()
+    } else {
+        after_prefix.find(suffix)?
+    };
+    (token_end > 0).then_some(&after_prefix[..token_end])
+}
+
+fn replace_path_credential(
+    path: &mut Zeroizing<String>,
+    pattern: &str,
+    replacement: &str,
+    secret: &str,
+) -> Result<(), RequestError> {
+    let (path_only, query) = path
+        .as_str()
+        .split_once('?')
+        .map_or((path.as_str(), None), |(path, query)| (path, Some(query)));
+    let (pattern_prefix, pattern_suffix) = pattern.split_once("{}").ok_or(RequestError::Invalid)?;
+    let (replacement_prefix, replacement_suffix) =
+        replacement.split_once("{}").ok_or(RequestError::Invalid)?;
+    let after_prefix = path_only
+        .strip_prefix(pattern_prefix)
+        .ok_or(RequestError::Unauthorized)?;
+    let token_end = if pattern_suffix.is_empty() {
+        after_prefix.len()
+    } else {
+        after_prefix
+            .find(pattern_suffix)
+            .ok_or(RequestError::Unauthorized)?
+    };
+    if token_end == 0 {
+        return Err(RequestError::Unauthorized);
+    }
+    let tail_start = token_end + pattern_suffix.len();
+    let encoded = Zeroizing::new(encode_path_segment(secret));
+    let mut rewritten = Zeroizing::new(String::with_capacity(path.len() + encoded.len()));
+    rewritten.push_str(replacement_prefix);
+    rewritten.push_str(&encoded);
+    rewritten.push_str(replacement_suffix);
+    rewritten.push_str(&after_prefix[tail_start..]);
+    if let Some(query) = query {
+        rewritten.push('?');
+        rewritten.push_str(query);
+    }
+    *path = rewritten;
+    Ok(())
+}
+
+fn query_credential(
+    target: &str,
+    parameter: &str,
+    replacement: Option<&str>,
+) -> Result<Option<Zeroizing<String>>, RequestError> {
+    let (path, query) = target.split_once('?').ok_or(RequestError::Unauthorized)?;
+    let mut found = None;
+    let mut matches = 0;
+    let mut rewritten = Vec::new();
+    for item in query.split('&') {
+        let mut pair = form_urlencoded::parse(item.as_bytes());
+        let Some((key, value)) = pair.next() else {
+            return Err(RequestError::Invalid);
+        };
+        if key == parameter {
+            matches += 1;
+            if matches > 1 {
+                return Err(RequestError::Unauthorized);
+            }
+            if let Some(secret) = replacement {
+                let encoded = Zeroizing::new(
+                    form_urlencoded::byte_serialize(secret.as_bytes()).collect::<String>(),
+                );
+                let raw_key = item.split_once('=').map_or(item, |(key, _)| key);
+                rewritten.push(format!("{raw_key}={encoded}"));
+            } else {
+                found = Some(value.into_owned());
+                rewritten.push(item.to_owned());
+            }
+        } else {
+            rewritten.push(item.to_owned());
+        }
+    }
+    if let Some(secret) = replacement {
+        if matches != 1 {
+            return Err(RequestError::Unauthorized);
+        }
+        Ok(Some(Zeroizing::new(format!(
+            "{path}?{}",
+            rewritten.join("&")
+        ))))
+    } else {
+        let token = found.filter(|token| !token.is_empty()).map(Zeroizing::new);
+        Ok(token)
+    }
+}
+
+fn encode_path_segment(value: &str) -> String {
+    form_urlencoded::byte_serialize(value.as_bytes()).collect()
 }
 
 fn decode_path(path: &str) -> Option<String> {
@@ -634,6 +866,10 @@ mod tests {
                 host: provider.host().trim_end_matches(":443").to_owned(),
                 incoming_header: builtin_route(provider).1.to_owned(),
                 credential_format: builtin_route(provider).2.to_owned(),
+                inject_mode: CredentialInjectionMode::Header,
+                path_pattern: None,
+                path_replacement: None,
+                query_param_name: None,
                 secret: Zeroizing::new("real-secret".to_owned()),
                 token: Zeroizing::new("session-token".to_owned()),
             }),
@@ -650,6 +886,34 @@ mod tests {
                 incoming_header: "X-API-Key".to_owned(),
                 credential_format: "Key {}".to_owned(),
                 secret: Zeroizing::new("real-secret".to_owned()),
+                token: Zeroizing::new("session-token".to_owned()),
+            }),
+        )])
+    }
+
+    fn custom_mode_credential(
+        name: &str,
+        mode: CredentialInjectionMode,
+        secret: &str,
+        header: &str,
+        format: &str,
+        path_pattern: Option<&str>,
+        path_replacement: Option<&str>,
+        query_param_name: Option<&str>,
+    ) -> HashMap<String, Arc<Credential>> {
+        HashMap::from([(
+            name.to_owned(),
+            Arc::new(Credential {
+                name: name.to_owned(),
+                authority: "api.example.com:443".to_owned(),
+                host: "api.example.com".to_owned(),
+                incoming_header: header.to_owned(),
+                credential_format: format.to_owned(),
+                inject_mode: mode,
+                path_pattern: path_pattern.map(str::to_owned),
+                path_replacement: path_replacement.map(str::to_owned),
+                query_param_name: query_param_name.map(str::to_owned),
+                secret: Zeroizing::new(secret.to_owned()),
                 token: Zeroizing::new("session-token".to_owned()),
             }),
         )])
@@ -771,6 +1035,98 @@ mod tests {
             &rules,
         );
         assert!(matches!(denied, Err(RequestError::Forbidden)));
+    }
+
+    #[test]
+    fn custom_url_path_credential_is_checked_then_replaced() {
+        let request = parse_request(
+            b"POST /telegram/v1/botwrong/send HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
+            &custom_mode_credential(
+                "telegram",
+                CredentialInjectionMode::UrlPath,
+                "123456:secret",
+                "Authorization",
+                "Bearer {}",
+                Some("/v1/bot{}/"),
+                None,
+                None,
+            ),
+            &[],
+        );
+        assert!(matches!(request, Err(RequestError::Unauthorized)));
+
+        let request = parse_request(
+            b"POST /telegram/v1/botsession-token/send HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
+            &custom_mode_credential(
+                "telegram",
+                CredentialInjectionMode::UrlPath,
+                "123456:secret",
+                "Authorization",
+                "Bearer {}",
+                Some("/v1/bot{}/"),
+                None,
+                None,
+            ),
+            &[],
+        )
+        .unwrap();
+        assert!(
+            request
+                .upstream_header
+                .contains("/v1/bot123456%3Asecret/send")
+        );
+        assert!(!request.upstream_header.contains("session-token"));
+    }
+
+    #[test]
+    fn custom_query_credential_is_checked_and_url_encoded() {
+        let request = parse_request(
+            b"GET /maps/v1/places?key=session-token&address=1%20Main HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
+            &custom_mode_credential(
+                "maps",
+                CredentialInjectionMode::QueryParam,
+                "a+b&c",
+                "Authorization",
+                "Bearer {}",
+                None,
+                None,
+                Some("key"),
+            ),
+            &[],
+        )
+        .unwrap();
+        assert!(
+            request
+                .upstream_header
+                .contains("/v1/places?key=a%2Bb%26c&address=1%20Main")
+        );
+        assert!(!request.upstream_header.contains("session-token"));
+    }
+
+    #[test]
+    fn custom_basic_auth_replaces_encoded_phantom_token() {
+        let phantom = base64::engine::general_purpose::STANDARD.encode("session-token");
+        let request = parse_request(
+            format!("GET /private/resource HTTP/1.1\r\nAuthorization: Basic {phantom}\r\nHost: 127.0.0.1\r\n\r\n").as_bytes(),
+            &custom_mode_credential(
+                "private",
+                CredentialInjectionMode::BasicAuth,
+                "user:password",
+                "Authorization",
+                "",
+                None,
+                None,
+                None,
+            ),
+            &[],
+        )
+        .unwrap();
+        assert!(
+            request
+                .upstream_header
+                .contains("Authorization: Basic dXNlcjpwYXNzd29yZA==\r\n")
+        );
+        assert!(!request.upstream_header.contains(&phantom));
     }
 
     #[test]

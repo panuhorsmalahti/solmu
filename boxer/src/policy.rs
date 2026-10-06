@@ -205,10 +205,28 @@ pub struct CustomCredential {
     pub credential_key: String,
     #[serde(default)]
     pub env_var: Option<String>,
+    #[serde(default)]
+    pub inject_mode: CredentialInjectionMode,
     #[serde(default = "default_credential_header")]
     pub inject_header: String,
     #[serde(default = "default_credential_format")]
     pub credential_format: String,
+    #[serde(default)]
+    pub path_pattern: Option<String>,
+    #[serde(default)]
+    pub path_replacement: Option<String>,
+    #[serde(default)]
+    pub query_param_name: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialInjectionMode {
+    #[default]
+    Header,
+    UrlPath,
+    QueryParam,
+    BasicAuth,
 }
 
 fn default_credential_header() -> String {
@@ -235,13 +253,7 @@ fn validate_credential_name(name: &str) -> io::Result<()> {
 }
 
 fn validate_custom_credential_name(name: &str) -> io::Result<()> {
-    validate_credential_name(name)?;
-    if CredentialProvider::parse(name).is_ok() {
-        return Err(io::Error::other(
-            "Custom credential routes cannot replace built-in providers",
-        ));
-    }
-    Ok(())
+    validate_credential_name(name)
 }
 
 impl CustomCredential {
@@ -274,6 +286,11 @@ impl CustomCredential {
                 "Invalid base URL environment name for custom route {name}"
             )));
         }
+        if token_env.eq_ignore_ascii_case(&base_env) {
+            return Err(io::Error::other(format!(
+                "Phantom-token and base URL variables collide for custom route {name}"
+            )));
+        }
         if !http_token(&self.inject_header)
             || [
                 "host",
@@ -295,15 +312,43 @@ impl CustomCredential {
                 "Invalid credential injection header for custom route {name}"
             )));
         }
-        if self.credential_format.matches("{}").count() != 1
-            || self
-                .credential_format
-                .chars()
-                .any(|character| character.is_ascii_control())
+        if self.inject_mode == CredentialInjectionMode::Header
+            && (self.credential_format.matches("{}").count() != 1
+                || self
+                    .credential_format
+                    .chars()
+                    .any(|character| character.is_ascii_control()))
         {
             return Err(io::Error::other(format!(
                 "Credential format for custom route {name} must contain one {{}} placeholder"
             )));
+        }
+        match self.inject_mode {
+            CredentialInjectionMode::Header | CredentialInjectionMode::BasicAuth => {}
+            CredentialInjectionMode::UrlPath => {
+                let pattern = self.path_pattern.as_deref().ok_or_else(|| {
+                    io::Error::other(format!("Custom route {name} requires path_pattern"))
+                })?;
+                validate_path_template(pattern, name, "path_pattern")?;
+                if let Some(replacement) = &self.path_replacement {
+                    validate_path_template(replacement, name, "path_replacement")?;
+                }
+            }
+            CredentialInjectionMode::QueryParam => {
+                let parameter = self.query_param_name.as_deref().ok_or_else(|| {
+                    io::Error::other(format!("Custom route {name} requires query_param_name"))
+                })?;
+                if parameter.is_empty()
+                    || parameter.len() > 128
+                    || parameter.bytes().any(|byte| {
+                        byte.is_ascii_control() || matches!(byte, b'&' | b'=' | b'#' | b'%')
+                    })
+                {
+                    return Err(io::Error::other(format!(
+                        "Invalid query_param_name for custom route {name}"
+                    )));
+                }
+            }
         }
         let upstream = url::Url::parse(&self.upstream).map_err(|_| {
             io::Error::other(format!("Invalid upstream URL for custom route {name}"))
@@ -329,6 +374,24 @@ impl CustomCredential {
     }
 }
 
+fn validate_path_template(value: &str, name: &str, field: &str) -> io::Result<()> {
+    if value.matches("{}").count() != 1
+        || !value.starts_with('/')
+        || value.starts_with("//")
+        || value.chars().any(|character| {
+            matches!(character, '?' | '#' | '%' | '\\') || character.is_ascii_control()
+        })
+        || value
+            .split('/')
+            .any(|segment| matches!(segment, "." | ".."))
+    {
+        return Err(io::Error::other(format!(
+            "Custom route {name} has an invalid {field} template"
+        )));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod custom_credential_tests {
     use super::*;
@@ -338,8 +401,12 @@ mod custom_credential_tests {
             upstream: "https://api.example.com/v1".to_owned(),
             credential_key: "EXAMPLE_API_KEY".to_owned(),
             env_var: None,
+            inject_mode: CredentialInjectionMode::Header,
             inject_header: "Authorization".to_owned(),
             credential_format: "Bearer {}".to_owned(),
+            path_pattern: None,
+            path_replacement: None,
+            query_param_name: None,
         }
     }
 
@@ -371,6 +438,29 @@ mod custom_credential_tests {
         custom = sample();
         custom.upstream = "https://user:secret@api.example.com".to_owned();
         assert!(custom.validate("example_api").is_err());
+    }
+
+    #[test]
+    fn custom_routes_validate_path_query_and_basic_injection_modes() {
+        let mut custom = sample();
+        custom.inject_mode = CredentialInjectionMode::UrlPath;
+        assert!(custom.validate("example_api").is_err());
+        custom.path_pattern = Some("/bot{}/".to_owned());
+        assert!(custom.validate("example_api").is_ok());
+        custom.path_replacement = Some("/v2/bot{}/".to_owned());
+        assert!(custom.validate("example_api").is_ok());
+        custom.path_replacement = Some("/v2/../bot{}/".to_owned());
+        assert!(custom.validate("example_api").is_err());
+
+        custom = sample();
+        custom.inject_mode = CredentialInjectionMode::QueryParam;
+        assert!(custom.validate("example_api").is_err());
+        custom.query_param_name = Some("key".to_owned());
+        assert!(custom.validate("example_api").is_ok());
+
+        custom = sample();
+        custom.inject_mode = CredentialInjectionMode::BasicAuth;
+        assert!(custom.validate("example_api").is_ok());
     }
 }
 
@@ -432,6 +522,16 @@ impl CredentialProvider {
             Self::Gemini => "GEMINI_API_KEY",
             Self::Github => "GITHUB_TOKEN",
             Self::Gitlab => "GITLAB_TOKEN",
+        }
+    }
+
+    pub fn base_env(self) -> &'static str {
+        match self {
+            Self::Openai => "OPENAI_BASE_URL",
+            Self::Anthropic => "ANTHROPIC_BASE_URL",
+            Self::Gemini => "GEMINI_BASE_URL",
+            Self::Github => "GITHUB_API_URL",
+            Self::Gitlab => "GITLAB_API_URL",
         }
     }
 
@@ -681,6 +781,7 @@ impl Policy {
                 ));
             }
             let mut providers = std::collections::HashSet::new();
+            let mut route_environment = std::collections::HashSet::new();
             for name in &self.credentials {
                 validate_credential_name(name)?;
                 if !providers.insert(name) {
@@ -688,35 +789,42 @@ impl Policy {
                         "A credential provider was specified more than once",
                     ));
                 }
-                if let Ok(provider) = CredentialProvider::parse(name) {
-                    if self
-                        .env_credentials
-                        .iter()
-                        .any(|env| env.eq_ignore_ascii_case(provider.key_env()))
-                    {
-                        return Err(io::Error::other(format!(
-                            "Use either --credential or --env-credential for {}",
-                            provider.key_env()
-                        )));
-                    }
-                    self.hosts.push(provider.host().to_owned());
-                } else if let Some(custom) = self.custom_credentials.get(name) {
-                    let token_env = custom.token_env(name);
-                    if self
-                        .env_credentials
-                        .iter()
-                        .any(|env| env.eq_ignore_ascii_case(&token_env))
-                    {
-                        return Err(io::Error::other(format!(
-                            "Use either --credential {name} or --env-credential for {token_env}"
-                        )));
-                    }
-                    self.hosts.push(custom.validate(name)?);
+                let (token_env, base_env, host) = if let Some(custom) =
+                    self.custom_credentials.get(name)
+                {
+                    (
+                        custom.token_env(name),
+                        CustomCredential::base_env(name),
+                        custom.validate(name)?,
+                    )
+                } else if let Ok(provider) = CredentialProvider::parse(name) {
+                    (
+                        provider.key_env().to_owned(),
+                        provider.base_env().to_owned(),
+                        provider.host().to_owned(),
+                    )
                 } else {
                     return Err(io::Error::other(format!(
                         "Unknown credential route {name}; add a custom_credentials definition or choose a built-in route"
                     )));
+                };
+                for variable in [&token_env, &base_env] {
+                    if self
+                        .env_credentials
+                        .iter()
+                        .any(|env| env.eq_ignore_ascii_case(variable))
+                    {
+                        return Err(io::Error::other(format!(
+                            "Credential route {name} conflicts with --env-credential {variable}"
+                        )));
+                    }
+                    if !route_environment.insert(variable.to_ascii_uppercase()) {
+                        return Err(io::Error::other(format!(
+                            "Credential routes have conflicting environment variable {variable}"
+                        )));
+                    }
                 }
+                self.hosts.push(host);
             }
             if self.solmu && self.credentials.len() != 1 {
                 return Err(io::Error::other(
@@ -922,10 +1030,10 @@ impl Policy {
             }
         }
         for name in &self.credentials {
-            if let Ok(provider) = CredentialProvider::parse(name) {
-                command.env_remove(provider.key_env());
-            } else if let Some(custom) = self.custom_credentials.get(name) {
+            if let Some(custom) = self.custom_credentials.get(name) {
                 command.env_remove(custom.token_env(name));
+            } else if let Ok(provider) = CredentialProvider::parse(name) {
+                command.env_remove(provider.key_env());
             }
         }
         if self.solmu {

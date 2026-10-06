@@ -89,7 +89,7 @@ fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
             "version": 1,
             "mode": "isolated",
             "network": "proxy",
-            "credentials": ["example_api"],
+            "credentials": ["example_api", "telegram", "maps", "private_api", "openai"],
             "custom_credentials": {
                 "example_api": {
                     "upstream": "https://api.example.com/v1",
@@ -97,10 +97,39 @@ fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
                     "env_var": "EXAMPLE_API_KEY",
                     "inject_header": "X-API-Key",
                     "credential_format": "Key {}"
+                },
+                "telegram": {
+                    "upstream": "https://api.example.com",
+                    "credential_key": "TELEGRAM_TOKEN",
+                    "inject_mode": "url_path",
+                    "path_pattern": "/bot{}/",
+                    "path_replacement": "/bot{}/"
+                },
+                "maps": {
+                    "upstream": "https://maps.example.com",
+                    "credential_key": "MAPS_TOKEN",
+                    "inject_mode": "query_param",
+                    "query_param_name": "key"
+                },
+                "private_api": {
+                    "upstream": "https://private.example.com",
+                    "credential_key": "PRIVATE_API_TOKEN",
+                    "inject_mode": "basic_auth"
+                },
+                "openai": {
+                    "upstream": "https://openai-proxy.example.com/v1",
+                    "credential_key": "OPENAI_PROXY_API_KEY",
+                    "env_var": "OPENAI_API_KEY",
+                    "inject_header": "Authorization",
+                    "credential_format": "Bearer {}"
                 }
             },
             "endpoint_rules": [
-                {"provider": "example_api", "method": "GET", "path": "/v1/**"}
+                {"provider": "example_api", "method": "GET", "path": "/v1/**"},
+                {"provider": "telegram", "method": "POST", "path": "/**"},
+                {"provider": "maps", "method": "GET", "path": "/places/**"},
+                {"provider": "private_api", "method": "GET", "path": "/resource"},
+                {"provider": "openai", "method": "POST", "path": "/v1/**"}
             ]
         }"#,
     )
@@ -121,6 +150,7 @@ fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
     );
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["policy"]["credentials"][0], "example_api");
+    assert_eq!(result["policy"]["credentials"].as_array().unwrap().len(), 5);
     assert_eq!(
         result["policy"]["custom_credentials"]["example_api"]["inject_header"],
         "X-API-Key"
@@ -135,6 +165,20 @@ fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
             .unwrap()
             .iter()
             .any(|host| host == "api.example.com:443")
+    );
+    assert!(
+        result["policy"]["hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|host| host == "openai-proxy.example.com:443")
+    );
+    assert!(
+        !result["policy"]["hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|host| host == "api.openai.com:443")
     );
     assert!(!String::from_utf8_lossy(&output.stdout).contains("real-secret-fixture"));
 }

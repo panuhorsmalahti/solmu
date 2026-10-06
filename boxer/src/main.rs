@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::{ffi::OsString, io, process::Command};
 mod check;
 mod credential;

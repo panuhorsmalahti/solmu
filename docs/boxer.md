@@ -180,8 +180,13 @@ boxer --policy boxer-policy.json --cwd /path/to/project -- solmu
 The route’s upstream host is added to the network policy. By default, Boxer
 sets `SEARCH_API_KEY` in the child to a session-only token and sets
 `SEARCH_API_BASE_URL` to the local proxy route. The real key is injected using
-the configured header and format. Custom routes currently support HTTPS header
-injection; endpoint rules can limit their allowed methods and paths.
+the configured header and format. Custom routes support header injection,
+URL-path replacement, query-parameter replacement, and Basic authentication.
+For path and query modes, the request must include the session token from the
+route’s environment variable in the configured placeholder. Basic authentication
+stores the real value as `username:password`; the client sends the Base64 form of
+the session token in its Basic auth field, and Boxer substitutes the stored pair.
+Endpoint rules can limit a route to selected methods and paths.
 
 By default, the broker allows any API path on the selected provider. Add one or
 more `--allow-endpoint PROVIDER:METHOD:PATH` options to limit it to specific
@@ -443,8 +448,12 @@ The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`,
 `credentials`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
 `custom_credentials`, and `cgroup_root`. Custom credential definitions provide
-an HTTPS `upstream` and a `credential_key`; `env_var`, `inject_header`, and
-`credential_format` are optional. Endpoint rules have
+an HTTPS `upstream` and a `credential_key`; `env_var`, `inject_mode`,
+`inject_header`, `credential_format`, `path_pattern`, `path_replacement`, and
+`query_param_name` are optional, depending on the selected injection mode.
+Custom credential definitions can use a built-in provider name to replace its
+default upstream and authentication settings.
+Endpoint rules have
 `provider`, `method`, and `path` fields and require a matching entry in
 `credentials`. Built-in proxy routes are `openai`, `anthropic`, `gemini`,
 `github`, and `gitlab`; custom routes use lowercase names with underscores.
