@@ -217,7 +217,9 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
         }
 
         while let Ok((mut control, _)) = control_listener.accept() {
-            control.set_read_timeout(Some(Duration::from_millis(200)))?;
+            // Read timeouts are not supported consistently for local sockets
+            // across Unix platforms; the control message is a single small write.
+            let _ = control.set_read_timeout(Some(Duration::from_millis(200)));
             let mut message = [0; 5];
             if control.read_exact(&mut message).is_ok() {
                 match message[0] {
