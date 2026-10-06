@@ -224,14 +224,14 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
                     b'R' => {
                         let rows = u16::from_be_bytes([message[1], message[2]]).max(1);
                         let cols = u16::from_be_bytes([message[3], message[4]]).max(1);
-                        pair.master
-                            .resize(PtySize {
-                                rows,
-                                cols,
-                                pixel_width: 0,
-                                pixel_height: 0,
-                            })
-                            .map_err(io::Error::other)?;
+                        // PTY resize support varies by platform. A rejected size
+                        // update must not terminate an otherwise healthy session.
+                        let _ = pair.master.resize(PtySize {
+                            rows,
+                            cols,
+                            pixel_width: 0,
+                            pixel_height: 0,
+                        });
                     }
                     b'D' => {
                         active = None;
