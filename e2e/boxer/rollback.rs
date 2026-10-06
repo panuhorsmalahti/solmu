@@ -81,6 +81,8 @@ fn rollback_snapshots_sessions_lists_diffs_and_restores_workspace() {
     assert!(diff.contains("modified\tmodified.txt"));
     assert!(diff.contains("added\tcreated.txt"));
     assert!(diff.contains("deleted\tdeleted.txt"));
+    assert!(diff.contains("-before session"));
+    assert!(diff.contains("+Solmu sandbox write allowed"));
 
     let preview = rollback_command(root.path(), &["restore", &id, "--dry-run"]);
     assert!(preview.status.success());

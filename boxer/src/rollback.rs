@@ -797,10 +797,104 @@ fn show(id: &str, print_diff: bool) -> io::Result<i32> {
     println!("Paths changed: {}", changes.len());
     if print_diff {
         for (kind, path) in changes {
-            println!("{kind}\t{}", display_path(&path));
+            let path_text = display_path(&path);
+            println!("{kind}\t{path_text}");
+            print_file_diff(&store, &session.before, after, &path, &path_text)?;
         }
     }
     Ok(0)
+}
+
+fn print_file_diff(
+    store: &Path,
+    before: &Snapshot,
+    after: &Snapshot,
+    relative: &Path,
+    display: &str,
+) -> io::Result<()> {
+    let key = encode_path(relative);
+    let content = |snapshot: &Snapshot| -> io::Result<Option<Vec<u8>>> {
+        let Some(Entry::File { hash, .. }) = snapshot.entries.get(&key) else {
+            return Ok(None);
+        };
+        if !valid_hash(hash) {
+            return Err(io::Error::other(
+                "Rollback snapshot contains an invalid content hash",
+            ));
+        }
+        let bytes = fs::read(store.join("blobs").join(hash))?;
+        if bytes.len() > 1_048_576 {
+            return Ok(None);
+        }
+        Ok(Some(bytes))
+    };
+    let old_file = matches!(before.entries.get(&key), Some(Entry::File { .. }));
+    let new_file = matches!(after.entries.get(&key), Some(Entry::File { .. }));
+    let old = content(before)?;
+    let new = content(after)?;
+    if old == new && old_file == new_file {
+        return Ok(());
+    }
+    let decode = |is_file: bool, bytes: Option<Vec<u8>>| -> Option<Vec<String>> {
+        if !is_file {
+            return Some(Vec::new());
+        }
+        let text = String::from_utf8(bytes?).ok()?;
+        if text.contains('\0') {
+            return None;
+        }
+        let lines = text.lines().map(str::to_owned).collect::<Vec<_>>();
+        (lines.len() <= 1000 && lines.iter().all(|line| line.len() <= 4096)).then_some(lines)
+    };
+    let (Some(old_lines), Some(new_lines)) = (decode(old_file, old), decode(new_file, new)) else {
+        println!("  (binary or oversized content; line diff omitted)");
+        return Ok(());
+    };
+    if old_lines.is_empty() && new_lines.is_empty() {
+        return Ok(());
+    }
+    let width = new_lines.len() + 1;
+    let cells = (old_lines.len() + 1).saturating_mul(width);
+    if cells > 1_000_000 {
+        println!("  (large diff; line diff omitted)");
+        return Ok(());
+    }
+    let mut lcs = vec![0u32; cells];
+    for old_index in (0..old_lines.len()).rev() {
+        for new_index in (0..new_lines.len()).rev() {
+            let index = old_index * width + new_index;
+            lcs[index] = if old_lines[old_index] == new_lines[new_index] {
+                lcs[(old_index + 1) * width + new_index + 1] + 1
+            } else {
+                lcs[(old_index + 1) * width + new_index].max(lcs[old_index * width + new_index + 1])
+            };
+        }
+    }
+    println!("--- a/{display}");
+    println!("+++ b/{display}");
+    println!("@@ -1,{} +1,{} @@", old_lines.len(), new_lines.len());
+    let (mut old_index, mut new_index) = (0, 0);
+    while old_index < old_lines.len() || new_index < new_lines.len() {
+        if old_index < old_lines.len()
+            && new_index < new_lines.len()
+            && old_lines[old_index] == new_lines[new_index]
+        {
+            println!(" {}", old_lines[old_index]);
+            old_index += 1;
+            new_index += 1;
+        } else if old_index < old_lines.len()
+            && (new_index == new_lines.len()
+                || lcs[(old_index + 1) * width + new_index]
+                    >= lcs[old_index * width + new_index + 1])
+        {
+            println!("-{}", old_lines[old_index]);
+            old_index += 1;
+        } else {
+            println!("+{}", new_lines[new_index]);
+            new_index += 1;
+        }
+    }
+    Ok(())
 }
 
 fn changes(before: &Snapshot, after: &Snapshot) -> io::Result<Vec<(&'static str, PathBuf)>> {

@@ -573,6 +573,10 @@ boxer rollback cleanup --keep 10 --dry-run
 boxer rollback cleanup --older-than 30 --keep 10
 ```
 
+`boxer rollback show <session-id> --diff` prints line-level changes for small
+UTF-8 text files. Binary and oversized files are listed without printing their
+contents.
+
 When both limits are set, sessions older than the age limit or beyond the
 newest-session limit are removed. Shared content objects remain while any
 retained session references them. Cleanup permanently removes selected session
