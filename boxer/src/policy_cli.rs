@@ -184,7 +184,8 @@ Network
 
 Credentials and endpoints
   `credentials` selects built-in credential routes. `custom_credentials` maps
-  route names to HTTPS upstreams and injection settings. `endpoint_rules`
+  route names to HTTPS upstreams and injection settings. `credential_capture`
+  maps `cmd://NAME` sources to trusted host commands. `endpoint_rules`
   restricts a route by provider, HTTP method, and path; each provider must also
   appear in `credentials`. Never put secret values in a policy file.
 
@@ -262,6 +263,7 @@ fn schema_value() -> Value {
             }},
             "env_credentials": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
             "env_credential_map": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
+            "credential_capture": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,63}$"}, "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["command"], "properties": {"command": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 4096}}, "timeout_secs": {"type": "integer", "minimum": 1, "maximum": 60}}}},
             "runtime_groups": {"type": "array", "uniqueItems": true, "items": {"enum": ["node", "python", "rust", "go"]}},
             "credentials": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}},
             "custom_credentials": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,63}$"}, "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["upstream", "credential_key"], "properties": {"upstream": {"type": "string", "format": "uri"}, "credential_key": {"type": "string"}, "env_var": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}, "inject_mode": {"enum": ["header", "url_path", "query_param", "basic_auth"]}, "inject_header": {"type": "string"}, "credential_format": {"type": "string"}, "path_pattern": {"type": "string"}, "path_replacement": {"type": "string"}, "query_param_name": {"type": "string"}}}},
@@ -380,6 +382,7 @@ fn scaffold(extends: Vec<OsString>, full: bool) -> Value {
             ("runtime_groups", json!([])),
             ("credentials", json!([])),
             ("custom_credentials", json!({})),
+            ("credential_capture", json!({})),
             ("endpoint_rules", json!([])),
         ] {
             object.insert(key.into(), value);

@@ -3,7 +3,9 @@ use std::{
     ffi::OsString,
     fs::File,
     io::{self, Read},
-    process::Command,
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -56,7 +58,15 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
     }
 }
 
+#[cfg(test)]
 pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
+    load_with_captures(names, &std::collections::BTreeMap::new())
+}
+
+pub fn load_with_captures(
+    names: &[String],
+    captures: &std::collections::BTreeMap<String, crate::policy::CredentialCapture>,
+) -> io::Result<Vec<(String, Zeroizing<String>)>> {
     load_with(names, |name| {
         if let Some(variable) = environment_reference(name) {
             return std::env::var(variable).map_err(|_| {
@@ -74,6 +84,12 @@ pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
         if let Some((item, field)) = bitwarden_reference(name) {
             return read_bitwarden(&item, field.as_deref());
         }
+        if let Some(capture_name) = command_reference(name) {
+            let capture = captures.get(capture_name).ok_or_else(|| {
+                io::Error::other(format!("Credential source {name} is not configured"))
+            })?;
+            return run_capture(capture);
+        }
         if name.starts_with("op://") {
             return read_onepassword(name);
         }
@@ -88,6 +104,107 @@ pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
             Err(_) => Err(store_error(name, "read")),
         }
     })
+}
+
+pub fn command_reference(value: &str) -> Option<&str> {
+    let name = value.strip_prefix("cmd://")?;
+    if name.is_empty()
+        || name.len() > 64
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        || !name.as_bytes()[0].is_ascii_lowercase()
+    {
+        return None;
+    }
+    Some(name)
+}
+
+fn run_capture(capture: &crate::policy::CredentialCapture) -> io::Result<String> {
+    let mut arguments = capture.command.iter();
+    let executable = arguments
+        .next()
+        .ok_or_else(|| io::Error::other("Credential capture command is empty"))?;
+    let mut child = Command::new(executable)
+        .args(arguments)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| io::Error::other("Could not start the credential capture command"))?;
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("Could not capture command output"))?;
+    let reader = thread::spawn(move || {
+        let mut output = Zeroizing::new(Vec::new());
+        let mut buffer = [0u8; 4096];
+        let mut too_large = false;
+        loop {
+            match stdout.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(count) => {
+                    if output.len() + count <= 1024 * 1024 {
+                        output.extend_from_slice(&buffer[..count]);
+                    } else {
+                        too_large = true;
+                    }
+                    buffer[..count].zeroize();
+                }
+                Err(_) => return (output, true),
+            }
+        }
+        (output, too_large)
+    });
+    let deadline = Instant::now() + Duration::from_secs(capture.timeout_secs);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                if let Ok((mut output, _)) = reader.join() {
+                    output.zeroize();
+                }
+                return Err(io::Error::other("Credential capture command timed out"));
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                if let Ok((mut output, _)) = reader.join() {
+                    output.zeroize();
+                }
+                return Err(io::Error::other(
+                    "Could not wait for credential capture command",
+                ));
+            }
+        }
+    };
+    let (mut output, too_large) = reader
+        .join()
+        .map_err(|_| io::Error::other("Credential capture command failed"))?;
+    if !status.success() {
+        output.zeroize();
+        return Err(io::Error::other("Credential capture command failed"));
+    }
+    if too_large {
+        output.zeroize();
+        return Err(io::Error::other("Credential capture output exceeds 1 MiB"));
+    }
+    while matches!(output.last(), Some(b'\n' | b'\r')) {
+        output.pop();
+    }
+    match String::from_utf8(std::mem::take(&mut *output)) {
+        Ok(secret) => Ok(secret),
+        Err(error) => {
+            let mut bytes = error.into_bytes();
+            bytes.zeroize();
+            Err(io::Error::other(
+                "Credential capture output is not valid UTF-8",
+            ))
+        }
+    }
 }
 
 pub fn is_onepassword_reference(value: &str) -> bool {
@@ -116,6 +233,7 @@ pub fn valid_source_key(value: &str) -> bool {
         || is_file_reference(value)
         || keyring_reference(value).is_some()
         || bitwarden_reference(value).is_some()
+        || command_reference(value).is_some()
         || is_onepassword_reference(value)
         || is_apple_password_reference(value)
 }
@@ -699,6 +817,10 @@ mod tests {
         );
         for invalid in ["bw://", "bw://item/", "bw://item/a/b", "bw://item?field=x"] {
             assert!(bitwarden_reference(invalid).is_none(), "accepted {invalid}");
+        }
+        assert_eq!(command_reference("cmd://github"), Some("github"));
+        for invalid in ["cmd://", "cmd://UPPER", "cmd://one/two", "cmd://9start"] {
+            assert!(command_reference(invalid).is_none(), "accepted {invalid}");
         }
     }
 }

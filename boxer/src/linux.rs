@@ -279,6 +279,7 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
                 upstream_bypass: &policy.upstream_bypass,
                 denied_hosts: &policy.deny_hosts,
                 reserved_ports: &reserved_ports,
+                credential_capture: &policy.credential_capture,
             },
         )?;
         let port = broker.port();

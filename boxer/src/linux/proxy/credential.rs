@@ -1,7 +1,10 @@
 use crate::{
     credential,
     network::{Target, UpstreamProxy},
-    policy::{CredentialInjectionMode, CredentialProvider, CustomCredential, EndpointRule},
+    policy::{
+        CredentialCapture, CredentialInjectionMode, CredentialProvider, CustomCredential,
+        EndpointRule,
+    },
 };
 use base64::Engine;
 use ring::rand::{SecureRandom, SystemRandom};
@@ -61,6 +64,7 @@ pub struct BrokerOptions<'a> {
     pub upstream_bypass: &'a [String],
     pub denied_hosts: &'a [String],
     pub reserved_ports: &'a [u16],
+    pub credential_capture: &'a BTreeMap<String, CredentialCapture>,
 }
 
 impl Broker {
@@ -75,6 +79,7 @@ impl Broker {
             upstream_bypass,
             denied_hosts,
             reserved_ports,
+            credential_capture,
         } = options;
         let mut credentials = HashMap::new();
         let mut session_tokens = Vec::new();
@@ -140,9 +145,12 @@ impl Broker {
                     "Credential route {name} uses a domain denied by the network policy"
                 )));
             }
-            let (_, secret) = credential::load(std::slice::from_ref(&credential_key))?
-                .pop()
-                .ok_or_else(|| io::Error::other("Credential store returned no value"))?;
+            let (_, secret) = credential::load_with_captures(
+                std::slice::from_ref(&credential_key),
+                credential_capture,
+            )?
+            .pop()
+            .ok_or_else(|| io::Error::other("Credential store returned no value"))?;
             if secret.bytes().any(|byte| byte.is_ascii_control()) {
                 return Err(io::Error::other(format!(
                     "Credential {credential_key} contains unsupported control characters"
@@ -938,6 +946,7 @@ mod tests {
                 upstream_bypass: &[],
                 denied_hosts: &[],
                 reserved_ports: &[],
+                credential_capture: &BTreeMap::new(),
             },
         )
         .unwrap();

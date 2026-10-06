@@ -259,7 +259,8 @@ Use `--env-credential-map SOURCE TARGET` when the credential source differs
 from the child environment variable. Sources can be a Boxer credential name,
 an `env://` host variable, a local `file://` URI, a 1Password reference, or on
 macOS an Apple Passwords reference. Use `keyring://SERVICE/ACCOUNT` to read
-from another service in the system keyring:
+from another service in the system keyring. A `cmd://NAME` source can run a
+configured host command to produce the value:
 
 ```sh
 boxer --env-credential-map 'op://Development/OpenAI API Key/credential' OPENAI_API_KEY \
@@ -276,7 +277,30 @@ boxer --env-credential-map 'keyring://team-secrets/openai_api_key' OPENAI_API_KE
 
 boxer --env-credential-map 'bw://01234567-89ab-cdef-0123-456789abcdef/password' OPENAI_API_KEY \
   --cwd /path/to/project -- solmu
+
+boxer --policy boxer-policy.json --env-credential-map 'cmd://github' GITHUB_TOKEN \
+  --cwd /path/to/project -- solmu
 ```
+
+Configure each command under `credential_capture` in the policy. Commands run
+directly without a shell, must use an absolute executable path, receive no
+interactive stdin, and have a five-second timeout by default (configurable from
+1 to 60 seconds). For example:
+
+```json
+{
+  "credential_capture": {
+    "github": {
+      "command": ["/usr/bin/gh", "auth", "token"],
+      "timeout_secs": 5
+    }
+  }
+}
+```
+
+The captured value is trimmed of trailing line endings and is never printed by
+Boxer. Capture commands are trusted host programs: only configure commands you
+intend Boxer to run with your account permissions.
 
 Policies can store the same mapping in `env_credential_map`, with source keys
 and target environment variable names as values. Boxer reads `env://` values

@@ -651,6 +651,9 @@ fn run() -> io::Result<i32> {
     resolved
         .custom_credentials
         .extend(policy.custom_credentials);
+    resolved
+        .credential_capture
+        .extend(policy.credential_capture);
     resolved.endpoint_rules.extend(policy.endpoint_rules);
     resolved.cpus = policy.cpus.or(resolved.cpus);
     resolved.memory_mib = policy.memory_mib.or(resolved.memory_mib);
@@ -824,12 +827,14 @@ fn run() -> io::Result<i32> {
         })).map_err(io::Error::other)?);
         return Ok(0);
     }
-    let credentials = credential::load(&resolved.env_credentials)?;
+    let credentials =
+        credential::load_with_captures(&resolved.env_credentials, &resolved.credential_capture)?;
     for (name, value) in credentials {
         command.env(name, value.as_str());
     }
     let mapped_sources: Vec<_> = resolved.env_credential_map.keys().cloned().collect();
-    let credentials = credential::load(&mapped_sources)?;
+    let credentials =
+        credential::load_with_captures(&mapped_sources, &resolved.credential_capture)?;
     for (source, value) in credentials {
         if let Some(target) = resolved.env_credential_map.get(&source) {
             command.env(target, value.as_str());

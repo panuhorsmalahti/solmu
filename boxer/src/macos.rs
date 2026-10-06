@@ -37,6 +37,7 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
                 upstream_bypass: &policy.upstream_bypass,
                 denied_hosts: &policy.deny_hosts,
                 reserved_ports: &[],
+                credential_capture: &policy.credential_capture,
             },
         )?;
         for session in sessions {

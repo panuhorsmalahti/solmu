@@ -66,6 +66,50 @@ fn file_reference_maps_a_secret_file_into_the_child_environment() {
 }
 
 #[test]
+fn command_capture_maps_host_command_output_without_a_shell() {
+    let directory = tempfile::tempdir().unwrap();
+    let policy = directory.path().join("policy.json");
+    std::fs::write(
+        &policy,
+        serde_json::json!({
+            "version": 1,
+            "mode": "unrestricted",
+            "credential_capture": {
+                "fixture": {
+                    "command": [binary("sandbox-probe").to_string_lossy(), "--credential-fixture"],
+                    "timeout_secs": 5
+                }
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--policy"])
+        .arg(&policy)
+        .args([
+            "--env-credential-map",
+            "cmd://fixture",
+            "CUSTOM_CAPTURED_KEY",
+            "--cwd",
+        ])
+        .arg(directory.path())
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .args([
+            "--env-check-value",
+            "CUSTOM_CAPTURED_KEY=cmd-secret-fixture",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn environment_credentials_reject_reserved_names_before_store_access() {
     let output = run(&[
         "--env-credential",

@@ -233,6 +233,18 @@ pub struct CustomCredential {
     pub query_param_name: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialCapture {
+    pub command: Vec<String>,
+    #[serde(default = "default_capture_timeout")]
+    pub timeout_secs: u64,
+}
+
+fn default_capture_timeout() -> u64 {
+    5
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CredentialInjectionMode {
@@ -715,6 +727,8 @@ pub struct Policy {
     pub credentials: Vec<String>,
     #[serde(default)]
     pub custom_credentials: std::collections::BTreeMap<String, CustomCredential>,
+    #[serde(default)]
+    pub credential_capture: std::collections::BTreeMap<String, CredentialCapture>,
     pub endpoint_rules: Vec<EndpointRule>,
     pub cpus: Option<u32>,
     pub memory_mib: Option<u32>,
@@ -1161,6 +1175,41 @@ impl Policy {
                 )));
             }
         }
+        for (name, capture) in &self.credential_capture {
+            validate_credential_name(name)?;
+            if capture.command.is_empty()
+                || capture.command.len() > 64
+                || !Path::new(&capture.command[0]).is_absolute()
+                || capture.timeout_secs == 0
+                || capture.timeout_secs > 60
+                || capture
+                    .command
+                    .iter()
+                    .any(|argument| argument.len() > 4096 || argument.chars().any(char::is_control))
+            {
+                return Err(io::Error::other(format!(
+                    "Invalid credential capture command for {name}; provide an absolute executable, up to 63 arguments, and a timeout from 1 to 60 seconds"
+                )));
+            }
+        }
+        for source in self
+            .env_credentials
+            .iter()
+            .chain(self.env_credential_map.keys())
+            .chain(
+                self.custom_credentials
+                    .values()
+                    .map(|route| &route.credential_key),
+            )
+        {
+            if let Some(name) = crate::credential::command_reference(source)
+                && !self.credential_capture.contains_key(name)
+            {
+                return Err(io::Error::other(format!(
+                    "Credential source {source} has no matching credential_capture entry"
+                )));
+            }
+        }
         if self.mode != Mode::Unrestricted
             && (workspace.parent().is_none()
                 || ["/sys", "/proc", "/dev"]
@@ -1223,6 +1272,22 @@ impl Policy {
         self.deny = minimal_deny;
         self.write_only.sort();
         self.write_only.dedup();
+        for capture in self.credential_capture.values_mut() {
+            let executable = Path::new(&capture.command[0]).canonicalize().map_err(|_| {
+                io::Error::other("Credential capture executable must exist on this host")
+            })?;
+            if !executable.is_file()
+                || executable.starts_with(workspace)
+                || self.write.iter().chain(&self.write_only).any(|grant| {
+                    executable == *grant || (grant.is_dir() && executable.starts_with(grant))
+                })
+            {
+                return Err(io::Error::other(
+                    "Credential capture executable must be a file outside the workspace and write grants",
+                ));
+            }
+            capture.command[0] = executable.to_string_lossy().into_owned();
+        }
         if !self.deny.is_empty() && cfg!(windows) {
             return Err(io::Error::other(
                 "Filesystem deny rules are not supported by the Windows Job Object backend",

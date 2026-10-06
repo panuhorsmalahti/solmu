@@ -7,6 +7,13 @@ fn main() {
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
     if arguments
         .first()
+        .is_some_and(|value| value == "--credential-fixture")
+    {
+        print!("cmd-secret-fixture\n");
+        return;
+    }
+    if arguments
+        .first()
         .is_some_and(|value| value == "--learn-fixture")
     {
         let input = std::path::PathBuf::from(&arguments[1]);
