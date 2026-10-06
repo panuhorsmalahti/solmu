@@ -632,7 +632,11 @@ fn parse_request(
 
 fn extract_formatted_token<'a>(format: &str, value: &'a str) -> Option<&'a str> {
     let (prefix, suffix) = format.split_once("{}")?;
-    let token = value.strip_prefix(prefix)?.strip_suffix(suffix)?;
+    let value_prefix = value.get(..prefix.len())?;
+    if !value_prefix.eq_ignore_ascii_case(prefix) {
+        return None;
+    }
+    let token = value.get(prefix.len()..)?.strip_suffix(suffix)?;
     (!token.is_empty()).then_some(token)
 }
 
