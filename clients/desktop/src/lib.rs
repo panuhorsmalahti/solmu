@@ -1791,25 +1791,30 @@ impl Desktop {
                 .color(appearance::MUTED),
             );
         model = model.spacing(12).align_y(iced::Alignment::Center);
-        let utilities = row![
-            button("Compact").style(appearance::ghost).on_press_maybe(
-                (enabled && self.session.current.is_some())
-                    .then_some(Event::Action(Action::Compact))
-            ),
-            button("Status")
-                .style(appearance::ghost)
-                .on_press(Event::Info("status")),
-            button("Context")
-                .style(appearance::ghost)
-                .on_press(Event::Info("context")),
-            button("Export")
-                .style(appearance::ghost)
-                .on_press(Event::Info("export")),
-            button("Copy reply")
-                .style(appearance::ghost)
-                .on_press(Event::CopyReply),
-        ]
-        .spacing(8);
+        let utilities: Element<'_, Event> = if self.muxer_embedded {
+            iced::widget::space().height(0).into()
+        } else {
+            row![
+                button("Compact").style(appearance::ghost).on_press_maybe(
+                    (enabled && self.session.current.is_some())
+                        .then_some(Event::Action(Action::Compact))
+                ),
+                button("Status")
+                    .style(appearance::ghost)
+                    .on_press(Event::Info("status")),
+                button("Context")
+                    .style(appearance::ghost)
+                    .on_press(Event::Info("context")),
+                button("Export")
+                    .style(appearance::ghost)
+                    .on_press(Event::Info("export")),
+                button("Copy reply")
+                    .style(appearance::ghost)
+                    .on_press(Event::CopyReply),
+            ]
+            .spacing(8)
+            .into()
+        };
         let info: Element<'_, Event> = match self.info_panel {
             Some("export") => column![
                 text_input("Markdown file path", &self.export_path).on_input(Event::ExportPath).padding(10),
