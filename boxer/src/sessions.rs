@@ -383,13 +383,14 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
             update_attachment(&root, &id, true)?;
         }
 
-        if stop_requested && child.try_wait()?.is_none() {
-            if stop_force || stop_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-                if let Some(pid) = child.process_id() {
-                    signal_child_group(pid, libc::SIGKILL);
-                }
-                let _ = child.kill();
+        if stop_requested
+            && child.try_wait()?.is_none()
+            && (stop_force || stop_deadline.is_some_and(|deadline| Instant::now() >= deadline))
+        {
+            if let Some(pid) = child.process_id() {
+                signal_child_group(pid, libc::SIGKILL);
             }
+            let _ = child.kill();
         }
         if let Some(status) = child.try_wait()? {
             if let Some(pid) = child.process_id() {
