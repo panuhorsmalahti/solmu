@@ -474,30 +474,6 @@ impl MuxerGui {
         .spacing(10)
         .align_y(Alignment::Center);
 
-        let status = row![
-            text("●").size(11).color(if self.snapshot.is_null() {
-                appearance::MUTED
-            } else {
-                appearance::PRIMARY
-            }),
-            column![
-                text(if self.snapshot.is_null() {
-                    "Not connected"
-                } else {
-                    "Session active"
-                })
-                .size(12),
-                text(format!("{} · local", self.session))
-                    .size(10)
-                    .color(appearance::MUTED),
-            ]
-            .spacing(2),
-            iced::widget::Space::new().width(Length::Fill),
-            text("⌄").size(14).color(appearance::MUTED),
-        ]
-        .spacing(8)
-        .align_y(Alignment::Center);
-
         let mut spaces_section = column![
             row![
                 text("SPACES").size(10).color(appearance::MUTED),
@@ -636,7 +612,6 @@ impl MuxerGui {
         .spacing(7);
         let sidebar = column![
             brand,
-            container(status).padding(11).style(appearance::panel),
             button(
                 row![text("＋").size(15), text("New space").size(12)]
                     .spacing(8)

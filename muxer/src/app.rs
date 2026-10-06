@@ -805,8 +805,7 @@ impl App {
             self.spaces.remove(space);
             self.space = self.space.min(self.spaces.len() - 1);
         } else if self.spaces[space].selected == id {
-            self.spaces[space].selected =
-                self.spaces[space].tabs[position.min(self.spaces[space].tabs.len() - 1)].id;
+            self.spaces[space].selected = self.spaces[space].tabs[position.saturating_sub(1)].id;
         }
         self.select_space(self.space);
         false

@@ -51,6 +51,12 @@ space = data["spaces"][0]
 print(space["tabs"][0]["id"])
 PY
 )
+first_space=$(python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+print(data["spaces"][0]["id"])
+PY
+)
 xdotool mousemove --window "$window" 390 38 click 1
 for _ in $(seq 1 30); do
   count=$(python3 - "$snapshot" <<'PY'
@@ -97,13 +103,13 @@ for _ in $(seq 1 30); do
 import json, sys
 data = json.load(open(sys.argv[1]))
 space = data["spaces"][0]
-print(len(space["tabs"]))
+print(f'{len(space["tabs"])}:{space["selected"]}:{space["id"]}')
 PY
 )
-  [ "$count" = 1 ] && break
+  [ "$count" = "1:$first_tab:$first_space" ] && break
   sleep 0.3
 done
-[ "$count" = 1 ] || { echo 'Top tab strip did not close the selected tab' >&2; exit 1; }
+[ "$count" = "1:$first_tab:$first_space" ] || { echo 'Closing a tab did not select the previous tab in the same space' >&2; exit 1; }
 
 # Send a shell command through the GUI and verify its file side effect.
 marker="$state/gui-command.txt"
