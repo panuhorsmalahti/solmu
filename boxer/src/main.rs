@@ -43,11 +43,11 @@ fn main() {
     #[cfg(unix)]
     sessions::set_child(session_child.is_some());
     #[cfg(unix)]
-    if let Some(id) = &session_child {
-        if let Err(error) = sessions::await_registered(id) {
-            eprintln!("Solmu Boxer: {error}");
-            std::process::exit(125);
-        }
+    if let Some(id) = &session_child
+        && let Err(error) = sessions::await_registered(id)
+    {
+        eprintln!("Solmu Boxer: {error}");
+        std::process::exit(125);
     }
     let result = if arguments.first().is_some_and(|arg| arg == "sessions") {
         #[cfg(unix)]
@@ -69,10 +69,10 @@ fn main() {
             125
         });
         #[cfg(unix)]
-        if let Some(id) = session_child.as_deref() {
-            if let Err(error) = sessions::finish(id, code) {
-                eprintln!("Solmu Boxer: could not record session completion: {error}");
-            }
+        if let Some(id) = session_child.as_deref()
+            && let Err(error) = sessions::finish(id, code)
+        {
+            eprintln!("Solmu Boxer: could not record session completion: {error}");
         }
         Ok(code)
     } else {
