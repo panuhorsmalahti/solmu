@@ -187,17 +187,19 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
         let (broker, session_tokens) = proxy::credential::Broker::start(
             &policy.credentials,
             &policy.custom_credentials,
-            &policy.endpoint_rules,
-            policy.proxy_port,
-            policy
-                .upstream_proxy
-                .as_deref()
-                .map(|value| crate::network::UpstreamProxy::parse(value))
-                .transpose()?
-                .as_ref(),
-            &policy.upstream_bypass,
-            &policy.deny_hosts,
-            &reserved_ports,
+            proxy::credential::BrokerOptions {
+                endpoint_rules: &policy.endpoint_rules,
+                proxy_port: policy.proxy_port,
+                upstream_proxy: policy
+                    .upstream_proxy
+                    .as_deref()
+                    .map(crate::network::UpstreamProxy::parse)
+                    .transpose()?
+                    .as_ref(),
+                upstream_bypass: &policy.upstream_bypass,
+                denied_hosts: &policy.deny_hosts,
+                reserved_ports: &reserved_ports,
+            },
         )?;
         let port = broker.port();
         policy.local.push(format!("127.0.0.1:{port}"));

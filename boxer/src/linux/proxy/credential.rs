@@ -55,17 +55,29 @@ pub struct Broker {
     thread: Option<JoinHandle<io::Result<()>>>,
 }
 
+pub struct BrokerOptions<'a> {
+    pub endpoint_rules: &'a [EndpointRule],
+    pub proxy_port: Option<u16>,
+    pub upstream_proxy: Option<&'a UpstreamProxy>,
+    pub upstream_bypass: &'a [String],
+    pub denied_hosts: &'a [String],
+    pub reserved_ports: &'a [u16],
+}
+
 impl Broker {
     pub fn start(
         providers: &[String],
         custom_credentials: &BTreeMap<String, CustomCredential>,
-        endpoint_rules: &[EndpointRule],
-        proxy_port: Option<u16>,
-        upstream_proxy: Option<&UpstreamProxy>,
-        upstream_bypass: &[String],
-        denied_hosts: &[String],
-        reserved_ports: &[u16],
+        options: BrokerOptions<'_>,
     ) -> io::Result<(Self, Vec<BrokeredCredential>)> {
+        let BrokerOptions {
+            endpoint_rules,
+            proxy_port,
+            upstream_proxy,
+            upstream_bypass,
+            denied_hosts,
+            reserved_ports,
+        } = options;
         let mut credentials = HashMap::new();
         let mut session_tokens = Vec::new();
         for name in providers {
