@@ -99,7 +99,7 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
             .stdout(Stdio::from(std::fs::File::create(&child_stdout)?))
             .stderr(Stdio::from(std::fs::File::create(&child_stderr)?));
     }
-    let mut child = command.spawn().map_err(|error| {
+    let child = command.spawn().map_err(|error| {
         if error.kind() == io::ErrorKind::NotFound {
             io::Error::other(
                 "Boxer learn requires strace; install it with your Linux package manager",
