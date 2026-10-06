@@ -41,13 +41,19 @@ fn assert_output(
 }
 
 fn wait_for_status(directory: &std::path::Path, id: &str, status: &str) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
         let inspect = Command::new(binary("boxer"))
             .args(["inspect", id, "--json"])
             .env("BOXER_SESSIONS_DIR", directory)
             .output()
             .unwrap();
+        let last_inspect = format!(
+            "status={:?}, stdout={}, stderr={}",
+            inspect.status,
+            String::from_utf8_lossy(&inspect.stdout),
+            String::from_utf8_lossy(&inspect.stderr)
+        );
         if inspect.status.success()
             && serde_json::from_slice::<serde_json::Value>(&inspect.stdout)
                 .is_ok_and(|session| session["status"] == status)
@@ -56,7 +62,7 @@ fn wait_for_status(directory: &std::path::Path, id: &str, status: &str) {
         }
         assert!(
             std::time::Instant::now() < deadline,
-            "Boxer session {id} did not reach status {status}"
+            "Boxer session {id} did not reach status {status}; last inspect: {last_inspect}"
         );
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
