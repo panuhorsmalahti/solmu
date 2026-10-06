@@ -20,6 +20,10 @@ contains the process tree and terminates remaining descendants on exit.
 
 `--read-only` denies new filesystem writes on Linux/macOS. Inherited open
 handles retain their access. Windows rejects filesystem restrictions.
+`--protect-unlink` allows writes and file creation but prevents deleting or
+renaming files and directories. Linux enforces this with Landlock, including
+inside `--isolated`; macOS uses Seatbelt. Atomic-save tools that replace files
+by renaming may fail while this option is enabled. Windows rejects the option.
 
 ## Run a detached session
 
@@ -691,7 +695,7 @@ mode and resource options override file values, and `--read-only` and
 `--clean-env` can tighten them. Choose either `--policy` or `--profile`.
 
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
-`workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
+`workspace`, or `isolated`. Optional fields are `read_only`, `protect_unlink`, `read`, `write`,
 `deny`,
 `write_only`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `deny_hosts`,
@@ -720,6 +724,11 @@ Linux requires `isolated` mode so Boxer can mask the path in the private mount
 namespace. Windows currently rejects filesystem deny rules because its Job
 Object backend does not enforce filesystem access. Use `boxer why --path PATH`
 to see when an explicit deny rule applies.
+
+Set `protect_unlink: true` in a policy or pass `--protect-unlink` to deny
+file and directory deletion while preserving other granted filesystem writes.
+The protection applies to the whole process tree and cannot be relaxed by a
+child process.
 
 Inspect saved policy files without launching the agent:
 

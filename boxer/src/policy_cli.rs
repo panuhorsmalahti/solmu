@@ -247,6 +247,7 @@ fn schema_value() -> Value {
             "publish": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 65535}},
             "proxy_port": {"type": "integer", "minimum": 1, "maximum": 65535},
             "read_only": {"type": "boolean"},
+            "protect_unlink": {"type": "boolean"},
             "read": {"type": "array", "items": {"type": "string"}},
             "write": {"type": "array", "items": {"type": "string"}},
             "deny": {"type": "array", "items": {"type": "string"}},
@@ -387,6 +388,7 @@ fn scaffold(extends: Vec<OsString>, full: bool) -> Value {
             // Make default scalar values visible only for a standalone policy.
             // In an extending policy even `false` would override its parent.
             object.insert("read_only".into(), json!(false));
+            object.insert("protect_unlink".into(), json!(false));
             object.insert("clean_env".into(), json!(false));
             object.insert(
                 "environment".into(),

@@ -1,5 +1,15 @@
 use super::*;
 
+#[test]
+fn windows_rejects_file_deletion_protection_instead_of_ignoring_it() {
+    let output = Command::new(binary("boxer"))
+        .args(["--protect-unlink", "--", "cmd", "/c", "exit 0"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("not supported"));
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_job_terminates_descendants_after_the_agent_exits() {

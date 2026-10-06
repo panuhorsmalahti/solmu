@@ -71,6 +71,32 @@ fn main() {
     }
     if arguments
         .first()
+        .is_some_and(|value| value == "--unlink-check")
+    {
+        let root = std::path::PathBuf::from(&arguments[1]);
+        std::fs::create_dir_all(&root).unwrap();
+        let file = root.join("keep.txt");
+        std::fs::write(&file, b"can still write").unwrap();
+        assert!(
+            std::fs::remove_file(&file).is_err(),
+            "file deletion must be denied"
+        );
+        let renamed = root.join("renamed.txt");
+        assert!(
+            std::fs::rename(&file, &renamed).is_err(),
+            "renames must be denied"
+        );
+        let nested = root.join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        assert!(
+            std::fs::remove_dir(&nested).is_err(),
+            "directory deletion must be denied"
+        );
+        println!("file deletion protection verified");
+        return;
+    }
+    if arguments
+        .first()
         .is_some_and(|value| value == "--env-check" || value == "--env-check-value")
     {
         let check_value = arguments[0] == "--env-check-value";

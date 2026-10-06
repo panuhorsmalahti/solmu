@@ -701,6 +701,7 @@ pub struct Policy {
     pub publish: Vec<u16>,
     pub proxy_port: Option<u16>,
     pub read_only: bool,
+    pub protect_unlink: bool,
     pub read: Vec<PathBuf>,
     pub write: Vec<PathBuf>,
     pub deny: Vec<PathBuf>,
@@ -1223,6 +1224,11 @@ impl Policy {
         if !self.deny.is_empty() && cfg!(target_os = "linux") && !self.isolated {
             return Err(io::Error::other(
                 "Linux filesystem deny rules require --isolated so Boxer can mask the denied paths",
+            ));
+        }
+        if self.protect_unlink && cfg!(windows) {
+            return Err(io::Error::other(
+                "File deletion protection is not supported by the Windows Job Object backend",
             ));
         }
         if self.deny.iter().any(|path| {

@@ -109,6 +109,9 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
     } else {
         "(version 1)(allow default)".to_owned()
     };
+    if policy.protect_unlink {
+        profile.push_str("(deny file-write-unlink)");
+    }
     for path in &policy.deny {
         let kind = if path.is_dir() { "subpath" } else { "literal" };
         let path = path

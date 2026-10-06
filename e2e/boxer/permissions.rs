@@ -149,6 +149,29 @@ async fn read_only_policy_still_allows_network_requests() {
 
 #[cfg(unix)]
 #[test]
+fn unlink_protection_allows_writes_but_blocks_file_and_directory_deletion() {
+    let directory = tempfile::tempdir().unwrap();
+    let workspace = directory.path().join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--workspace", "--protect-unlink", "--cwd"])
+        .arg(&workspace)
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("--unlink-check")
+        .arg(workspace.join("changes"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("file deletion protection verified"));
+}
+
+#[cfg(unix)]
+#[test]
 fn workspace_write_only_grants_allow_writes_but_deny_reads() {
     let directory = tempfile::tempdir().unwrap();
     let workspace = directory.path().join("workspace");

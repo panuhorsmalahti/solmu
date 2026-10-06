@@ -18,6 +18,7 @@ use std::{
 mod cgroup;
 pub mod proxy;
 mod seccomp;
+pub mod unlink;
 
 static INTERRUPTED: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 extern "C" fn interrupted(signal: i32) {
@@ -34,10 +35,15 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     // The launcher is single-threaded. Apply the irreversible policy before exec,
     // rather than allocating or taking locks in a post-fork pre_exec callback.
     let handled = AccessFs::from_all(ABI::V3);
+    let writable = if policy.protect_unlink {
+        handled & !AccessFs::RemoveDir & !AccessFs::RemoveFile
+    } else {
+        handled
+    };
     let allowed = if policy.read_only {
         AccessFs::from_read(ABI::V3)
     } else {
-        handled
+        writable
     };
     let mut rules = Ruleset::default()
         .set_compatibility(CompatLevel::HardRequirement)
@@ -82,9 +88,9 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
             .map_err(io::Error::other)?;
         for path in &policy.write {
             let access = if path.is_file() {
-                handled & AccessFs::from_file(ABI::V3)
+                writable & AccessFs::from_file(ABI::V3)
             } else {
-                handled
+                writable
             };
             rules = rules
                 .add_rule(PathBeneath::new(
@@ -94,10 +100,16 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
                 .map_err(io::Error::other)?;
         }
         for path in &policy.write_only {
-            let access = if path.is_file() {
-                AccessFs::from_write(ABI::V3) & AccessFs::from_file(ABI::V3)
+            let write_only = AccessFs::from_write(ABI::V3);
+            let write_only = if policy.protect_unlink {
+                write_only & !AccessFs::RemoveDir & !AccessFs::RemoveFile
             } else {
-                AccessFs::from_write(ABI::V3)
+                write_only
+            };
+            let access = if path.is_file() {
+                write_only & AccessFs::from_file(ABI::V3)
+            } else {
+                write_only
             };
             rules = rules
                 .add_rule(PathBeneath::new(
@@ -351,6 +363,32 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
             .arg("--")
             .arg("/opt/solmu/agent")
             .args(command.get_args());
+    }
+    if policy.protect_unlink {
+        let arguments: Vec<_> = sandbox.get_args().map(std::ffi::OsStr::to_owned).collect();
+        let separator = arguments
+            .iter()
+            .position(|argument| argument == "--")
+            .ok_or_else(|| io::Error::other("Bubblewrap command is missing its separator"))?;
+        let program = arguments
+            .get(separator + 1)
+            .ok_or_else(|| io::Error::other("Bubblewrap command is missing its program"))?
+            .clone();
+        let program_arguments = arguments[separator + 2..].to_vec();
+        let boxer = std::env::current_exe()?;
+        let mut wrapped = Command::new("bwrap");
+        wrapped.args(&arguments[..separator]);
+        // Network proxy mode already mounts Boxer inside the guest.
+        if policy.network != Network::Proxy {
+            wrapped.arg("--ro-bind").arg(&boxer).arg("/opt/solmu/boxer");
+        }
+        wrapped
+            .arg("--")
+            .arg("/opt/solmu/boxer")
+            .arg(unlink::WORKER)
+            .arg(program)
+            .args(program_arguments);
+        sandbox = wrapped;
     }
     // Options must precede the agent separator.
     let mut supervised = Command::new("bwrap");

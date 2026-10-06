@@ -205,6 +205,10 @@ fn run() -> io::Result<i32> {
         return rollback::command(&raw_arguments);
     }
     #[cfg(target_os = "linux")]
+    if let Some(code) = linux::unlink::worker()? {
+        return Ok(code);
+    }
+    #[cfg(target_os = "linux")]
     if let Some(code) = linux::proxy::worker()? {
         return Ok(code);
     }
@@ -244,6 +248,9 @@ fn run() -> io::Result<i32> {
             );
             println!(
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."
+            );
+            println!(
+                "--protect-unlink: allow normal writes but prevent deleting or renaming files and directories (Linux/macOS)."
             );
             println!(
                 "--allow-env PATTERN / --deny-env PATTERN: add inherited environment filter patterns (repeatable; * matches any run of characters). See the Boxer guide."
@@ -293,6 +300,8 @@ fn run() -> io::Result<i32> {
             return Ok(0);
         } else if argument == "--read-only" {
             policy.read_only = true;
+        } else if argument == "--protect-unlink" {
+            policy.protect_unlink = true;
         } else if argument == "--workspace" || argument == "--allow-cwd" {
             mode = Some(Mode::Workspace);
         } else if argument == "--network" {
@@ -612,6 +621,7 @@ fn run() -> io::Result<i32> {
     resolved.publish.extend(policy.publish);
     resolved.proxy_port = policy.proxy_port.or(resolved.proxy_port);
     resolved.read_only |= policy.read_only;
+    resolved.protect_unlink |= policy.protect_unlink;
     resolved.clean_env |= policy.clean_env;
     if let Some(cli_environment) = policy.environment.take() {
         let environment = resolved.environment.get_or_insert_with(Default::default);
