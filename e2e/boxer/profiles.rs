@@ -85,6 +85,65 @@ fn custom_named_profiles_load_from_the_profile_directory_and_are_discoverable() 
 }
 
 #[test]
+fn jsonc_profiles_support_comments_trailing_commas_and_override_json_files() {
+    let root = tempfile::tempdir().unwrap();
+    let profile_directory = root.path().join("profiles");
+    std::fs::create_dir(&profile_directory).unwrap();
+    std::fs::write(
+        profile_directory.join("reviewer.json"),
+        r#"{"version":1,"mode":"workspace","network":"allow"}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        profile_directory.join("reviewer.jsonc"),
+        r#"{
+          // JSONC profile wins if both formats exist.
+          "version": 1,
+          "mode": "workspace",
+          "network": "deny",
+          "environment": {"allow_vars": ["PATH",],},
+        }"#,
+    )
+    .unwrap();
+    let workspace = root.path().join("project");
+    std::fs::create_dir(&workspace).unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--profile", "reviewer", "--cwd"])
+        .arg(&workspace)
+        .arg("--print-policy")
+        .env("BOXER_PROFILE_DIR", &profile_directory)
+        .env("HOME", root.path())
+        .env("USERPROFILE", root.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let plan: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(plan["policy"]["network"], "deny");
+    assert_eq!(plan["policy"]["environment"]["allow_vars"], json!(["PATH"]));
+
+    let listed = Command::new(binary("boxer"))
+        .args(["policy", "profiles"])
+        .env("BOXER_PROFILE_DIR", &profile_directory)
+        .output()
+        .unwrap();
+    assert!(listed.status.success());
+    let profiles: Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(
+        profiles
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|profile| profile["name"] == "reviewer")
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn custom_profiles_inherit_permission_and_environment_lists() {
     let root = tempfile::tempdir().unwrap();
     let profile_directory = root.path().join("profiles");

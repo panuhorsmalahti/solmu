@@ -375,8 +375,9 @@ boxer policy profiles
 Named custom profiles use the same versioned JSON policy format as `--policy`.
 The built-in profile names take precedence over files with the same name.
 
-Custom policies can extend another custom profile by name, or a JSON file by
-relative path. Inherited list fields are combined without duplicates; child
+Custom policies can extend another custom profile by name, or a JSON/JSONC file by
+relative path. Profiles accept JSONC comments and trailing commas; when both
+`NAME.json` and `NAME.jsonc` exist, Boxer loads `NAME.jsonc`. Inherited list fields are combined without duplicates; child
 scalar values override the base. Relative path grants are resolved from the
 file that declares them. For example, share a base between two profiles:
 

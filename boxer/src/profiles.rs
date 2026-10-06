@@ -38,7 +38,13 @@ impl Profile {
         if !valid_name(name) {
             return Err(unknown_profile());
         }
-        let path = profile_directory()?.join(format!("{name}.json"));
+        let directory = profile_directory()?;
+        let jsonc = directory.join(format!("{name}.jsonc"));
+        let path = if jsonc.is_file() {
+            jsonc
+        } else {
+            directory.join(format!("{name}.json"))
+        };
         if !path.is_file() {
             return Err(unknown_profile());
         }
@@ -141,7 +147,10 @@ pub fn custom_profiles() -> io::Result<Vec<String>> {
             continue;
         }
         let path = entry.path();
-        if path.extension() != Some(OsStr::new("json")) {
+        if !matches!(
+            path.extension(),
+            Some(extension) if extension == OsStr::new("json") || extension == OsStr::new("jsonc")
+        ) {
             continue;
         }
         if let Some(name) = path.file_stem().and_then(OsStr::to_str)
@@ -151,6 +160,7 @@ pub fn custom_profiles() -> io::Result<Vec<String>> {
         }
     }
     names.sort();
+    names.dedup();
     Ok(names)
 }
 

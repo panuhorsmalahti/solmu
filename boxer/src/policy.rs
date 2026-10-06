@@ -1207,6 +1207,7 @@ fn load_policy_chain(
         if source.len() > 1_000_000 {
             return Err(io::Error::other("Policy exceeds the 1 MB limit"));
         }
+        let source = normalize_jsonc(&source)?;
         let mut parser = serde_json::Deserializer::from_slice(&source);
         let mut object = serde::de::Deserializer::deserialize_map(&mut parser, PolicyObject)
             .map_err(io::Error::other)?;
@@ -1273,7 +1274,104 @@ fn inherited_policy_path(current: &Path, parent: &str) -> io::Result<PathBuf> {
             "Use a profile name or an explicit relative path such as ./base.json in extends",
         ));
     }
-    Ok(crate::profiles::profile_directory()?.join(format!("{parent}.json")))
+    let directory = crate::profiles::profile_directory()?;
+    let jsonc = directory.join(format!("{parent}.jsonc"));
+    if jsonc.is_file() {
+        Ok(jsonc)
+    } else {
+        Ok(directory.join(format!("{parent}.json")))
+    }
+}
+
+fn normalize_jsonc(source: &[u8]) -> io::Result<Vec<u8>> {
+    let mut uncommented = Vec::with_capacity(source.len());
+    let mut index = 0;
+    let mut in_string = false;
+    let mut escaped = false;
+    while index < source.len() {
+        let byte = source[index];
+        if in_string {
+            uncommented.push(byte);
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'"' {
+            in_string = true;
+            uncommented.push(byte);
+            index += 1;
+        } else if byte == b'/' && source.get(index + 1) == Some(&b'/') {
+            index += 2;
+            while index < source.len() && !matches!(source[index], b'\n' | b'\r') {
+                index += 1;
+            }
+        } else if byte == b'/' && source.get(index + 1) == Some(&b'*') {
+            index += 2;
+            let mut closed = false;
+            while index < source.len() {
+                if source[index] == b'*' && source.get(index + 1) == Some(&b'/') {
+                    index += 2;
+                    closed = true;
+                    break;
+                }
+                if matches!(source[index], b'\n' | b'\r') {
+                    uncommented.push(source[index]);
+                }
+                index += 1;
+            }
+            if !closed {
+                return Err(io::Error::other("Unterminated JSONC block comment"));
+            }
+        } else {
+            uncommented.push(byte);
+            index += 1;
+        }
+    }
+    if in_string {
+        return Err(io::Error::other("Unterminated string in JSONC policy"));
+    }
+
+    let mut normalized = Vec::with_capacity(uncommented.len());
+    index = 0;
+    in_string = false;
+    escaped = false;
+    while index < uncommented.len() {
+        let byte = uncommented[index];
+        if in_string {
+            normalized.push(byte);
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            index += 1;
+        } else if byte == b'"' {
+            in_string = true;
+            normalized.push(byte);
+            index += 1;
+        } else if byte == b',' {
+            let mut next = index + 1;
+            while next < uncommented.len() && uncommented[next].is_ascii_whitespace() {
+                next += 1;
+            }
+            if !matches!(uncommented.get(next), Some(b'}' | b']')) {
+                normalized.push(byte);
+            }
+            index += 1;
+        } else {
+            normalized.push(byte);
+            index += 1;
+        }
+    }
+    Ok(normalized)
 }
 
 fn resolve_policy_layer_paths(
