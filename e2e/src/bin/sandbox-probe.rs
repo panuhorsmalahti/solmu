@@ -5,6 +5,27 @@ use std::{
 
 fn main() {
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    if arguments.first().is_some_and(|value| {
+        value == "--write-only-check" || value == "--write-only-directory-check"
+    }) {
+        let directory_grant = arguments[0] == "--write-only-directory-check";
+        let path = std::path::PathBuf::from(&arguments[1]);
+        let target = if directory_grant {
+            path.join("created.txt")
+        } else {
+            path.clone()
+        };
+        std::fs::write(&target, b"write-only").expect("write-only grant permits writes");
+        assert!(
+            std::fs::read(&target).is_err(),
+            "write-only grants must deny reads"
+        );
+        if directory_grant {
+            assert!(std::fs::read(path.join("existing.txt")).is_err());
+        }
+        println!("write-only access verified");
+        return;
+    }
     if arguments
         .first()
         .is_some_and(|value| value == "--env-check" || value == "--env-check-value")

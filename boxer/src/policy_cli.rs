@@ -124,6 +124,7 @@ fn schema() -> io::Result<i32> {
             "read_only": {"type": "boolean"},
             "read": {"type": "array", "items": {"type": "string"}},
             "write": {"type": "array", "items": {"type": "string"}},
+            "write_only": {"type": "array", "items": {"type": "string"}},
             "clean_env": {"type": "boolean"},
             "pass_env": {"type": "array", "items": {"type": "string"}},
             "environment": {"type": "object", "additionalProperties": false, "properties": {

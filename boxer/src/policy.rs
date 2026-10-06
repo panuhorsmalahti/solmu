@@ -677,6 +677,7 @@ pub struct Policy {
     pub read_only: bool,
     pub read: Vec<PathBuf>,
     pub write: Vec<PathBuf>,
+    pub write_only: Vec<PathBuf>,
     pub clean_env: bool,
     pub pass_env: Vec<String>,
     pub environment: Option<EnvironmentPolicy>,
@@ -1027,14 +1028,21 @@ impl Policy {
                 ));
             }
         }
-        if (!self.read.is_empty() || !self.write.is_empty()) && self.mode == Mode::Unrestricted {
+        if (!self.read.is_empty() || !self.write.is_empty() || !self.write_only.is_empty())
+            && self.mode == Mode::Unrestricted
+        {
             return Err(io::Error::other(
                 "Path grants require --workspace or --isolated",
             ));
         }
-        if self.read_only && !self.write.is_empty() {
+        if self.read_only && (!self.write.is_empty() || !self.write_only.is_empty()) {
             return Err(io::Error::other(
                 "--read-only cannot be combined with writable path grants",
+            ));
+        }
+        if !self.write_only.is_empty() && (self.isolated || cfg!(windows)) {
+            return Err(io::Error::other(
+                "Write-only path grants require workspace mode on Linux or macOS",
             ));
         }
         if !self.isolated
@@ -1115,7 +1123,12 @@ impl Policy {
                 "Choose a project workspace outside filesystem roots and kernel control directories",
             ));
         }
-        for path in self.read.iter_mut().chain(&mut self.write) {
+        for path in self
+            .read
+            .iter_mut()
+            .chain(&mut self.write)
+            .chain(&mut self.write_only)
+        {
             let text = path.to_string_lossy();
             let expanded = if text == "$WORKSPACE" || text.starts_with("$WORKSPACE/") {
                 workspace.join(text.strip_prefix("$WORKSPACE/").unwrap_or(""))
@@ -1141,6 +1154,29 @@ impl Policy {
         self.read.dedup();
         self.write.sort();
         self.write.dedup();
+        self.write_only.sort();
+        self.write_only.dedup();
+        let mut readable = runtime_paths();
+        readable.push(workspace.to_owned());
+        readable.extend(self.read.iter().cloned());
+        readable.extend(self.write.iter().cloned());
+        readable.extend(device_paths());
+        self.validate_write_only_overlaps(&readable)?;
+        Ok(())
+    }
+
+    pub fn validate_write_only_overlaps(&self, readable: &[PathBuf]) -> io::Result<()> {
+        for path in &self.write_only {
+            if readable
+                .iter()
+                .any(|grant| path.starts_with(grant) || grant.starts_with(path))
+            {
+                return Err(io::Error::other(format!(
+                    "Write-only grant {} overlaps another readable or writable path grant",
+                    path.display()
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -1512,7 +1548,7 @@ fn resolve_policy_layer_paths(
     path: &Path,
 ) -> io::Result<()> {
     let base = path.parent().unwrap_or_else(|| Path::new("."));
-    for key in ["read", "write"] {
+    for key in ["read", "write", "write_only"] {
         if let Some(serde_json::Value::Array(paths)) = object.get_mut(key) {
             for value in paths.iter_mut() {
                 let Some(path_text) = value.as_str() else {

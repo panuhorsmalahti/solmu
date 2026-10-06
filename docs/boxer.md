@@ -528,11 +528,15 @@ boxer --profile solmu --cwd /path/to/project \
   --write /path/to/results -- solmu
 ```
 
-`--read` and `--write` can be repeated and require existing files or directories.
+`--read`, `--write`, and `--write-only` can be repeated and require existing files or directories.
 Relative command-line paths are resolved against the workspace; symbolic links
 are resolved before launch. A directory grant covers its descendants, and a
 file grant covers that existing file. Create result directories before granting
-them. Writable access includes reading. Grants are additive: `--read` within a
+them. `--write` allows reading and writing. `--write-only` allows writing while
+denying file-content reads, on Linux and macOS in workspace mode. It cannot
+overlap the workspace or any other readable or writable grant. Isolated mode
+and Windows reject write-only grants because they cannot enforce this access
+level. Grants are additive: `--read` within a
 writable project does not make that subtree read-only.
 Tools that replace a file by renaming a temporary file need a writable directory
 grant. Solmu's file tools also retain their own workspace boundaries; a Boxer
@@ -642,6 +646,7 @@ mode and resource options override file values, and `--read-only` and
 
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
+`write_only`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `deny_hosts`,
 `local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`, `env_credential_map`,
 `credentials`, `proxy_port`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,

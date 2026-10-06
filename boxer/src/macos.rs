@@ -16,6 +16,16 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
         let executable = policy::executable(&command)?;
         let mut read = policy::runtime_paths();
         read.extend(policy.read.clone());
+        let mut readable_grants = read.clone();
+        readable_grants.extend(policy.write.clone());
+        readable_grants.extend(policy::device_paths());
+        readable_grants.push(
+            command
+                .get_current_dir()
+                .expect("resolved workspace")
+                .to_owned(),
+        );
+        policy.validate_write_only_overlaps(&readable_grants)?;
         read.push(
             command
                 .get_current_dir()
@@ -34,6 +44,7 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
         }
         write.extend(policy.write.clone());
         read.extend(write.clone());
+        let write_only = policy.write_only.clone();
         let mut profile = String::from(
             "(version 1)(deny default)(allow process*)(allow signal)(allow sysctl-read)(allow mach-lookup)(allow file-read-metadata)",
         );
@@ -69,6 +80,7 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
         for (operation, paths) in [
             ("file-read* file-map-executable", read),
             ("file-write*", write),
+            ("file-write*", write_only),
         ] {
             for path in paths {
                 let kind = if path.is_dir() { "subpath" } else { "literal" };

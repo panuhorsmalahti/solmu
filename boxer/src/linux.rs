@@ -50,6 +50,16 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
         let mut read = policy::runtime_paths();
         read.extend(policy.read.clone());
         read.push(executable);
+        let mut readable_grants = read.clone();
+        readable_grants.push(
+            command
+                .get_current_dir()
+                .expect("resolved workspace")
+                .to_owned(),
+        );
+        readable_grants.extend(policy.write.clone());
+        readable_grants.extend(policy::device_paths());
+        policy.validate_write_only_overlaps(&readable_grants)?;
         for path in read {
             let access = if path.is_file() {
                 AccessFs::from_read(ABI::V3) & AccessFs::from_file(ABI::V3)
@@ -75,6 +85,19 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
                 handled & AccessFs::from_file(ABI::V3)
             } else {
                 handled
+            };
+            rules = rules
+                .add_rule(PathBeneath::new(
+                    PathFd::new(path).map_err(io::Error::other)?,
+                    access,
+                ))
+                .map_err(io::Error::other)?;
+        }
+        for path in &policy.write_only {
+            let access = if path.is_file() {
+                AccessFs::from_write(ABI::V3) & AccessFs::from_file(ABI::V3)
+            } else {
+                AccessFs::from_write(ABI::V3)
             };
             rules = rules
                 .add_rule(PathBeneath::new(
@@ -231,7 +254,12 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
     // Host networking is shared only when the policy allows it.
     let group = cgroup::Group::create(&policy)?;
     group.validate_workspace(&directory)?;
-    for path in policy.read.iter().chain(&policy.write) {
+    for path in policy
+        .read
+        .iter()
+        .chain(&policy.write)
+        .chain(&policy.write_only)
+    {
         if path == std::path::Path::new("/")
             || ["/sys", "/proc", "/dev"]
                 .iter()

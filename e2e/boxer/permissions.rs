@@ -146,3 +146,55 @@ async fn read_only_policy_still_allows_network_requests() {
     assert!(String::from_utf8_lossy(&output.stdout).contains("network allowed"));
     server.await.unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn workspace_write_only_grants_allow_writes_but_deny_reads() {
+    let directory = tempfile::tempdir().unwrap();
+    let workspace = directory.path().join("workspace");
+    let output = directory.path().join("write-only-output");
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::create_dir(&output).unwrap();
+    std::fs::write(output.join("existing.txt"), "private contents").unwrap();
+
+    let directory_grant = Command::new(binary("boxer"))
+        .args(["--workspace", "--cwd"])
+        .arg(&workspace)
+        .arg("--write-only")
+        .arg(&output)
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("--write-only-directory-check")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(
+        directory_grant.status.success(),
+        "{}",
+        String::from_utf8_lossy(&directory_grant.stderr)
+    );
+    assert_eq!(
+        std::fs::read(output.join("created.txt")).unwrap(),
+        b"write-only"
+    );
+
+    let file = directory.path().join("write-only-file.txt");
+    std::fs::write(&file, "original").unwrap();
+    let file_grant = Command::new(binary("boxer"))
+        .args(["--workspace", "--cwd"])
+        .arg(&workspace)
+        .arg("--write-only")
+        .arg(&file)
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("--write-only-check")
+        .arg(&file)
+        .output()
+        .unwrap();
+    assert!(
+        file_grant.status.success(),
+        "{}",
+        String::from_utf8_lossy(&file_grant.stderr)
+    );
+    assert_eq!(std::fs::read(&file).unwrap(), b"write-only");
+}

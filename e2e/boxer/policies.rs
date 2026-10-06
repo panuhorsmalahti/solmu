@@ -70,6 +70,35 @@ fn resolved_policies_show_permissions_and_never_launch_or_disclose_environment_v
 }
 
 #[test]
+fn write_only_policy_paths_are_resolved_and_cannot_overlap_readable_grants() {
+    let directory = tempfile::tempdir().unwrap();
+    let workspace = directory.path().join("workspace");
+    let output = directory.path().join("output");
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::create_dir(&output).unwrap();
+
+    let value = plan(
+        &workspace,
+        &["--workspace", "--write-only", output.to_str().unwrap()],
+    );
+    assert_eq!(
+        value["policy"]["write_only"][0],
+        output.canonicalize().unwrap().to_str().unwrap()
+    );
+
+    let overlap = Command::new(binary("boxer"))
+        .args(["--workspace", "--cwd"])
+        .arg(&workspace)
+        .arg("--write-only")
+        .arg(workspace.join("output"))
+        .args(["--print-policy", "--", "program"])
+        .output()
+        .unwrap();
+    assert_eq!(overlap.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&overlap.stderr).contains("overlaps"));
+}
+
+#[test]
 fn explicit_policy_files_resolve_relative_paths_variables_and_cli_overrides() {
     let directory = tempfile::tempdir().unwrap();
     let workspace = directory.path().join("project");
