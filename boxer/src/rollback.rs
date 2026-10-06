@@ -843,7 +843,10 @@ fn print_file_diff(
         if text.contains('\0') {
             return None;
         }
-        let lines = text.lines().map(str::to_owned).collect::<Vec<_>>();
+        let lines = text
+            .split_inclusive('\n')
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
         (lines.len() <= 1000 && lines.iter().all(|line| line.len() <= 4096)).then_some(lines)
     };
     let (Some(old_lines), Some(new_lines)) = (decode(old_file, old), decode(new_file, new)) else {
@@ -879,7 +882,7 @@ fn print_file_diff(
             && new_index < new_lines.len()
             && old_lines[old_index] == new_lines[new_index]
         {
-            println!(" {}", old_lines[old_index]);
+            print_diff_line(' ', &old_lines[old_index]);
             old_index += 1;
             new_index += 1;
         } else if old_index < old_lines.len()
@@ -887,14 +890,25 @@ fn print_file_diff(
                 || lcs[(old_index + 1) * width + new_index]
                     >= lcs[old_index * width + new_index + 1])
         {
-            println!("-{}", old_lines[old_index]);
+            print_diff_line('-', &old_lines[old_index]);
             old_index += 1;
         } else {
-            println!("+{}", new_lines[new_index]);
+            print_diff_line('+', &new_lines[new_index]);
             new_index += 1;
         }
     }
     Ok(())
+}
+
+fn print_diff_line(prefix: char, line: &str) {
+    print!("{prefix}");
+    if let Some(line) = line.strip_suffix("\r\n") {
+        println!("{line}");
+    } else if let Some(line) = line.strip_suffix('\n') {
+        println!("{line}");
+    } else {
+        println!("{line}\n\\ No newline at end of file");
+    }
 }
 
 fn changes(before: &Snapshot, after: &Snapshot) -> io::Result<Vec<(&'static str, PathBuf)>> {

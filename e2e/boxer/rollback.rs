@@ -43,6 +43,11 @@ fn rollback_snapshots_sessions_lists_diffs_and_restores_workspace() {
     let workspace = root.path().join("workspace");
     std::fs::create_dir(&workspace).unwrap();
     std::fs::write(workspace.join("modified.txt"), "before session").unwrap();
+    std::fs::write(
+        workspace.join("newline.txt"),
+        "Solmu sandbox write allowed\n",
+    )
+    .unwrap();
     std::fs::write(workspace.join("deleted.txt"), "keep until rollback").unwrap();
 
     let output = Command::new(binary("boxer"))
@@ -53,6 +58,7 @@ fn rollback_snapshots_sessions_lists_diffs_and_restores_workspace() {
         .args([
             "--rollback-set",
             "modified.txt",
+            "newline.txt",
             "created.txt",
             "deleted.txt",
         ])
@@ -83,6 +89,8 @@ fn rollback_snapshots_sessions_lists_diffs_and_restores_workspace() {
     assert!(diff.contains("deleted\tdeleted.txt"));
     assert!(diff.contains("-before session"));
     assert!(diff.contains("+Solmu sandbox write allowed"));
+    assert!(diff.contains("-Solmu sandbox write allowed"));
+    assert!(diff.contains("\\ No newline at end of file"));
 
     let preview = rollback_command(root.path(), &["restore", &id, "--dry-run"]);
     assert!(preview.status.success());
