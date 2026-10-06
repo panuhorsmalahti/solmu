@@ -589,10 +589,18 @@ impl MuxerGui {
             if Some(id) == active_space
                 && let Some(tab_id) = active_tab
             {
-                for pane in panes
+                let tab_panes: Vec<_> = panes
                     .iter()
                     .filter(|pane| pane["tab"].as_u64() == Some(tab_id))
-                {
+                    .collect();
+                if tab_panes.len() > 1 {
+                    spaces_section = spaces_section.push(
+                        text("PANES")
+                            .size(9)
+                            .color(appearance::MUTED),
+                    );
+                }
+                for pane in tab_panes {
                     let pane_id = pane["id"].as_u64().unwrap_or_default();
                     let name = pane["name"]
                         .as_str()
