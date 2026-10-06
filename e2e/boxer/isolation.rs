@@ -2,6 +2,29 @@ use super::*;
 
 #[cfg(target_os = "linux")]
 #[test]
+fn workspace_landlock_uses_kernel_supported_filesystem_abi() {
+    let workspace = tempfile::tempdir().unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--workspace", "--cwd"])
+        .arg(workspace.path())
+        .arg("--")
+        .arg("/bin/true")
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let warning = String::from_utf8_lossy(&output.stderr);
+    if warning.contains("device ioctl restrictions are unavailable") {
+        assert!(warning.contains("Landlock ABI"));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn abstract_unix_socket_scope_blocks_host_sockets_when_landlock_v6_is_available() {
     use std::os::{linux::net::SocketAddrExt, unix::net::UnixDatagram};
 

@@ -14,9 +14,12 @@ coming from other sandbox tools.
 ## Default permissions
 
 Filesystem access and **all network requests are allowed** by default, subject
-to your existing OS permissions. Linux uses Landlock (Linux 6.2+ with ABI v3),
-macOS uses Seatbelt through `sandbox-exec`, and Windows uses a Job Object that
-contains the process tree and terminates remaining descendants on exit.
+to your existing OS permissions. Linux uses Landlock (ABI v3 or newer). Boxer
+applies filesystem controls through ABI v5 when supported; older supported
+kernels use their highest available ABI and warn when ABI v5 device ioctl
+restrictions are unavailable. macOS uses Seatbelt through `sandbox-exec`, and
+Windows uses a Job Object that contains the process tree and terminates
+remaining descendants on exit.
 
 `--read-only` denies new filesystem writes on Linux/macOS. Inherited open
 handles retain their access. Windows rejects filesystem restrictions.
