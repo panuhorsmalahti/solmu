@@ -84,6 +84,24 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         .unwrap();
     assert!(ps.status.success());
     assert!(String::from_utf8_lossy(&ps.stdout).contains(id));
+    let ps_json = Command::new(binary("boxer"))
+        .args(["ps", "--json"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(ps_json.status.success());
+    let listed: serde_json::Value = serde_json::from_slice(&ps_json.stdout).unwrap();
+    assert_eq!(listed[0]["id"], id);
+    assert_eq!(listed[0]["attached"], false);
+    let inspect_json = Command::new(binary("boxer"))
+        .args(["inspect", id, "--json"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(inspect_json.status.success());
+    let details: serde_json::Value = serde_json::from_slice(&inspect_json.stdout).unwrap();
+    assert_eq!(details["workspace"], workspace.path().to_str().unwrap());
+    assert_eq!(details["attached"], false);
 
     let pair = native_pty_system()
         .openpty(PtySize {
@@ -191,6 +209,20 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         String::from_utf8_lossy(&stop.stderr)
     );
     assert!(String::from_utf8_lossy(&stop.stdout).contains("stopped"));
+    let running_only = Command::new(binary("boxer"))
+        .args(["ps", "--json"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    let running: serde_json::Value = serde_json::from_slice(&running_only.stdout).unwrap();
+    assert!(running.as_array().unwrap().is_empty());
+    let all_sessions = Command::new(binary("boxer"))
+        .args(["ps", "--all", "--json"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    let all: serde_json::Value = serde_json::from_slice(&all_sessions.stdout).unwrap();
+    assert_eq!(all[0]["status"], "stopped");
 
     let prune = Command::new(binary("boxer"))
         .arg("prune")

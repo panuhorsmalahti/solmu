@@ -53,8 +53,27 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
         (arguments.first().and_then(|arg| arg.to_str()), 0)
     };
     match action {
-        Some("list" | "ps") if arguments.len() == 1 + offset => list(),
-        Some("inspect") if arguments.len() == 2 + offset => inspect(text(arguments, 1 + offset)?),
+        Some("list" | "ps") => {
+            let mut show_all = false;
+            let mut json = false;
+            for argument in &arguments[1 + offset..] {
+                match argument.to_str() {
+                    Some("--all") => show_all = true,
+                    Some("--json") => json = true,
+                    _ => return Err(session_usage()),
+                }
+            }
+            list(show_all, json)
+        }
+        Some("inspect") if arguments.len() == 2 + offset || arguments.len() == 3 + offset => {
+            let json = arguments
+                .get(2 + offset)
+                .is_some_and(|argument| argument == "--json");
+            if arguments.len() == 3 + offset && !json {
+                return Err(session_usage());
+            }
+            inspect(text(arguments, 1 + offset)?, json)
+        }
         Some("stop") if arguments.len() == 2 + offset => stop(text(arguments, 1 + offset)?),
         Some("logs") if arguments.len() == 2 + offset => logs(text(arguments, 1 + offset)?),
         Some("prune") if arguments.len() == 1 + offset => prune(),
@@ -62,10 +81,14 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
         Some("detach") if arguments.len() == 2 + offset => {
             control(text(arguments, 1 + offset)?, b'D')
         }
-        _ => Err(io::Error::other(
-            "Usage: boxer sessions list | attach <id> | detach <id> | inspect <id> | logs <id> | stop <id> | prune",
-        )),
+        _ => Err(session_usage()),
     }
+}
+
+fn session_usage() -> io::Error {
+    io::Error::other(
+        "Usage: boxer ps [--all] [--json] | boxer attach <id> | boxer detach <id> | boxer inspect <id> [--json] | boxer logs <id> | boxer stop <id> | boxer prune",
+    )
 }
 
 pub fn start(
@@ -389,11 +412,26 @@ pub fn finish(id: &str, code: i32) -> io::Result<()> {
     save(&root, &session)
 }
 
-fn list() -> io::Result<i32> {
+fn list(show_all: bool, json: bool) -> io::Result<i32> {
     let root = root()?;
-    println!("ID\tSTATUS\tATTACHMENT\tPID\tCOMMAND");
+    let mut sessions = Vec::new();
     for mut session in all(&root)? {
         refresh_status(&mut session);
+        if !show_all && session.status != "running" {
+            save(&root, &session)?;
+            continue;
+        }
+        sessions.push(session);
+    }
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&sessions).map_err(io::Error::other)?
+        );
+        return Ok(0);
+    }
+    println!("ID\tSTATUS\tATTACHMENT\tPID\tCOMMAND");
+    for session in sessions {
         println!(
             "{}\t{}\t{}\t{}\t{}",
             session.id,
@@ -402,18 +440,22 @@ fn list() -> io::Result<i32> {
             session.pid,
             session.command
         );
-        if session.status != "running" {
-            save(&root, &session)?;
-        }
     }
     Ok(0)
 }
 
-fn inspect(id: &str) -> io::Result<i32> {
+fn inspect(id: &str, json: bool) -> io::Result<i32> {
     let root = root()?;
     let mut session = read(&root, id)?;
     refresh_status(&mut session);
     save(&root, &session)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&session).map_err(io::Error::other)?
+        );
+        return Ok(0);
+    }
     println!(
         "ID: {}\nStatus: {}\nAttachment: {}\nPID: {}\nCommand: {}\nWorkspace: {}\nStarted: {}\nExit code: {}",
         session.id,

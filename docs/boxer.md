@@ -30,6 +30,8 @@ standard output and errors there. Review, stop, and clean up sessions with:
 ```sh
 boxer --detached --profile solmu --cwd /path/to/project -- solmu
 boxer ps
+boxer ps --all
+boxer ps --json
 boxer attach <session-id>
 # Press Ctrl-] followed by d to detach and leave the session running.
 boxer detach <session-id>
@@ -38,6 +40,10 @@ boxer sessions logs <session-id>
 boxer stop <session-id>
 boxer prune
 ```
+
+By default, `boxer ps` lists running sessions. Add `--all` to include sessions
+that have stopped or exited. Use `--json` to script the list, or
+`boxer inspect <session-id> --json` to retrieve one session's details.
 
 The session runs in its own process group so stopping it also signals ordinary
 child processes. Boxer stores the workspace and command with each session.
