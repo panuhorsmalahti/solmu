@@ -401,13 +401,15 @@ and [Pi coding agent guide](https://github.com/badlogic/pi-mono/tree/main/packag
 Save a versioned Boxer policy as `~/.config/boxer/profiles/NAME.json` to use it
 with `--profile NAME`. Use `BOXER_PROFILE_DIR` to choose another profile
 directory. `boxer policy init NAME` creates a starter policy there. Add
-`--extends BASE` to inherit another named profile; Boxer checks that the parent
-exists and parses before creating the child. Add `--full` to include the
+Use `--extends BASE` once or more to inherit named policies in order; Boxer
+checks every parent exists and parses before creating the child. Parent lists
+combine, and later parents override earlier scalar settings. Add `--full` to include the
 available additive policy sections as empty arrays or maps. When extending a
 profile, the full scaffold leaves inherited scalar settings untouched:
 
 ```sh
 boxer policy init reviewer --extends base --full
+boxer policy init web-reviewer --extends base --extends node-tools
 boxer policy validate reviewer --cwd /path/to/project
 boxer policy show reviewer --cwd /path/to/project
 boxer --profile reviewer --cwd /path/to/project -- solmu

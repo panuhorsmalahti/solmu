@@ -132,6 +132,63 @@ fn policy_init_rejects_a_missing_parent_without_creating_the_child() {
 }
 
 #[test]
+fn policy_init_supports_ordered_multiple_parents() {
+    let root = tempfile::tempdir().unwrap();
+    let profiles = root.path().join("profiles");
+    let workspace = root.path().join("workspace");
+    std::fs::create_dir_all(profiles.join("first")).unwrap();
+    std::fs::create_dir_all(profiles.join("second")).unwrap();
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::write(
+        profiles.join("base-a.json"),
+        r#"{"version":1,"mode":"workspace","network":"allow","read":["first"]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        profiles.join("base-b.json"),
+        r#"{"version":1,"mode":"workspace","network":"deny","read":["second"]}"#,
+    )
+    .unwrap();
+
+    let created = Command::new(binary("boxer"))
+        .args([
+            "policy",
+            "init",
+            "merged",
+            "--extends",
+            "base-a",
+            "--extends",
+            "base-b",
+        ])
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let scaffold: Value =
+        serde_json::from_slice(&std::fs::read(profiles.join("merged.json")).unwrap()).unwrap();
+    assert_eq!(scaffold["extends"], json!(["base-a", "base-b"]));
+
+    let resolved = Command::new(binary("boxer"))
+        .args(["policy", "validate", "merged", "--cwd"])
+        .arg(&workspace)
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert!(
+        resolved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&resolved.stderr)
+    );
+    let resolved: Value = serde_json::from_slice(&resolved.stdout).unwrap();
+    assert_eq!(resolved["policy"]["network"], "deny");
+    assert_eq!(resolved["policy"]["read"].as_array().unwrap().len(), 2);
+}
+
+#[test]
 fn full_policy_scaffold_preserves_inherited_scalar_security_settings() {
     let root = tempfile::tempdir().unwrap();
     let profiles = root.path().join("profiles");

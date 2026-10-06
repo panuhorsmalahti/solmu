@@ -167,7 +167,7 @@ fn schema() -> io::Result<i32> {
 fn init(args: &[OsString]) -> io::Result<i32> {
     let mut name = None;
     let mut output = None;
-    let mut extends = None;
+    let mut extends = Vec::new();
     let mut full = false;
     let mut index = 0;
     while index < args.len() {
@@ -178,10 +178,7 @@ fn init(args: &[OsString]) -> io::Result<i32> {
             output = Some(PathBuf::from(&args[index + 1]));
             index += 2;
         } else if args[index] == "--extends" && index + 1 < args.len() {
-            if extends.is_some() {
-                return Err(usage());
-            }
-            extends = Some(args[index + 1].clone());
+            extends.push(args[index + 1].clone());
             index += 2;
         } else if args[index] == "--full" && !full {
             full = true;
@@ -205,7 +202,7 @@ fn init(args: &[OsString]) -> io::Result<i32> {
         }
         None => PathBuf::from("boxer-policy.json"),
     };
-    if let Some(parent) = &extends {
+    for parent in &extends {
         let parent = parent
             .to_str()
             .ok_or_else(|| io::Error::other("--extends profile must be valid UTF-8"))?;
@@ -236,9 +233,11 @@ fn init(args: &[OsString]) -> io::Result<i32> {
     Ok(0)
 }
 
-fn scaffold(extends: Option<OsString>, full: bool) -> Value {
-    let inherited = extends.is_some();
-    let mut policy = if let Some(extends) = extends {
+fn scaffold(extends: Vec<OsString>, full: bool) -> Value {
+    let inherited = !extends.is_empty();
+    let mut policy = if extends.len() == 1 {
+        json!({"version":1,"extends":extends[0],"read":[],"write":[]})
+    } else if !extends.is_empty() {
         json!({"version":1,"extends":extends,"read":[],"write":[]})
     } else {
         json!({"version":1,"mode":"workspace","network":"allow","read":[],"write":[]})
@@ -360,6 +359,6 @@ fn supported(policy: &Policy) -> bool {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer policy init [NAME] [--extends PROFILE] [--full] [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
+        "Usage: boxer policy init [NAME] [--extends PROFILE [--extends PROFILE ...]] [--full] [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
     )
 }
