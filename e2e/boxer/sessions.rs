@@ -100,7 +100,8 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         .unwrap();
     assert!(inspect_json.status.success());
     let details: serde_json::Value = serde_json::from_slice(&inspect_json.stdout).unwrap();
-    assert_eq!(details["workspace"], workspace.path().to_str().unwrap());
+    let workspace_path = workspace.path().canonicalize().unwrap();
+    assert_eq!(details["workspace"], workspace_path.to_str().unwrap());
     assert_eq!(details["attached"], false);
 
     let pair = native_pty_system()
