@@ -7,6 +7,9 @@ test('website describes Solmu features and links to every client and installatio
   for (const feature of ['See it take shape', 'Follow your threads', 'Bring your model', 'Make it yours', 'Put ideas to work', 'See every action', 'Put work on the calendar', 'Add project skills', 'Connect your tools', 'Bring plugins along']) await expect(page.getByRole('heading', { name: feature })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Congregator', exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Explore Congregator' })).toHaveAttribute('href', 'docs/congregator/')
+  for (const product of ['muxer', 'boxer', 'congregator']) await expect(page.locator('.product-pages').getByRole('link', { name: new RegExp(product, 'i') })).toHaveAttribute('href', `${product}/`)
+  await expect(page.getByRole('heading', { name: 'Muxer GUI' })).toBeVisible()
+  await expect(page.getByText(/runs independently of the Muxer server/)).toBeVisible()
   await expect(page.getByRole('link', { name: 'Explore Audit' })).toHaveAttribute('href', 'docs/audit/')
   await expect(page.getByText("last 24 hours' prompt cache hit rate", { exact: false })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Explore Tasks' })).toHaveAttribute('href', 'docs/tasks/')
@@ -52,7 +55,7 @@ test('website describes Solmu features and links to every client and installatio
   await expect(page.getByText('Check that your OS can apply them before launching.', { exact: false })).toBeVisible()
   await expect(page.getByText('explicit network routes for your provider and backend', { exact: false })).toBeVisible()
   for (const script of ['install-bundle.sh', 'install-bundle.ps1']) await expect(page.locator('#install pre').filter({ hasText: `https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts/${script}` })).toBeVisible()
-  for (const client of ['cli', 'desktop', 'android', 'ios', 'web', 'muxer']) {
+  for (const client of ['cli', 'desktop', 'android', 'ios', 'web', 'muxer', 'muxer-gui']) {
     const image = page.locator(`img[src="screenshots/${client}.png"]`)
     await image.scrollIntoViewIfNeeded()
     await expect(image).toBeVisible()

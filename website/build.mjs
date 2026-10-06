@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { Marked } from 'marked'
 import GithubSlugger from 'github-slugger'
 import sanitizeHtml from 'sanitize-html'
+import { buildProductPages } from './products.mjs'
 
 export const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const siteDirectory = join(repository, 'website', 'dist')
@@ -151,7 +152,7 @@ export async function buildSite() {
   // This fixed output directory is inside website/, separate from every source.
   await rm(siteDirectory, { recursive: true, force: true })
   await mkdir(siteDirectory, { recursive: true })
-  for (const asset of ['index.html', 'style.css', 'icon.svg', 'docs.css', 'docs.js']) {
+  for (const asset of ['index.html', 'style.css', 'product.css', 'icon.svg', 'docs.css', 'docs.js']) {
     await cp(join(repository, 'website', asset), join(siteDirectory, asset))
   }
   await cp(join(docsDirectory, 'screenshots'), join(siteDirectory, 'screenshots'), { recursive: true })
@@ -160,6 +161,7 @@ export async function buildSite() {
     await mkdir(directory, { recursive: true })
     await writeFile(join(directory, 'index.html'), documentPage(document, documents))
   }
+  await buildProductPages(siteDirectory)
   return documents.size
 }
 

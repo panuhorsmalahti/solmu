@@ -24,6 +24,11 @@ tools. The backend must be running before you open a client.
 
 See the [client overview](clients.md) for screenshots and shared features.
 
+The [Solmu website](https://panuhorsmalahti.github.io/solmu/) also has a page
+for each workspace product: [Muxer](https://panuhorsmalahti.github.io/solmu/muxer/),
+[Boxer](https://panuhorsmalahti.github.io/solmu/boxer/), and
+[Congregator](https://panuhorsmalahti.github.io/solmu/congregator/).
+
 ## Work with Solmu
 
 - [Profile](profile.md): edit the system prompt and default model.

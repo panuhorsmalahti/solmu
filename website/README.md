@@ -13,6 +13,10 @@ Open `http://127.0.0.1:4174`. Choose **Docs** for installation, client, and
 workspace guides. The same documentation is published at
 [solmu/docs/](https://panuhorsmalahti.github.io/solmu/docs/).
 
+The home page links to individual product introductions at `/muxer/`,
+`/boxer/`, and `/congregator/`. Product pages link back to their detailed
+guides generated from `docs/`.
+
 Documentation pages are generated from the root `docs/` Markdown files.
 Edit those files to change the guides; every Markdown file is included
 automatically. Links between guides, screenshots, tables, code blocks, and
