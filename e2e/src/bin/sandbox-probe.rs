@@ -7,17 +7,26 @@ fn main() {
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
     if arguments
         .first()
-        .is_some_and(|value| value == "--env-check")
+        .is_some_and(|value| value == "--env-check" || value == "--env-check-value")
     {
+        let check_value = arguments[0] == "--env-check-value";
         for check in arguments.iter().skip(1) {
             let check = check.to_string_lossy();
             let (name, expectation) = check.split_once('=').expect("NAME=present|absent");
-            let actual = std::env::var_os(name).is_some();
-            assert_eq!(
-                actual,
-                expectation == "present",
-                "unexpected environment variable visibility: {name}"
-            );
+            if check_value {
+                assert_eq!(
+                    std::env::var(name).as_deref(),
+                    Ok(expectation),
+                    "unexpected environment variable value: {name}"
+                );
+            } else {
+                let actual = std::env::var_os(name).is_some();
+                assert_eq!(
+                    actual,
+                    expectation == "present",
+                    "unexpected environment variable visibility: {name}"
+                );
+            }
         }
         println!("environment filtering verified");
         return;

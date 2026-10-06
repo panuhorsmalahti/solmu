@@ -496,6 +496,25 @@ Explicitly injected credentials remain available to the launched program.
 }
 ```
 
+Set explicit child values with `environment.set_vars`. They override inherited
+values after filtering; Boxer credential injection is applied afterward. Values
+expand `$HOME`, `~`, `$WORKDIR`, `$TMPDIR`, `$UID` (Unix), and XDG config, data,
+state, cache, and runtime paths. `PATH` and `BOXER_*` keys are reserved. Values
+are redacted in `--print-policy` output.
+
+```json
+{
+  "version": 1,
+  "mode": "workspace",
+  "environment": {
+    "set_vars": {
+      "RUST_LOG": "debug",
+      "XDG_CONFIG_HOME": "$HOME/.config"
+    }
+  }
+}
+```
+
 Use repeated `--allow-env PATTERN` and `--deny-env PATTERN` options to add
 patterns when launching. Add `"case_insensitive_vars": true` for ASCII
 case-insensitive matching. Empty or NUL-containing patterns are rejected.
@@ -627,7 +646,7 @@ The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`, `env_credential_map`,
 `credentials`, `proxy_port`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
 `custom_credentials`, `cgroup_root`, and `environment` (`allow_vars`, `deny_vars`,
-`case_insensitive_vars`). Custom credential definitions provide
+`case_insensitive_vars`, `set_vars`). Custom credential definitions provide
 an HTTPS `upstream` and a `credential_key`; `env_var`, `inject_mode`,
 `inject_header`, `credential_format`, `path_pattern`, `path_replacement`, and
 `query_param_name` are optional, depending on the selected injection mode.

@@ -28,7 +28,7 @@ pub fn run(policy: &Policy, workspace: &Path) -> io::Result<i32> {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    policy.environment(&mut command);
+    policy.environment(&mut command)?;
     let mut worker = command.spawn()?;
     let sent = worker.stdin.take().unwrap().write_all(&source);
     let output = worker.wait_with_output()?;
@@ -83,6 +83,6 @@ pub fn worker() -> io::Result<Option<i32>> {
     }
     let mut command = Command::new(std::env::current_exe()?);
     command.arg("--version").current_dir(workspace);
-    policy.environment(&mut command);
+    policy.environment(&mut command)?;
     crate::platform::run(command, policy).map(Some)
 }

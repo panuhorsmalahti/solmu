@@ -36,6 +36,20 @@ where
     Option::<String>::deserialize(deserializer).map(|value| value.map(Zeroizing::new))
 }
 
+fn serialize_redacted_environment<S>(
+    values: &std::collections::BTreeMap<String, String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    values
+        .keys()
+        .map(|key| (key, "[redacted]"))
+        .collect::<std::collections::BTreeMap<_, _>>()
+        .serialize(serializer)
+}
+
 // Security policies must not accept ambiguous duplicate keys. Parsing into a
 // Value directly would silently keep the last occurrence.
 struct PolicyObject;
@@ -687,13 +701,15 @@ pub struct Policy {
     pub profile_home: Option<PathBuf>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct EnvironmentPolicy {
     /// `None` inherits all otherwise permitted variables; `Some([])` inherits none.
     pub allow_vars: Option<Vec<String>>,
     pub deny_vars: Vec<String>,
     pub case_insensitive_vars: bool,
+    #[serde(serialize_with = "serialize_redacted_environment")]
+    pub set_vars: std::collections::BTreeMap<String, String>,
 }
 
 impl EnvironmentPolicy {
@@ -703,6 +719,21 @@ impl EnvironmentPolicy {
                 return Err(io::Error::other(
                     "Environment variable patterns cannot be empty or contain NUL",
                 ));
+            }
+        }
+        for (name, value) in &self.set_vars {
+            if !crate::credential::valid_name(name)
+                || name.eq_ignore_ascii_case("PATH")
+                || name.to_ascii_uppercase().starts_with("BOXER_")
+            {
+                return Err(io::Error::other(format!(
+                    "Invalid or reserved environment.set_vars key: {name}"
+                )));
+            }
+            if value.contains('\0') {
+                return Err(io::Error::other(format!(
+                    "Environment value for {name} cannot contain NUL"
+                )));
             }
         }
         Ok(())
@@ -1113,7 +1144,7 @@ impl Policy {
         Ok(())
     }
 
-    pub fn environment(&self, command: &mut Command) {
+    pub fn environment(&self, command: &mut Command) -> io::Result<()> {
         let filter_enabled = self.clean_env || self.isolated || self.environment.is_some();
         if filter_enabled {
             command.env_clear();
@@ -1181,7 +1212,109 @@ impl Policy {
                 }
             }
         }
+        if let Some(environment) = &self.environment {
+            for (name, value) in &environment.set_vars {
+                let expanded = expand_environment_value(value, command)?;
+                command.env(name, expanded);
+            }
+        }
+        Ok(())
     }
+}
+
+fn expand_environment_value(mut value: &str, command: &Command) -> io::Result<String> {
+    let workspace = command
+        .get_current_dir()
+        .map(PathBuf::from)
+        .unwrap_or(std::env::current_dir()?)
+        .to_string_lossy()
+        .into_owned();
+    let mut variables = std::collections::BTreeMap::from([
+        ("WORKDIR", workspace),
+        (
+            "TMPDIR",
+            std::env::var_os("TMPDIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir)
+                .to_string_lossy()
+                .into_owned(),
+        ),
+    ]);
+    let home = home().ok().map(|home| home.to_string_lossy().into_owned());
+    if let Some(home) = &home {
+        variables.insert("HOME", home.clone());
+    }
+    #[cfg(unix)]
+    variables.insert("UID", unsafe { libc::geteuid() }.to_string());
+    for (name, suffix) in [
+        ("XDG_CONFIG_HOME", ".config"),
+        ("XDG_DATA_HOME", ".local/share"),
+        ("XDG_STATE_HOME", ".local/state"),
+        ("XDG_CACHE_HOME", ".cache"),
+    ] {
+        if let Some(home) = &home {
+            variables.insert(
+                name,
+                std::env::var(name).unwrap_or_else(|_| {
+                    Path::new(home).join(suffix).to_string_lossy().into_owned()
+                }),
+            );
+        } else if let Ok(value) = std::env::var(name) {
+            variables.insert(name, value);
+        }
+    }
+    if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") {
+        variables.insert("XDG_RUNTIME_DIR", runtime.to_string_lossy().into_owned());
+    }
+    if let Ok(path) = crate::profiles::profile_directory() {
+        variables.insert(
+            "BOXER_CONFIG",
+            path.parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+
+    let mut expanded = String::with_capacity(value.len());
+    if let Some(rest) = value.strip_prefix('~')
+        && (rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\'))
+    {
+        if let Some(home) = &home {
+            expanded.push_str(home);
+        } else {
+            expanded.push('~');
+        }
+        value = rest;
+    }
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'$' {
+            let character = value[index..].chars().next().expect("valid UTF-8 boundary");
+            expanded.push(character);
+            index += character.len_utf8();
+            continue;
+        }
+        let start = index + 1;
+        let mut end = start;
+        while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+            end += 1;
+        }
+        if end == start {
+            expanded.push('$');
+            index += 1;
+            continue;
+        }
+        let name = &value[start..end];
+        if let Some(replacement) = variables.get(name) {
+            expanded.push_str(replacement);
+        } else {
+            expanded.push_str(&value[index..end]);
+        }
+        index = end;
+    }
+    Ok(expanded)
 }
 
 fn load_policy_chain(

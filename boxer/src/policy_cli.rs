@@ -129,7 +129,8 @@ fn schema() -> io::Result<i32> {
             "environment": {"type": "object", "additionalProperties": false, "properties": {
                 "allow_vars": {"type": "array", "items": {"type": "string", "minLength": 1}},
                 "deny_vars": {"type": "array", "items": {"type": "string", "minLength": 1}},
-                "case_insensitive_vars": {"type": "boolean"}
+                "case_insensitive_vars": {"type": "boolean"},
+                "set_vars": {"type": "object", "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}, "additionalProperties": {"type": "string"}}
             }},
             "env_credentials": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
             "env_credential_map": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},

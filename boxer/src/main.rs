@@ -723,7 +723,7 @@ fn run() -> io::Result<i32> {
     if rollback_session && !rollback_child {
         return rollback::run(&raw_arguments, &workspace, command.get_program());
     }
-    resolved.environment(&mut command);
+    resolved.environment(&mut command)?;
     if print_policy {
         let supported = if cfg!(windows) {
             resolved.mode == Mode::Unrestricted

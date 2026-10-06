@@ -127,6 +127,8 @@ fn invalid_policy_grants_and_environment_names_fail_before_starting_the_program(
         r#"{"version":1,"mode":"workspace","typo":true}"#,
         r#"{"version":1,"mode":"workspace","read":["missing"]}"#,
         r#"{"version":1,"mode":"workspace","read":["$UNKNOWN/path"]}"#,
+        r#"{"version":1,"mode":"workspace","environment":{"set_vars":{"PATH":"unsafe"}}}"#,
+        r#"{"version":1,"mode":"workspace","environment":{"set_vars":{"BOXER_SECRET":"unsafe"}}}"#,
         r#"{"version":1,"mode":"isolated","cpus":0}"#,
         r#"{"version":1,"mode":"workspace","mode":"unrestricted"}"#,
         r#"{"version":1,"version":1,"mode":"workspace"}"#,
