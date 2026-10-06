@@ -710,7 +710,7 @@ fn query_credential(
             rewritten.push(item.to_owned());
         }
     }
-    if let Some(secret) = replacement {
+    if replacement.is_some() {
         if matches != 1 {
             return Err(RequestError::Unauthorized);
         }
@@ -895,6 +895,7 @@ mod tests {
         )])
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn custom_mode_credential(
         name: &str,
         mode: CredentialInjectionMode,
