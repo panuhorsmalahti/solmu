@@ -542,18 +542,36 @@ fn wait_for_socket(root: &std::path::Path, id: &str) -> io::Result<()> {
         }
         thread::sleep(Duration::from_millis(10));
     }
+    let error_log = root.join(format!("{id}.err"));
+    let details = fs::read_to_string(&error_log).unwrap_or_default();
     Err(io::Error::other(format!(
-        "Detached session did not start; inspect {}",
-        root.join(format!("{id}.err")).display()
+        "Detached session did not start; daemon error: {} (log: {})",
+        if details.trim().is_empty() {
+            "no details were recorded"
+        } else {
+            details.trim()
+        },
+        error_log.display()
     )))
 }
 
-fn socket_path(root: &std::path::Path, id: &str) -> PathBuf {
-    root.join(format!("{id}.sock"))
+fn socket_path(_root: &std::path::Path, id: &str) -> PathBuf {
+    runtime_socket_path(id, "s")
 }
 
-fn control_path(root: &std::path::Path, id: &str) -> PathBuf {
-    root.join(format!("{id}.ctl"))
+fn control_path(_root: &std::path::Path, id: &str) -> PathBuf {
+    runtime_socket_path(id, "c")
+}
+
+fn runtime_socket_path(id: &str, suffix: &str) -> PathBuf {
+    let compact_id = Uuid::parse_str(id)
+        .map(|id| id.simple().to_string())
+        .unwrap_or_else(|_| "invalid".into());
+    let uid = unsafe { libc::geteuid() };
+    std::env::temp_dir().join(format!(
+        "b{uid}-{}{suffix}",
+        &compact_id[..20.min(compact_id.len())]
+    ))
 }
 
 fn control(id: &str, action: u8) -> io::Result<i32> {
