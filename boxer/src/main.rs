@@ -3,6 +3,7 @@ mod check;
 mod explain;
 mod network;
 mod policy;
+mod policy_cli;
 mod rollback;
 mod trust;
 use policy::{AgentProfile, Mode, Network, Policy};
@@ -117,6 +118,12 @@ fn run() -> io::Result<i32> {
         .is_some_and(|argument| argument == "trust")
     {
         return trust::command(&raw_arguments);
+    }
+    if raw_arguments
+        .first()
+        .is_some_and(|argument| argument == "policy")
+    {
+        return policy_cli::command(&raw_arguments);
     }
     let why_command = raw_arguments
         .first()

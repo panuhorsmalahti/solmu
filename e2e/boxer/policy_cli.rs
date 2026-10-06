@@ -1,0 +1,110 @@
+use super::*;
+use serde_json::Value;
+
+fn run(args: &[&str]) -> std::process::Output {
+    Command::new(binary("boxer")).args(args).output().unwrap()
+}
+
+#[test]
+fn policy_commands_validate_resolve_diff_and_list_builtin_profiles() {
+    let temp = tempfile::tempdir().unwrap();
+    let workspace = temp.path().join("workspace");
+    std::fs::create_dir_all(workspace.join("data")).unwrap();
+    let before = workspace.join("before.json");
+    let after = workspace.join("after.json");
+    std::fs::write(workspace.join("data/readme.txt"), "content").unwrap();
+    std::fs::write(
+        &before,
+        r#"{"version":1,"mode":"workspace","network":"allow","read":["data"]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        &after,
+        r#"{"version":1,"mode":"workspace","network":"deny","read_only":true,"read":["data"]}"#,
+    )
+    .unwrap();
+
+    let validated = run(&[
+        "policy",
+        "validate",
+        before.to_str().unwrap(),
+        "--cwd",
+        workspace.to_str().unwrap(),
+    ]);
+    assert!(
+        validated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validated.stderr)
+    );
+    let result: Value = serde_json::from_slice(&validated.stdout).unwrap();
+    assert_eq!(result["valid"], true);
+    assert_eq!(result["policy"]["network"], "allow");
+    assert_eq!(result["platform_supported"], !cfg!(windows));
+
+    let shown = run(&[
+        "policy",
+        "show",
+        after.to_str().unwrap(),
+        "--cwd",
+        workspace.to_str().unwrap(),
+    ]);
+    assert!(
+        shown.status.success(),
+        "{}",
+        String::from_utf8_lossy(&shown.stderr)
+    );
+    let result: Value = serde_json::from_slice(&shown.stdout).unwrap();
+    assert_eq!(result["policy"]["network"], "deny");
+    assert_eq!(result["policy"]["read_only"], true);
+
+    let diff = run(&[
+        "policy",
+        "diff",
+        before.to_str().unwrap(),
+        after.to_str().unwrap(),
+        "--cwd",
+        workspace.to_str().unwrap(),
+    ]);
+    assert!(
+        diff.status.success(),
+        "{}",
+        String::from_utf8_lossy(&diff.stderr)
+    );
+    let result: Value = serde_json::from_slice(&diff.stdout).unwrap();
+    assert_eq!(result["changes"]["network"]["before"], "allow");
+    assert_eq!(result["changes"]["network"]["after"], "deny");
+    assert_eq!(result["changes"]["read_only"]["after"], true);
+
+    let profiles = run(&["policy", "profiles"]);
+    assert!(profiles.status.success());
+    let profiles: Value = serde_json::from_slice(&profiles.stdout).unwrap();
+    for name in ["solmu", "codex", "claude-code", "opencode", "pi"] {
+        assert!(
+            profiles
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|profile| profile["name"] == name)
+        );
+    }
+}
+
+#[test]
+fn policy_validate_rejects_duplicate_keys_and_invalid_combinations() {
+    let temp = tempfile::tempdir().unwrap();
+    let duplicate = temp.path().join("duplicate.json");
+    std::fs::write(
+        &duplicate,
+        r#"{"version":1,"mode":"workspace","network":"allow","network":"deny"}"#,
+    )
+    .unwrap();
+    let output = run(&["policy", "validate", duplicate.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Duplicate policy key"));
+
+    let invalid = temp.path().join("invalid.json");
+    std::fs::write(&invalid, r#"{"version":1,"mode":"workspace","cpus":2}"#).unwrap();
+    let output = run(&["policy", "validate", invalid.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Resource controls require"));
+}

@@ -7,6 +7,7 @@ mod explain;
 mod network;
 mod permissions;
 mod policies;
+mod policy_cli;
 mod profiles;
 mod readiness;
 mod rollback;

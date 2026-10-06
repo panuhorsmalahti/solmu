@@ -313,6 +313,21 @@ The required fields are `version: 1` and `mode`, which is `unrestricted`,
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
 
+Inspect saved policy files without launching the agent:
+
+```sh
+boxer policy profiles
+boxer policy validate ./boxer-policy.json --cwd /path/to/project
+boxer policy show ./boxer-policy.json --cwd /path/to/project
+boxer policy diff ./before.json ./after.json --cwd /path/to/project
+```
+
+`validate` parses and resolves the policy and reports whether Boxer has a
+backend for it on the current platform. `show` prints its resolved values, and
+`diff` shows changed fields. Validation does not apply the kernel controls; use
+`boxer --policy FILE --cwd PATH --check` to test enforcement in a probe process.
+The profiles command lists Boxer’s built-in agent launch profiles.
+
 ## Run an offline command
 
 Linux and macOS can deny socket networking explicitly:
