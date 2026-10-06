@@ -85,6 +85,94 @@ fn custom_named_profiles_load_from_the_profile_directory_and_are_discoverable() 
 }
 
 #[test]
+fn custom_profiles_inherit_permission_and_environment_lists() {
+    let root = tempfile::tempdir().unwrap();
+    let profile_directory = root.path().join("profiles");
+    std::fs::create_dir(&profile_directory).unwrap();
+    let shared = root.path().join("shared");
+    let local = root.path().join("local");
+    std::fs::create_dir(&shared).unwrap();
+    std::fs::create_dir(&local).unwrap();
+    std::fs::write(
+        profile_directory.join("base.json"),
+        json!({
+            "version": 1,
+            "mode": "workspace",
+            "network": "deny",
+            "read": [shared],
+            "environment": {"allow_vars": ["PATH"], "deny_vars": ["*_SECRET"]}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    std::fs::write(
+        profile_directory.join("reviewer.json"),
+        json!({
+            "version": 1,
+            "extends": "base",
+            "read": [local],
+            "environment": {"allow_vars": ["HOME"], "deny_vars": ["API_KEY"]}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let workspace = root.path().join("project");
+    std::fs::create_dir(&workspace).unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--profile", "reviewer", "--cwd"])
+        .arg(&workspace)
+        .arg("--print-policy")
+        .env("BOXER_PROFILE_DIR", &profile_directory)
+        .env("HOME", root.path())
+        .env("USERPROFILE", root.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let plan: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(plan["policy"]["mode"], "workspace");
+    assert_eq!(plan["policy"]["network"], "deny");
+    let reads = plan["policy"]["read"].as_array().unwrap();
+    assert!(reads.contains(&json!(shared.canonicalize().unwrap())));
+    assert!(reads.contains(&json!(local.canonicalize().unwrap())));
+    assert_eq!(
+        plan["policy"]["environment"]["allow_vars"],
+        json!(["PATH", "HOME"])
+    );
+    assert_eq!(
+        plan["policy"]["environment"]["deny_vars"],
+        json!(["*_SECRET", "API_KEY"])
+    );
+}
+
+#[test]
+fn custom_profile_inheritance_rejects_cycles() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("first.json"),
+        r#"{"version":1,"mode":"workspace","extends":"second"}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        root.path().join("second.json"),
+        r#"{"version":1,"extends":"first"}"#,
+    )
+    .unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--policy"])
+        .arg(root.path().join("first.json"))
+        .arg("--print-policy")
+        .env("BOXER_PROFILE_DIR", root.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("inheritance cycle"));
+}
+
+#[test]
 fn agent_profiles_launch_the_expected_program_with_separate_writable_state() {
     for (profile, program, config, allowed, excluded) in [
         (

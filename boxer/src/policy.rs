@@ -761,43 +761,15 @@ fn dangerous_inherited_env(name: &str) -> bool {
 
 impl Policy {
     pub fn from_file(path: &Path) -> io::Result<Self> {
-        let mut source = Vec::new();
-        std::fs::File::open(path)?
-            .take(1_000_001)
-            .read_to_end(&mut source)?;
-        if source.len() > 1_000_000 {
-            return Err(io::Error::other("Policy exceeds the 1 MB limit"));
-        }
-        // Read the format version separately, then validate every policy field.
-        let mut parser = serde_json::Deserializer::from_slice(&source);
-        let mut object = serde::de::Deserializer::deserialize_map(&mut parser, PolicyObject)
-            .map_err(io::Error::other)?;
-        parser.end().map_err(io::Error::other)?;
-        let version = object
-            .remove("version")
-            .and_then(|value| value.as_u64())
-            .ok_or_else(|| io::Error::other("Policy requires version: 1"))?;
-        if version != 1 {
-            return Err(io::Error::other("Unsupported policy version; expected 1"));
-        }
+        let mut ancestors = std::collections::HashSet::new();
+        let object = load_policy_chain(path, &mut ancestors, 0)?;
         if !object.contains_key("mode") {
             return Err(io::Error::other(
                 "Policy requires an explicit mode: unrestricted, workspace, or isolated",
             ));
         }
-        let mut policy: Self =
+        let policy: Self =
             serde_json::from_value(serde_json::Value::Object(object)).map_err(io::Error::other)?;
-        let base = path.canonicalize()?.parent().unwrap().to_owned();
-        for path in policy.read.iter_mut().chain(&mut policy.write) {
-            if path.is_relative() && !path.to_string_lossy().starts_with('$') {
-                *path = base.join(&*path);
-            }
-        }
-        if let Some(root) = &mut policy.cgroup_root
-            && root.is_relative()
-        {
-            *root = base.join(&*root);
-        }
         Ok(policy)
     }
 
@@ -833,6 +805,10 @@ impl Policy {
         for pattern in &mut self.upstream_bypass {
             *pattern = crate::network::normalize_bypass_pattern(pattern)?;
         }
+        self.resolve_rest(workspace)
+    }
+
+    fn resolve_rest(&mut self, workspace: &Path) -> io::Result<()> {
         self.upstream_bypass.sort();
         self.upstream_bypass.dedup();
         if let Some(profile) = &self.network_profile {
@@ -1203,6 +1179,160 @@ impl Policy {
                 AgentProfile::Pi => {
                     command.env("PI_CODING_AGENT_DIR", home.join("agent"));
                 }
+            }
+        }
+    }
+}
+
+fn load_policy_chain(
+    path: &Path,
+    ancestors: &mut std::collections::HashSet<PathBuf>,
+    depth: usize,
+) -> io::Result<serde_json::Map<String, serde_json::Value>> {
+    if depth >= 16 {
+        return Err(io::Error::other("Policy inheritance exceeds 16 levels"));
+    }
+    let path = path.canonicalize()?;
+    if !ancestors.insert(path.clone()) {
+        return Err(io::Error::other(format!(
+            "Policy inheritance cycle includes {}",
+            path.display()
+        )));
+    }
+    let result = (|| {
+        let mut source = Vec::new();
+        std::fs::File::open(&path)?
+            .take(1_000_001)
+            .read_to_end(&mut source)?;
+        if source.len() > 1_000_000 {
+            return Err(io::Error::other("Policy exceeds the 1 MB limit"));
+        }
+        let mut parser = serde_json::Deserializer::from_slice(&source);
+        let mut object = serde::de::Deserializer::deserialize_map(&mut parser, PolicyObject)
+            .map_err(io::Error::other)?;
+        parser.end().map_err(io::Error::other)?;
+        let version = object
+            .remove("version")
+            .and_then(|value| value.as_u64())
+            .ok_or_else(|| io::Error::other("Policy requires version: 1"))?;
+        if version != 1 {
+            return Err(io::Error::other("Unsupported policy version; expected 1"));
+        }
+        object.insert("version".into(), serde_json::json!(1));
+        let parents = match object.remove("extends") {
+            None => Vec::new(),
+            Some(serde_json::Value::String(parent)) => vec![parent],
+            Some(serde_json::Value::Array(parents)) => parents
+                .into_iter()
+                .map(|parent| {
+                    parent.as_str().map(str::to_owned).ok_or_else(|| {
+                        io::Error::other("Policy extends entries must be profile names or paths")
+                    })
+                })
+                .collect::<io::Result<Vec<_>>>()?,
+            Some(_) => {
+                return Err(io::Error::other(
+                    "Policy extends must be a profile name, path, or list of them",
+                ));
+            }
+        };
+        resolve_policy_layer_paths(&mut object, &path)?;
+        let mut merged = serde_json::Map::new();
+        for parent in parents {
+            let parent_path = inherited_policy_path(&path, &parent)?;
+            let base = load_policy_chain(&parent_path, ancestors, depth + 1)?;
+            merge_policy_objects(&mut merged, base);
+        }
+        merge_policy_objects(&mut merged, object);
+        Ok(merged)
+    })();
+    ancestors.remove(&path);
+    result
+}
+
+fn inherited_policy_path(current: &Path, parent: &str) -> io::Result<PathBuf> {
+    if parent.is_empty() || parent.contains('\0') {
+        return Err(io::Error::other("Policy inheritance entry cannot be empty"));
+    }
+    let requested = Path::new(parent);
+    if requested.is_absolute() || parent.starts_with("./") || parent.starts_with("../") {
+        return Ok(if requested.is_absolute() {
+            requested.to_owned()
+        } else {
+            current
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(requested)
+        });
+    }
+    if !parent
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err(io::Error::other(
+            "Use a profile name or an explicit relative path such as ./base.json in extends",
+        ));
+    }
+    Ok(crate::profiles::profile_directory()?.join(format!("{parent}.json")))
+}
+
+fn resolve_policy_layer_paths(
+    object: &mut serde_json::Map<String, serde_json::Value>,
+    path: &Path,
+) -> io::Result<()> {
+    let base = path.parent().unwrap_or_else(|| Path::new("."));
+    for key in ["read", "write"] {
+        if let Some(serde_json::Value::Array(paths)) = object.get_mut(key) {
+            for value in paths.iter_mut() {
+                let Some(path_text) = value.as_str() else {
+                    continue;
+                };
+                let path = Path::new(path_text);
+                if path.is_relative() && !path_text.starts_with('$') {
+                    *value = serde_json::Value::String(base.join(path).to_string_lossy().into());
+                }
+            }
+        }
+    }
+    if let Some(serde_json::Value::String(value)) = object.get_mut("cgroup_root") {
+        let root = Path::new(value);
+        if root.is_relative() {
+            *value = base.join(root).to_string_lossy().into_owned();
+        }
+    }
+    Ok(())
+}
+
+fn merge_policy_objects(
+    target: &mut serde_json::Map<String, serde_json::Value>,
+    source: serde_json::Map<String, serde_json::Value>,
+) {
+    for (key, value) in source {
+        match (target.get_mut(&key), value) {
+            (Some(serde_json::Value::Array(existing)), serde_json::Value::Array(additions)) => {
+                for item in additions {
+                    if !existing.contains(&item) {
+                        existing.push(item);
+                    }
+                }
+            }
+            (Some(serde_json::Value::Object(existing)), serde_json::Value::Object(additions)) => {
+                let insensitive = key == "environment"
+                    && (existing
+                        .get("case_insensitive_vars")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false)
+                        || additions
+                            .get("case_insensitive_vars")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false));
+                merge_policy_objects(existing, additions);
+                if insensitive {
+                    existing.insert("case_insensitive_vars".into(), serde_json::json!(true));
+                }
+            }
+            (_, value) => {
+                target.insert(key, value);
             }
         }
     }

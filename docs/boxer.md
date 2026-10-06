@@ -375,6 +375,36 @@ boxer policy profiles
 Named custom profiles use the same versioned JSON policy format as `--policy`.
 The built-in profile names take precedence over files with the same name.
 
+Custom policies can extend another custom profile by name, or a JSON file by
+relative path. Inherited list fields are combined without duplicates; child
+scalar values override the base. Relative path grants are resolved from the
+file that declares them. For example, share a base between two profiles:
+
+```json
+{
+  "version": 1,
+  "mode": "workspace",
+  "read": ["../shared"],
+  "environment": {"allow_vars": ["PATH"]}
+}
+```
+
+Save as `base.json`, then create `reviewer.json`:
+
+```json
+{
+  "version": 1,
+  "extends": "base",
+  "read_only": true,
+  "environment": {"allow_vars": ["HOME"]}
+}
+```
+
+`extends` also accepts an array of parent profile names. Use `"./base.json"`
+for a path relative to the current policy file. Inheritance is limited to 16
+levels and cycles are rejected. Child policy values still pass the same
+validation and platform checks as a standalone policy.
+
 ## Review and restore a session
 
 Add `--rollback` to save the workspace before and after an agent runs:

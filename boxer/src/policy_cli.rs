@@ -103,10 +103,14 @@ fn schema() -> io::Result<i32> {
         "$id": "https://solmu.dev/schemas/boxer-policy-v1.json",
         "title": "Solmu Boxer policy",
         "type": "object",
-        "required": ["version", "mode"],
+        "required": ["version"],
         "additionalProperties": false,
         "properties": {
             "version": {"const": 1},
+            "extends": {"oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "array", "items": {"type": "string", "minLength": 1}}
+            ]},
             "mode": {"enum": ["unrestricted", "workspace", "isolated"]},
             "network": {"enum": ["allow", "deny", "proxy"]},
             "network_profile": {"enum": ["minimal", "developer", "claude-code", "codex", "opencode", "enterprise"]},
@@ -139,6 +143,9 @@ fn schema() -> io::Result<i32> {
             "cgroup_root": {"type": "string"}
         },
         "allOf": [{
+            "if": {"not": {"required": ["extends"]}},
+            "then": {"required": ["mode"]}
+        }, {
             "if": {"properties": {"network": {"const": "proxy"}}, "required": ["network"]},
             "then": {"properties": {"mode": {"const": "isolated"}}}
         }]
