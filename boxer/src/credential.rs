@@ -61,14 +61,17 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
     }
 }
 
-#[cfg(test)]
-pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
-    load_with_captures(names, &std::collections::BTreeMap::new())
-}
-
 pub fn load_with_captures(
     names: &[String],
     captures: &std::collections::BTreeMap<String, crate::policy::CredentialCapture>,
+) -> io::Result<Vec<(String, Zeroizing<String>)>> {
+    load_with_captures_and_keyring(names, captures, read_keyring)
+}
+
+fn load_with_captures_and_keyring(
+    names: &[String],
+    captures: &std::collections::BTreeMap<String, crate::policy::CredentialCapture>,
+    mut read_keyring: impl FnMut(&str, &str) -> io::Result<String>,
 ) -> io::Result<Vec<(String, Zeroizing<String>)>> {
     load_with(names, |name| {
         if let Some(variable) = environment_reference(name) {
@@ -768,14 +771,17 @@ mod tests {
 
     #[test]
     fn custom_keyring_references_load_from_the_selected_service() {
-        let _guard = KEYRING_TEST_LOCK.lock().unwrap();
-        keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
-        let (service, account) = keyring_reference("keyring://my-service/openai_api_key").unwrap();
-        keyring_entry(&service, &account)
-            .unwrap()
-            .set_password("keyring-secret")
-            .unwrap();
-        let loaded = load(&["keyring://my-service/openai_api_key".to_owned()]).unwrap();
+        let names = ["keyring://my-service/openai_api_key".to_owned()];
+        let loaded = load_with_captures_and_keyring(
+            &names,
+            &std::collections::BTreeMap::new(),
+            |service, account| {
+                assert_eq!(service, "my-service");
+                assert_eq!(account, "openai_api_key");
+                Ok("keyring-secret".to_owned())
+            },
+        )
+        .unwrap();
         assert_eq!(loaded[0].0, "keyring://my-service/openai_api_key");
         assert_eq!(loaded[0].1.as_str(), "keyring-secret");
         assert_eq!(
