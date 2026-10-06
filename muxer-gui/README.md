@@ -50,8 +50,9 @@ muxer-gui
 ```
 
 The app opens the local `default` session or creates it from the current
-folder. Choose **Solmu** or **Terminal** when creating a space. Solmu spaces
-show Solmu's shared native desktop interface; Terminal spaces show a shell or
-another command-line client such as Claude Code.
+folder. Click **+** beside **Spaces** and choose **Solmu** or **Terminal**.
+Right-click a space to delete it. Solmu spaces show Solmu's shared native
+desktop interface; Terminal spaces show a shell or another command-line client
+such as Claude Code.
 
 Read the [Muxer GUI guide](../docs/muxer-gui.md) and the [Muxer guide](../docs/muxer.md).

@@ -121,6 +121,7 @@ mod mcp;
 mod models;
 mod plugins;
 mod profile;
+mod screenshots;
 mod skills;
 mod tasks;
 mod tools;

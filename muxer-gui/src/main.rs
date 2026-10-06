@@ -1,6 +1,6 @@
 use iced::{
     Alignment, Element, Length, Subscription, Task, Theme,
-    widget::{button, column, container, pick_list, row, scrollable, text, text_input},
+    widget::{button, column, container, mouse_area, row, scrollable, text, text_input},
 };
 use serde_json::{Value, json};
 use solmu_client::{Action, Api};
@@ -31,7 +31,8 @@ struct MuxerGui {
     screen: String,
     input: String,
     notice: String,
-    new_space_type: SpaceType,
+    show_space_types: bool,
+    context_space: Option<u64>,
     desktops: HashMap<u64, Desktop>,
 }
 
@@ -42,8 +43,6 @@ enum SpaceType {
 }
 
 impl SpaceType {
-    const ALL: [Self; 2] = [Self::Solmu, Self::Terminal];
-
     fn launch(self) -> Value {
         match self {
             Self::Solmu => json!({"kind":"solmu"}),
@@ -66,9 +65,11 @@ enum Message {
     Tick,
     SessionChanged(String),
     WorkspaceChanged(String),
-    NewSpaceTypeChanged(SpaceType),
     InputChanged(String),
-    NewSpace,
+    ToggleSpaceMenu,
+    SpaceContextMenu(u64),
+    DeleteSpace(u64),
+    CreateSpace(SpaceType),
     NewTab,
     Split,
     SelectPane(u64),
@@ -96,7 +97,8 @@ impl MuxerGui {
             screen: String::new(),
             input: String::new(),
             notice: "Starting the embedded workspace engine…".into(),
-            new_space_type: SpaceType::Solmu,
+            show_space_types: false,
+            context_space: None,
             desktops: HashMap::new(),
         };
         let task = state.snapshot_task();
@@ -117,19 +119,38 @@ impl MuxerGui {
                 self.workspace = value;
                 Task::none()
             }
-            Message::NewSpaceTypeChanged(space_type) => {
-                self.new_space_type = space_type;
+            Message::ToggleSpaceMenu => {
+                self.show_space_types = !self.show_space_types;
                 Task::none()
+            }
+            Message::SpaceContextMenu(id) => {
+                self.context_space = Some(id);
+                Task::none()
+            }
+            Message::DeleteSpace(id) => {
+                self.context_space = None;
+                let session = self.session.clone();
+                perform(
+                    move || {
+                        request(
+                            &session,
+                            json!({"method":"close","params":{"target":"space","id":id}}),
+                        )
+                        .map(|_| ())
+                    },
+                    "Space deleted".into(),
+                )
             }
             Message::InputChanged(value) => {
                 self.input = value;
                 Task::none()
             }
-            Message::NewSpace => {
+            Message::CreateSpace(space_type) => {
+                self.show_space_types = false;
                 let (session, cwd, launch) = (
                     self.session.clone(),
                     self.workspace.clone(),
-                    self.new_space_type.launch(),
+                    space_type.launch(),
                 );
                 perform(
                     move || {
@@ -177,6 +198,8 @@ impl MuxerGui {
                 }
             }
             Message::FocusSpace(id) => {
+                self.context_space = None;
+                self.show_space_types = false;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -278,6 +301,23 @@ impl MuxerGui {
                             .as_array()
                             .cloned()
                             .unwrap_or_default();
+                        let pane_ids: std::collections::HashSet<_> = panes
+                            .iter()
+                            .filter_map(|pane| pane["id"].as_u64())
+                            .collect();
+                        self.desktops.retain(|id, _| pane_ids.contains(id));
+                        let space_ids: std::collections::HashSet<_> = self.snapshot["spaces"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|space| space["id"].as_u64())
+                            .collect();
+                        if self
+                            .context_space
+                            .is_some_and(|id| !space_ids.contains(&id))
+                        {
+                            self.context_space = None;
+                        }
                         let selected = self
                             .selected_pane
                             .filter(|id| panes.iter().any(|p| p["id"].as_u64() == Some(*id)))
@@ -462,20 +502,35 @@ impl MuxerGui {
             row![
                 text("SPACES").size(10).color(appearance::MUTED),
                 iced::widget::Space::new().width(Length::Fill),
-                pick_list(
-                    SpaceType::ALL,
-                    Some(self.new_space_type),
-                    Message::NewSpaceTypeChanged,
-                )
-                .width(Length::Fixed(104.0)),
                 button(text("＋").size(16))
-                    .on_press(Message::NewSpace)
+                    .on_press(Message::ToggleSpaceMenu)
                     .style(appearance::ghost)
                     .padding([3, 8])
             ]
             .align_y(Alignment::Center),
         ]
         .spacing(6);
+        if self.show_space_types {
+            spaces_section = spaces_section.push(
+                container(
+                    column![
+                        button(text("Terminal").size(12))
+                            .on_press(Message::CreateSpace(SpaceType::Terminal))
+                            .style(appearance::ghost)
+                            .padding([7, 10])
+                            .width(Length::Fill),
+                        button(text("Solmu").size(12))
+                            .on_press(Message::CreateSpace(SpaceType::Solmu))
+                            .style(appearance::ghost)
+                            .padding([7, 10])
+                            .width(Length::Fill),
+                    ]
+                    .spacing(3),
+                )
+                .padding(4)
+                .style(appearance::panel),
+            );
+        }
         for space in &spaces {
             let id = space["id"].as_u64().unwrap_or_default();
             let selected = Some(id) == active_space;
@@ -487,29 +542,50 @@ impl MuxerGui {
                 "Terminal"
             };
             spaces_section = spaces_section.push(
-                button(
-                    column![
-                        row![
-                            text("▰").size(12).color(if selected {
-                                appearance::PRIMARY
-                            } else {
-                                appearance::MUTED
-                            }),
-                            text(name).size(13),
-                            iced::widget::Space::new().width(Length::Fill),
-                            text(kind).size(9).color(appearance::MUTED)
+                mouse_area(
+                    button(
+                        column![
+                            row![
+                                text("▰").size(12).color(if selected {
+                                    appearance::PRIMARY
+                                } else {
+                                    appearance::MUTED
+                                }),
+                                text(name).size(13),
+                                iced::widget::Space::new().width(Length::Fill),
+                                text(kind).size(9).color(appearance::MUTED)
+                            ]
+                            .spacing(8)
+                            .align_y(Alignment::Center),
+                            text(cwd).size(10).color(appearance::MUTED),
                         ]
-                        .spacing(8)
-                        .align_y(Alignment::Center),
-                        text(cwd).size(10).color(appearance::MUTED),
-                    ]
-                    .spacing(3),
+                        .spacing(3),
+                    )
+                    .on_press(Message::FocusSpace(id))
+                    .style(move |theme, state| appearance::navigation(theme, state, selected))
+                    .padding([9, 10])
+                    .width(Length::Fill),
                 )
-                .on_press(Message::FocusSpace(id))
-                .style(move |theme, state| appearance::navigation(theme, state, selected))
-                .padding([9, 10])
-                .width(Length::Fill),
+                .on_right_press(Message::SpaceContextMenu(id)),
             );
+            if self.context_space == Some(id) {
+                spaces_section = spaces_section.push(
+                    container(
+                        button(
+                            text("Delete space")
+                                .size(11)
+                                .color(iced::Color::from_rgb8(190, 65, 65)),
+                        )
+                        .on_press(Message::DeleteSpace(id))
+                        .style(appearance::ghost)
+                        .padding([7, 10])
+                        .width(Length::Fill),
+                    )
+                    .padding(4)
+                    .style(appearance::panel)
+                    .width(Length::Fill),
+                );
+            }
             if Some(id) == active_space {
                 for tab in tabs.iter().filter(|tab| tab["space"].as_u64() == Some(id)) {
                     let tab_id = tab["id"].as_u64().unwrap_or_default();
@@ -584,7 +660,7 @@ impl MuxerGui {
                     .spacing(8)
                     .align_y(Alignment::Center)
             )
-            .on_press(Message::NewSpace)
+            .on_press(Message::ToggleSpaceMenu)
             .style(appearance::primary_button)
             .padding([10, 12])
             .width(Length::Fill),
@@ -713,17 +789,11 @@ impl MuxerGui {
         .width(Length::Fill)
         .height(Length::Fill)
         .style(appearance::panel);
-        let content = column![
-            toolbar,
-            terminal_panel,
-            text("MUXER CONTROL  ·  session state refreshes automatically")
-                .size(9)
-                .color(appearance::MUTED)
-        ]
-        .spacing(16)
-        .padding([22, 24])
-        .width(Length::Fill)
-        .height(Length::Fill);
+        let content = column![toolbar, terminal_panel]
+            .spacing(16)
+            .padding([22, 24])
+            .width(Length::Fill)
+            .height(Length::Fill);
         let terminal_content = content;
         let content: Element<'_, Message> = if active_solmu {
             if let Some(pane) = self.snapshot["active_pane"].as_u64()

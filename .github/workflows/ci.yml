@@ -164,6 +164,20 @@ jobs:
             -p Delegate=yes -p DelegateSubgroup=supervisor \
             /usr/bin/env "PATH=$PATH" cargo test --workspace --all-targets --locked
       - if: runner.os == 'Linux'
+        run: |
+          sudo systemd-run --wait --pipe --collect \
+            -p User="$USER" -p WorkingDirectory="$PWD" \
+            -p Delegate=yes -p DelegateSubgroup=supervisor \
+            /usr/bin/env "PATH=$PATH" SOLMU_CAPTURE_SCREENSHOTS=1 \
+            cargo test --locked -p solmu-e2e --test desktop screenshots::desktop_main_screen_screenshot -- --exact
+      - if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-client-screenshot
+          path: docs/screenshots/desktop.png
+          if-no-files-found: ignore
+          retention-days: 2
+      - if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: browser-test-backend
@@ -190,6 +204,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: muxer-gui-screenshot
+          path: docs/screenshots
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-client-screenshot
           path: docs/screenshots
       - uses: actions/setup-node@v6
         with:

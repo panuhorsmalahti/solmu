@@ -17,11 +17,12 @@ the `solmu` runtime for Solmu spaces; start the Solmu backend before using
 those spaces. Terminal spaces launch local shells and command-line clients.
 
 The sidebar shows the session, its spaces, tabs, and panes. Create spaces and
-tabs, split panes, send terminal input, and switch spaces. Choose **Solmu** or
-**Terminal** from the dropdown beside **Spaces** when creating a space.
-Solmu opens the shared native Solmu desktop interface, including its
-conversation list and Profile, Audit, Tasks, and other pages. Terminal keeps
-the terminal view for shells and command-line clients such as Claude Code.
+tabs, split panes, send terminal input, and switch spaces. Click **+** beside
+**Spaces** to choose a new **Terminal** or **Solmu** space. Right-click a space
+and choose **Delete space** to remove it. Solmu opens the shared native desktop
+interface, including its conversation list and Profile, Audit, Tasks, and
+other pages. Terminal opens a shell for command-line clients such as Claude
+Code.
 
 Muxer GUI owns the session lock while open. Close it before opening that
 session in the terminal Muxer app; the session layout and metadata are saved

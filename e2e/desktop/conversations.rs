@@ -8,6 +8,11 @@ async fn desktop_thread_sidebar_streaming_history_crud_and_errors() {
     ui.wait("Ready").await;
     assert!(
         iced_test::simulator(ui.emulator.as_ref().unwrap().view(&ui.program))
+            .find("Provider credentials stay on your backend")
+            .is_err()
+    );
+    assert!(
+        iced_test::simulator(ui.emulator.as_ref().unwrap().view(&ui.program))
             .find("Ready · conversations saved locally")
             .is_err()
     );

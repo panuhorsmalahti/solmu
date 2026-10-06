@@ -1721,9 +1721,6 @@ impl Desktop {
                         appearance::MUTED
                     }),
                 composer,
-                text("Enter to send · Provider credentials stay on your backend")
-                    .size(11)
-                    .color(appearance::MUTED)
             ]
             .spacing(16),
         )

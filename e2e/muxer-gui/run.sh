@@ -52,34 +52,41 @@ xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
 [ -s "$marker" ] && grep -q SOLMU_MUXER_GUI_E2E "$marker" || { echo 'GUI input did not reach its terminal pane' >&2; exit 1; }
 
-# Create a Terminal space and confirm it is present in the saved shared state.
-xdotool mousemove --window "$window" 190 210 click 1
+# Open the + menu, capture its choices, and select Terminal.
+initial_space=$(python3 - "$snapshot" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1]))["spaces"][0]["id"])
+PY
+)
+before=$(python3 - "$snapshot" <<'PY'
+import json, sys
+print(len(json.load(open(sys.argv[1]))["spaces"]))
+PY
+)
+xdotool mousemove --window "$window" 240 210 click 1
 sleep 0.3
-xdotool mousemove --window "$window" 165 272 click 1
+import -window "$window" docs/screenshots/muxer-gui.png
+xdotool mousemove --window "$window" 75 242 click 1
 sleep 0.3
-xdotool mousemove --window "$window" 140 160 click 1
 created=''
 for _ in $(seq 1 30); do
   created=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 space = next((item for item in data["spaces"] if item["id"] == data["active"]), {})
-print(space.get("kind", "empty"))
+pane = next((item for item in data["panes"] if item["id"] == data["active"]), {})
+print("{}:{}:{}".format(len(data["spaces"]), space.get("kind", "empty"), pane.get("launch", {}).get("kind", "empty")))
 PY
 )
-  [ "$created" = terminal ] && break
+  [ "$created" = "$((before + 1)):terminal:shell" ] && break
   sleep 0.5
 done
-[ "$created" = terminal ] || { echo "GUI did not persist a Terminal space (active=$created)" >&2; exit 1; }
-sleep 1
-import -window "$window" docs/screenshots/muxer-gui.png
+[ "$created" = "$((before + 1)):terminal:shell" ] || { echo "Terminal choice did not open a shell (active=$created)" >&2; exit 1; }
 
 # The embedded GUI can create Solmu spaces too, without a Muxer server.
-xdotool mousemove --window "$window" 190 210 click 1
+xdotool mousemove --window "$window" 240 210 click 1
 sleep 0.3
-xdotool mousemove --window "$window" 165 241 click 1
-sleep 0.3
-xdotool mousemove --window "$window" 140 160 click 1
+xdotool mousemove --window "$window" 75 274 click 1
 created=''
 for _ in $(seq 1 30); do
   created=$(python3 - "$snapshot" <<'PY'
@@ -93,5 +100,22 @@ PY
   sleep 0.5
 done
 [ "$created" = solmu ] || { echo "GUI did not persist a Solmu space (active=$created)" >&2; exit 1; }
+
+# Right-click a space, choose Delete space, and verify it is removed.
+xdotool mousemove --window "$window" 100 254 click 3
+sleep 0.3
+xdotool mousemove --window "$window" 80 310 click 1
+removed=''
+for _ in $(seq 1 30); do
+  removed=$(python3 - "$snapshot" "$initial_space" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+print("removed" if all(space["id"] != int(sys.argv[2]) for space in data["spaces"]) else "present")
+PY
+)
+  [ "$removed" = removed ] && break
+  sleep 0.5
+done
+[ "$removed" = removed ] || { echo 'Right-click Delete space did not remove the selected workspace' >&2; exit 1; }
 
 test -s docs/screenshots/muxer-gui.png
