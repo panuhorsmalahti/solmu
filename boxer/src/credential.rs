@@ -55,6 +55,9 @@ pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
         if name.starts_with("op://") {
             return read_onepassword(name);
         }
+        if name.starts_with("apple-password://") {
+            return read_apple_password(name);
+        }
         match entry(name)?.get_password() {
             Ok(password) => Ok(password),
             Err(keyring::Error::NoEntry) => Err(io::Error::other(format!(
@@ -86,7 +89,32 @@ pub fn is_onepassword_reference(value: &str) -> bool {
 }
 
 pub fn valid_source_key(value: &str) -> bool {
-    valid_name(value) || is_onepassword_reference(value)
+    valid_name(value) || is_onepassword_reference(value) || is_apple_password_reference(value)
+}
+
+pub fn is_apple_password_reference(value: &str) -> bool {
+    if value.chars().any(char::is_control) {
+        return false;
+    }
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    url.scheme() == "apple-password"
+        && url.host_str().is_some_and(|server| !server.is_empty())
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && url.path_segments().is_some_and(|mut segments| {
+            segments.next().is_some_and(|account| {
+                !account.is_empty()
+                    && !percent_encoding::percent_decode_str(account)
+                        .decode_utf8_lossy()
+                        .chars()
+                        .any(char::is_control)
+            }) && segments.next().is_none()
+        })
 }
 
 fn read_onepassword(reference: &str) -> io::Result<String> {
@@ -112,6 +140,63 @@ fn read_onepassword(reference: &str) -> io::Result<String> {
                 "1Password returned a secret that is not valid UTF-8",
             ))
         }
+    }
+}
+
+fn read_apple_password(reference: &str) -> io::Result<String> {
+    if !is_apple_password_reference(reference) {
+        return Err(io::Error::other("Invalid Apple Passwords reference"));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let url = url::Url::parse(reference).map_err(io::Error::other)?;
+        let server = url
+            .host_str()
+            .ok_or_else(|| io::Error::other("Apple Passwords server is missing"))?;
+        let account = url
+            .path_segments()
+            .and_then(|mut segments| segments.next())
+            .ok_or_else(|| io::Error::other("Apple Passwords account is missing"))?;
+        let account = percent_encoding::percent_decode_str(account)
+            .decode_utf8()
+            .map_err(io::Error::other)?;
+        let mut output = Command::new("security")
+            .arg("find-internet-password")
+            .arg("-s")
+            .arg(server)
+            .arg("-a")
+            .arg(account.as_ref())
+            .arg("-w")
+            .output()
+            .map_err(|_| io::Error::other("Could not read from Apple Passwords"))?;
+        if !output.status.success() {
+            output.stdout.zeroize();
+            return Err(io::Error::other(
+                "Could not read from Apple Passwords; check that the item is available in Keychain",
+            ));
+        }
+        if output.stdout.ends_with(b"\n") {
+            output.stdout.pop();
+            if output.stdout.ends_with(b"\r") {
+                output.stdout.pop();
+            }
+        }
+        match String::from_utf8(std::mem::take(&mut output.stdout)) {
+            Ok(secret) => Ok(secret),
+            Err(error) => {
+                let mut bytes = error.into_bytes();
+                bytes.zeroize();
+                Err(io::Error::other(
+                    "Apple Passwords returned a secret that is not valid UTF-8",
+                ))
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(io::Error::other(
+            "apple-password:// references are only supported on macOS",
+        ))
     }
 }
 
@@ -257,5 +342,21 @@ mod tests {
         assert!(is_onepassword_reference(
             "op://vault/item/one-time%20password?attribute=otp"
         ));
+    }
+
+    #[test]
+    fn apple_password_references_require_server_and_account() {
+        assert!(is_apple_password_reference(
+            "apple-password://github.com/alice%40example.com"
+        ));
+        for invalid in [
+            "apple-password://",
+            "apple-password://github.com",
+            "apple-password://github.com/",
+            "apple-password://user@github.com/account",
+            "apple-password://github.com/account?query=value",
+        ] {
+            assert!(!is_apple_password_reference(invalid), "accepted {invalid}");
+        }
     }
 }

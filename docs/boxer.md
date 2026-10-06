@@ -131,6 +131,9 @@ boxer --env-credential-map 'op://Development/OpenAI API Key/credential' OPENAI_A
 Policies can store the same mapping in `env_credential_map`, with source keys
 and target environment variable names as values. Boxer resolves 1Password
 references with the installed, signed-in `op` CLI before starting the child.
+On macOS, mappings can also use an Apple Passwords reference such as
+`apple-password://github.com/alice%40example.com`; Boxer looks up the matching
+server and account using the macOS `security` command.
 
 This makes the value easier to manage and avoids exposing it in Boxer command
 arguments. The value is still present in the agent's environment and available
@@ -206,6 +209,8 @@ the installed `op` CLI before launching the sandbox, so the CLI must be signed
 in and able to access that vault. The retrieved value is held by Boxer and
 injected by the proxy; it is not added to the child environment. Query options
 in a reference are supported, for example `?attribute=otp`.
+On macOS, a custom route can also use an `apple-password://server/account`
+reference available through the macOS Keychain.
 
 By default, the broker allows any API path on the selected provider. Add one or
 more `--allow-endpoint PROVIDER:METHOD:PATH` options to limit it to specific

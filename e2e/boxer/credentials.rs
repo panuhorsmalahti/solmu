@@ -84,6 +84,28 @@ fn environment_credential_map_accepts_secret_references_and_validates_target_nam
         "OPENAI_API_KEY"
     );
 
+    let apple_reference = Command::new(binary("boxer"))
+        .args([
+            "--env-credential-map",
+            "apple-password://github.com/alice%40example.com",
+            "GITHUB_PASSWORD",
+            "--cwd",
+        ])
+        .arg(temp.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .output()
+        .unwrap();
+    assert!(
+        apple_reference.status.success(),
+        "{}",
+        String::from_utf8_lossy(&apple_reference.stderr)
+    );
+    let policy: serde_json::Value = serde_json::from_slice(&apple_reference.stdout).unwrap();
+    assert_eq!(
+        policy["policy"]["env_credential_map"]["apple-password://github.com/alice%40example.com"],
+        "GITHUB_PASSWORD"
+    );
+
     let invalid = run(&[
         "--env-credential-map",
         "op://Development/OpenAI API Key/credential",
