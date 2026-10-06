@@ -60,11 +60,35 @@ pub struct Desktop {
     info_notice: String,
 }
 
+const CHAT_COMMANDS: &[(&str, &str)] = &[
+    ("/new", "Start a conversation"),
+    ("/threads", "Refresh the conversation list"),
+    ("/open", "Open a conversation by ID"),
+    ("/model", "Choose or set this thread's model"),
+    ("/profile", "Edit Solmu's profile"),
+    ("/audit", "Review tool calls"),
+    ("/tasks", "View scheduled tasks"),
+    ("/task", "Create or manage a scheduled task"),
+    ("/skills", "Show workspace skills"),
+    ("/mcp", "Show MCP servers and tools"),
+    ("/plugins", "Show installed plugins"),
+    ("/rename", "Rename this conversation"),
+    ("/delete", "Delete this conversation"),
+    ("/status", "Show connection and thread status"),
+    ("/export", "Export this conversation as Markdown"),
+    ("/copy", "Copy Solmu's latest reply"),
+    ("/context", "Show current conversation context"),
+    ("/compact", "Summarize older conversation history"),
+    ("/stop", "Stop Solmu's current response"),
+    ("/help", "List available commands"),
+];
+
 #[derive(Debug, Clone)]
 pub enum Event {
     Action(Action),
     Updated(Update),
     Draft(String),
+    CommandSelected(&'static str),
     Title(String),
     Send,
     Stop,
@@ -158,6 +182,24 @@ fn conversation_markdown(session: &Session) -> String {
         }
     }
     output
+}
+
+fn command_suggestions(input: &str) -> Vec<(&'static str, &'static str)> {
+    let input = input.trim_start();
+    if !input.starts_with('/') || input.chars().last().is_some_and(char::is_whitespace) {
+        return Vec::new();
+    }
+    let Some(prefix) = input.split_whitespace().next() else {
+        return Vec::new();
+    };
+    if prefix.contains(char::is_whitespace) {
+        return Vec::new();
+    }
+    CHAT_COMMANDS
+        .iter()
+        .copied()
+        .filter(|(command, _)| command.starts_with(prefix))
+        .collect()
 }
 
 impl Desktop {
@@ -809,11 +851,19 @@ impl Desktop {
                 self.draft = value;
                 Task::none()
             }
+            Event::CommandSelected(command) => {
+                self.draft = format!("{command} ");
+                Task::none()
+            }
             Event::Title(value) => {
                 self.title = value;
                 Task::none()
             }
             Event::Send => {
+                if self.draft.trim_start().starts_with('/') {
+                    let command = std::mem::take(&mut self.draft);
+                    return self.execute_command(&command);
+                }
                 if self.session.busy
                     || self.session.current.is_none()
                     || self.draft.trim().is_empty()
@@ -822,6 +872,71 @@ impl Desktop {
                 }
                 let content = std::mem::take(&mut self.draft);
                 self.act(Action::Send(content))
+            }
+        }
+    }
+
+    fn execute_command(&mut self, input: &str) -> Task<Event> {
+        let mut parts = input.trim().splitn(2, char::is_whitespace);
+        let command = parts.next().unwrap_or_default();
+        let argument = parts.next().unwrap_or_default().trim();
+        if !command.starts_with('/') {
+            return Task::none();
+        }
+        match command {
+            "/new" => self.act(Action::New(if argument.is_empty() {
+                "New conversation".into()
+            } else {
+                argument.into()
+            })),
+            "/threads" => self.act(Action::List),
+            "/open" if !argument.is_empty() => self.act(Action::Open(argument.into())),
+            "/model" if argument.is_empty() => self.update(Event::OpenModels),
+            "/model" => self.act(Action::Model(
+                (argument != "default").then(|| argument.into()),
+            )),
+            "/profile" if argument.is_empty() => self.update(Event::OpenProfile),
+            "/audit" if argument.is_empty() => self.update(Event::OpenAudit),
+            "/tasks" | "/task" if argument.is_empty() => self.update(Event::OpenTasks),
+            "/skills" if argument.is_empty() => self.update(Event::OpenSkills),
+            "/mcp" if argument.is_empty() => self.update(Event::OpenMcp),
+            "/plugins" if argument.is_empty() => self.update(Event::OpenPlugins),
+            "/rename" if !argument.is_empty() => self.act(Action::Rename(argument.into())),
+            "/delete" if argument.is_empty() => self.act(Action::Delete),
+            "/status" if argument.is_empty() => self.update(Event::Info("status")),
+            "/context" if argument.is_empty() => self.update(Event::Info("context")),
+            "/export" => {
+                if !argument.is_empty() {
+                    self.export_path = argument.into();
+                }
+                self.info_notice.clear();
+                self.info_panel = Some("export");
+                Task::none()
+            }
+            "/copy" if argument.is_empty() => self.update(Event::CopyReply),
+            "/compact" if argument.is_empty() => self.act(Action::Compact),
+            "/stop" if argument.is_empty() => self.update(Event::Stop),
+            "/help" if argument.is_empty() => {
+                self.info_panel = Some("commands");
+                self.info_notice.clear();
+                Task::none()
+            }
+            _ => {
+                self.session.error = Some(
+                    if CHAT_COMMANDS.iter().any(|(known, _)| *known == command) {
+                        format!(
+                            "Usage: {}",
+                            CHAT_COMMANDS
+                                .iter()
+                                .find(|(name, _)| *name == command)
+                                .unwrap()
+                                .0
+                        )
+                    } else {
+                        format!("Unknown command: {command}. Type / to see available commands.")
+                    },
+                );
+                Task::none()
             }
         }
     }
@@ -1667,6 +1782,22 @@ impl Desktop {
             ].spacing(8).into(),
             Some("status") => container(text(format!("{} · {} · {} · {}", if self.connected { "Connected" } else { "Disconnected" }, self.session.current.as_ref().map(|t| t.title.as_str()).unwrap_or("No conversation"), model_label, self.session.current.as_ref().and_then(|t| t.workspace.as_deref()).unwrap_or("No workspace"))).size(13)).padding(12).style(appearance::sidebar).into(),
             Some("context") => container(column![text(format!("{} messages · {} tool calls · {} skills · {} MCP servers · {} plugins\nWorkspace: {}", self.session.messages.len(), self.session.tools.len(), self.session.skills.items.len(), self.session.mcp.servers.len(), self.session.plugins.items.len(), self.session.current.as_ref().and_then(|t| t.workspace.as_deref()).unwrap_or("No workspace"))).size(13), text(&self.info_notice).size(12)]).padding(12).style(appearance::sidebar).into(),
+            Some("commands") => {
+                let mut commands = column![text("Chat commands").size(16)].spacing(6);
+                for (command, description) in CHAT_COMMANDS {
+                    commands = commands.push(
+                        row![
+                            text(*command).size(12),
+                            text(*description).size(12).color(appearance::MUTED),
+                        ]
+                        .spacing(12),
+                    );
+                }
+                container(commands)
+                    .padding(12)
+                    .style(appearance::sidebar)
+                    .into()
+            }
             _ => iced::widget::space().height(0).into(),
         };
         let status = self
@@ -1695,7 +1826,7 @@ impl Desktop {
                 )
                 .into()
         };
-        let composer = row![
+        let composer_controls = row![
             text_input("Message Solmu…", &self.draft)
                 .style(appearance::input)
                 .on_input(Event::Draft)
@@ -1706,6 +1837,36 @@ impl Desktop {
         ]
         .spacing(12)
         .align_y(iced::Alignment::Center);
+        let suggestions = command_suggestions(&self.draft);
+        let composer: Element<'_, Event> = if suggestions.is_empty() {
+            composer_controls.into()
+        } else {
+            let mut choices = column![].spacing(3);
+            for (command, description) in suggestions {
+                choices = choices.push(
+                    button(
+                        row![
+                            text(command).size(13),
+                            iced::widget::space().width(Length::Fill),
+                            text(description).size(11).color(appearance::MUTED),
+                        ]
+                        .align_y(iced::Alignment::Center),
+                    )
+                    .width(Length::Fill)
+                    .padding([8, 10])
+                    .style(appearance::ghost)
+                    .on_press(Event::CommandSelected(command)),
+                );
+            }
+            column![
+                container(scrollable(choices).height(Length::Fixed(220.0)))
+                    .padding(6)
+                    .style(appearance::sidebar),
+                composer_controls,
+            ]
+            .spacing(8)
+            .into()
+        };
         let main = container(
             column![
                 heading,

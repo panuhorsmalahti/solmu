@@ -14,6 +14,9 @@ async fn desktop_main_screen_screenshot() {
     ui.step("type enter").await;
     ui.wait("Hello from Solmu").await;
     ui.wait("Ready").await;
+    ui.step("click \"Message Solmu…\"").await;
+    ui.step("type \"/\"").await;
+    ui.wait("Show installed plugins").await;
 
     let screenshot =
         ui.emulator

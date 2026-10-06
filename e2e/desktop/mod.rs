@@ -115,6 +115,7 @@ impl<P: Program> Drop for Ui<P> {
 }
 
 mod audit;
+mod commands;
 mod compaction;
 mod conversations;
 mod mcp;

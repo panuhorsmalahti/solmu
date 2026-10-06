@@ -38,6 +38,12 @@ plugins currently loaded for the conversation. **Export** saves the thread as
 Markdown to the path shown in its panel. **Copy reply** copies Solmu's latest
 reply to the system clipboard.
 
+Type `/` in the chat input to browse and filter slash commands, then select a
+suggestion to insert it into the input. Run it with Enter or **Send**. Available
+commands are `/new`, `/threads`, `/open`, `/model`, `/profile`, `/audit`,
+`/tasks`, `/task`, `/skills`, `/mcp`, `/plugins`, `/rename`, `/delete`,
+`/status`, `/export`, `/copy`, `/context`, `/compact`, `/stop`, and `/help`.
+
 ![Solmu client screenshot](screenshots/desktop.png)
 
 ## Audit
