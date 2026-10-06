@@ -256,3 +256,56 @@ fn signed_trust_policy_blocks_listed_file_digests_before_startup() {
     assert!(!marker.exists());
     assert!(String::from_utf8_lossy(&rejected.stderr).contains("matches a blocked digest"));
 }
+
+#[test]
+fn signed_trust_policy_verifies_every_file_matching_instruction_patterns() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = root.path().join("workspace");
+    let trust_dir = root.path().join("trust");
+    std::fs::create_dir(&workspace).unwrap();
+    let instructions = workspace.join("AGENTS.md");
+    let skills = workspace.join("SKILLS.md");
+    let policy = workspace.join("boxer-trust.json");
+    std::fs::write(&instructions, "trusted agent instructions").unwrap();
+    std::fs::write(&skills, "trusted skill instructions").unwrap();
+    std::fs::write(&policy, r#"{"version":1,"instruction_patterns":["*.md"]}"#).unwrap();
+
+    let generated = Command::new(binary("boxer"))
+        .args(["trust", "keygen"])
+        .env("BOXER_TRUST_DIR", &trust_dir)
+        .output()
+        .unwrap();
+    assert!(generated.status.success());
+    for file in [&instructions, &skills, &policy] {
+        let signed = Command::new(binary("boxer"))
+            .args(["trust", "sign"])
+            .arg(file)
+            .env("BOXER_TRUST_DIR", &trust_dir)
+            .output()
+            .unwrap();
+        assert!(
+            signed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&signed.stderr)
+        );
+    }
+    let run = |marker: &str| {
+        Command::new(binary("boxer"))
+            .args(["--workspace", "--cwd"])
+            .arg(&workspace)
+            .arg("--")
+            .arg(binary("sandbox-probe"))
+            .arg(marker)
+            .env("BOXER_TRUST_DIR", &trust_dir)
+            .output()
+            .unwrap()
+    };
+    let accepted = run("pattern-accepted.txt");
+    assert_eq!(accepted.status.code(), Some(7));
+
+    std::fs::write(&skills, "changed skill instructions").unwrap();
+    let rejected = run("pattern-rejected.txt");
+    assert_eq!(rejected.status.code(), Some(125));
+    assert!(!workspace.join("pattern-rejected.txt").exists());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("changed after signing"));
+}

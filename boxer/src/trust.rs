@@ -18,7 +18,10 @@ const DOMAIN: &[u8] = b"solmu-boxer-trust-v1\0";
 #[serde(deny_unknown_fields)]
 struct TrustPolicy {
     version: u32,
+    #[serde(default)]
     files: Vec<PathBuf>,
+    #[serde(default)]
+    instruction_patterns: Vec<String>,
     blocklist: Option<TrustBlocklist>,
 }
 
@@ -128,10 +131,54 @@ pub fn verify_policy(
     if policy.version != 1 {
         return Err(io::Error::other("Unsupported trust policy version"));
     }
-    if policy.files.is_empty() || policy.files.len() > 256 {
+    if policy.files.len() > 256 || policy.instruction_patterns.len() > 128 {
         return Err(io::Error::other(
-            "Trust policy must list between 1 and 256 files",
+            "Trust policy supports at most 256 files and 128 instruction patterns",
         ));
+    }
+    if policy.files.is_empty() && policy.instruction_patterns.is_empty() {
+        return Err(io::Error::other(
+            "Trust policy must list files or instruction patterns",
+        ));
+    }
+    let mut files = policy.files;
+    for pattern in policy.instruction_patterns {
+        let path = Path::new(&pattern);
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|component| component == std::path::Component::ParentDir)
+        {
+            return Err(io::Error::other(
+                "Trust policy instruction patterns must stay inside the workspace",
+            ));
+        }
+        let pattern_path = workspace.join(path);
+        let pattern_text = pattern_path.to_string_lossy();
+        let matches = glob::glob(&pattern_text).map_err(|error| {
+            io::Error::other(format!("Invalid trust policy instruction pattern: {error}"))
+        })?;
+        let mut matched = 0usize;
+        for entry in matches {
+            let entry = entry.map_err(|error| io::Error::other(error.to_string()))?;
+            if !entry.is_file() {
+                continue;
+            }
+            let relative = entry.strip_prefix(workspace).map_err(io::Error::other)?;
+            let relative = relative.to_string_lossy().replace('\\', "/");
+            matched += 1;
+            if matched > 512 {
+                return Err(io::Error::other(
+                    "Trust policy instruction patterns match more than 512 files",
+                ));
+            }
+            files.push(relative.into());
+        }
+        if matched == 0 {
+            return Err(io::Error::other(format!(
+                "Trust policy instruction pattern matched no files: {pattern}"
+            )));
+        }
     }
     let mut blocked_digests = std::collections::HashSet::new();
     if let Some(blocklist) = policy.blocklist {
@@ -163,15 +210,14 @@ pub fn verify_policy(
         }
     }
     let mut unique = std::collections::HashSet::new();
-    let mut files = Vec::with_capacity(policy.files.len());
-    for file in policy.files {
-        let canonical = workspace_path(workspace, &file)?;
-        if !unique.insert(canonical.clone()) {
-            return Err(io::Error::other("Trust policy contains a duplicate file"));
-        }
-        files.push(canonical);
-    }
+    let mut canonical_files = Vec::with_capacity(files.len());
     for file in files {
+        let canonical = workspace_path(workspace, &file)?;
+        if unique.insert(canonical.clone()) {
+            canonical_files.push(canonical);
+        }
+    }
+    for file in canonical_files {
         let digest = verify(public_key_path, &file)?;
         if blocked_digests.contains(&digest) {
             return Err(io::Error::other(format!(
@@ -300,7 +346,7 @@ fn verify(public_path: &Path, file_path: &Path) -> io::Result<String> {
     }
     let contents = read_limited(file_path)?;
     let digest = Sha256::digest(&contents);
-    let digest_hex = hex::encode(&digest);
+    let digest_hex = hex::encode(digest);
     if digest_hex != record.digest_sha256 {
         return Err(io::Error::other(format!(
             "Trust verification failed: {} was changed after signing",

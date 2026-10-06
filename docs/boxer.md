@@ -199,7 +199,7 @@ For repeatable checks, create a trust policy listing workspace-relative files
 and sign the policy itself as well as each listed file:
 
 ```json
-{"version":1,"files":["AGENTS.md",".claude/CLAUDE.md"],"blocklist":{"digests":["sha256:<64-lowercase-hex>"]}}
+{"version":1,"files":["AGENTS.md"],"instruction_patterns":[".claude/*.md",".agents/skills/*/SKILL.md"],"blocklist":{"digests":["sha256:<64-lowercase-hex>"]}}
 ```
 
 Save this signed policy as `boxer-trust.json` in the workspace. Boxer discovers
@@ -218,12 +218,14 @@ pass `--trust-key PUBLIC_KEY`; an explicit `--trust-policy FILE` is also
 available when the policy has another name or location.
 
 Boxer verifies the policy signature first, then requires valid signatures for
-every listed file before launching the agent. The policy and listed files must
-be regular files inside the selected workspace. Relative paths are resolved
-from the workspace. Alternatively, repeat `--verify FILE` for explicit per-run
-file checks. The optional `blocklist.digests` rejects listed SHA-256 content
-digests even when their signatures are valid. The private key is created with
-owner-only permissions on Unix.
+every file in `files` and every regular workspace file matching an
+`instruction_patterns` glob before launching the agent. A pattern with no
+matches is an error. The policy and files must stay inside the selected
+workspace. Relative paths are resolved from the workspace. Alternatively,
+repeat `--verify FILE` for explicit per-run file checks. The optional
+`blocklist.digests` rejects listed SHA-256 content digests even when their
+signatures are valid. The private key is created with owner-only permissions
+on Unix.
 Protect and back it up securely; losing it means you cannot sign future updates.
 
 Signatures use Ed25519 and are checked before process launch. Boxer does not
