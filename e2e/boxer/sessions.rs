@@ -137,7 +137,8 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
     let mut attach_command = CommandBuilder::new(binary("boxer"));
     attach_command.args(["attach", id]);
     attach_command.env("BOXER_SESSIONS_DIR", directory.path());
-    let config = directory.path().join("config.toml");
+    let config_directory = tempfile::tempdir().unwrap();
+    let config = config_directory.path().join("config.toml");
     std::fs::write(&config, "[ui]\ndetach_sequence = \"ctrl-a q\"\n").unwrap();
     attach_command.env("BOXER_CONFIG", config);
     attach_command.env_remove("BOXER_DETACH_SEQUENCE");
