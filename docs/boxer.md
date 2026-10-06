@@ -308,7 +308,7 @@ mode and resource options override file values, and `--read-only` and
 
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
-`network` (`allow`, `deny`, or `proxy`), `hosts`, `local`, `publish`, `clean_env`,
+`network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `local`, `publish`, `clean_env`,
 `pass_env`, `cpus`, `memory_mib`, `pids`, and `cgroup_root`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
@@ -370,6 +370,24 @@ overriding proxy variables or disabling a program's proxy does not restore
 direct access. Connections to pathname and abstract Unix sockets, raw network
 families, tracing, and copying another process's descriptors are denied. Broker channels and host-connected
 sockets are not inherited by the launched agent.
+
+Built-in host sets can reduce setup for common workflows:
+
+```sh
+boxer network profiles
+boxer --isolated --network proxy --network-profile minimal \
+  --cwd /path/to/project -- solmu
+boxer --isolated --network proxy --network-profile developer \
+  --allow-host packages.example.com --cwd /path/to/project -- solmu
+```
+
+`minimal` allows OpenAI, Anthropic, and Google Generative Language API hosts.
+`developer` adds GitHub and common npm, Python, and Rust package registry hosts.
+You can add exact destinations with `--allow-host`; policy-file `hosts` are also
+combined with the selected profile. These are fixed host lists, not endpoint
+filters. Package registries may use additional CDN hosts, which you can add
+explicitly. Profiles require Linux isolated proxy mode and do not configure
+credential injection.
 
 For a backend that calls OpenAI, stop the regular backend, then run:
 

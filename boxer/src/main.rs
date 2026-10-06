@@ -125,6 +125,12 @@ fn run() -> io::Result<i32> {
     {
         return policy_cli::command(&raw_arguments);
     }
+    if raw_arguments
+        .first()
+        .is_some_and(|argument| argument == "network")
+    {
+        return network::command(&raw_arguments);
+    }
     let why_command = raw_arguments
         .first()
         .is_some_and(|argument| argument == "why");
@@ -155,6 +161,7 @@ fn run() -> io::Result<i32> {
     let mut policy = Policy::default();
     let mut mode = None;
     let mut network = None;
+    let mut network_profile = None;
     let mut policy_file = None;
     let mut profile = None;
     let mut print_policy = false;
@@ -189,6 +196,9 @@ fn run() -> io::Result<i32> {
                 "--trust-key PUBLIC_KEY --trust-policy FILE: verify a signed list of files before launch."
             );
             println!(
+                "--network-profile minimal|developer: add a built-in exact-host allowlist to --isolated --network proxy."
+            );
+            println!(
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
@@ -209,6 +219,16 @@ fn run() -> io::Result<i32> {
                 Some(value) if value == "proxy" => Network::Proxy,
                 _ => return Err(io::Error::other("--network requires allow, deny, or proxy")),
             });
+        } else if argument == "--network-profile" {
+            if network_profile.is_some() {
+                return Err(io::Error::other("Specify only one --network-profile"));
+            }
+            network_profile = Some(
+                arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| io::Error::other("--network-profile requires a profile name"))?,
+            );
         } else if argument == "--allow-host" || argument == "--allow-local" {
             let value = arguments
                 .next()
@@ -371,6 +391,7 @@ fn run() -> io::Result<i32> {
     };
     resolved.mode = mode.unwrap_or(resolved.mode);
     resolved.network = network.unwrap_or(resolved.network);
+    resolved.network_profile = network_profile.or(resolved.network_profile);
     resolved.hosts.extend(policy.hosts);
     resolved.local.extend(policy.local);
     resolved.publish.extend(policy.publish);

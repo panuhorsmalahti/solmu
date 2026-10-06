@@ -70,6 +70,7 @@ impl AgentProfile {
 pub struct Policy {
     pub mode: Mode,
     pub network: Network,
+    pub network_profile: Option<String>,
     pub hosts: Vec<String>,
     pub local: Vec<String>,
     pub publish: Vec<u16>,
@@ -136,6 +137,12 @@ impl Policy {
 
     pub fn resolve(&mut self, workspace: &Path) -> io::Result<()> {
         self.isolated = self.mode == Mode::Isolated;
+        if let Some(profile) = &self.network_profile {
+            if self.network != Network::Proxy {
+                return Err(io::Error::other("Network profiles require --network proxy"));
+            }
+            self.hosts.extend(crate::network::profile_hosts(profile)?);
+        }
         if self.network == Network::Proxy && !self.isolated {
             return Err(io::Error::other(
                 "Proxy networking requires Linux --isolated mode",

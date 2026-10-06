@@ -193,7 +193,8 @@ Profiles for Codex and Claude Code launch those installed CLIs with separate
 login homes and the same project access.
 Use `--network deny` for offline commands, including their subprocesses.
 On Linux, `--isolated --network proxy` permits only explicit remote and local
-routes; publish the boxed backend on port 3000 to use normal client settings.
+routes; built-in `minimal` and `developer` host profiles reduce setup. Publish
+the boxed backend on port 3000 to use normal client settings.
 Launch the backend inside Boxer to protect its tool calls.
 On Linux, `--isolated --cwd /path/to/project` also gives it
 private processes and a filesystem view with only the workspace writable,

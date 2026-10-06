@@ -1,6 +1,64 @@
 use serde::{Deserialize, Serialize};
 use std::{io, net::IpAddr};
 
+pub fn profiles() -> &'static [(&'static str, &'static [&'static str])] {
+    &[
+        (
+            "minimal",
+            &[
+                "api.openai.com",
+                "api.anthropic.com",
+                "generativelanguage.googleapis.com",
+            ],
+        ),
+        (
+            "developer",
+            &[
+                "api.openai.com",
+                "api.anthropic.com",
+                "generativelanguage.googleapis.com",
+                "github.com",
+                "api.github.com",
+                "raw.githubusercontent.com",
+                "codeload.github.com",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+                "index.crates.io",
+                "static.crates.io",
+            ],
+        ),
+    ]
+}
+
+pub fn profile_hosts(name: &str) -> io::Result<Vec<String>> {
+    profiles()
+        .iter()
+        .find(|(profile, _)| *profile == name)
+        .map(|(_, hosts)| hosts.iter().map(|host| (*host).to_owned()).collect())
+        .ok_or_else(|| {
+            io::Error::other(format!(
+                "Unknown network profile '{name}'; available profiles: minimal, developer"
+            ))
+        })
+}
+
+pub fn command(args: &[std::ffi::OsString]) -> io::Result<i32> {
+    if args.len() == 2 && args[1] == "profiles" {
+        let profiles: Vec<_> = profiles()
+            .iter()
+            .map(|(name, hosts)| serde_json::json!({"name":name,"hosts":hosts}))
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&profiles).map_err(io::Error::other)?
+        );
+        Ok(0)
+    } else {
+        Err(io::Error::other("Usage: boxer network profiles"))
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Target {
