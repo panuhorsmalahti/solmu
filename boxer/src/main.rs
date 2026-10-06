@@ -7,7 +7,7 @@ mod policy;
 mod policy_cli;
 mod rollback;
 mod trust;
-use policy::{AgentProfile, CredentialProvider, Mode, Network, Policy, RuntimeGroup};
+use policy::{AgentProfile, CredentialProvider, EndpointRule, Mode, Network, Policy, RuntimeGroup};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 
@@ -212,6 +212,9 @@ fn run() -> io::Result<i32> {
                 "--credential openai|anthropic: proxy a key from the OS credential store so the agent receives only a per-session token (requires --isolated --network proxy)."
             );
             println!(
+                "--allow-endpoint PROVIDER:METHOD:PATH: allow a brokered API endpoint (repeatable; * matches one path segment and ** matches multiple)."
+            );
+            println!(
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
@@ -306,6 +309,15 @@ fn run() -> io::Result<i32> {
                     .next()
                     .and_then(|value| value.into_string().ok())
                     .ok_or_else(|| io::Error::other("--credential requires a provider name"))?,
+            )?);
+        } else if argument == "--allow-endpoint" {
+            policy.endpoint_rules.push(EndpointRule::parse(
+                &arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| {
+                        io::Error::other("--allow-endpoint requires PROVIDER:METHOD:PATH")
+                    })?,
             )?);
         } else if argument == "--print-policy" {
             print_policy = true;
@@ -440,6 +452,7 @@ fn run() -> io::Result<i32> {
     resolved.env_credentials.extend(policy.env_credentials);
     resolved.runtime_groups.extend(policy.runtime_groups);
     resolved.credentials.extend(policy.credentials);
+    resolved.endpoint_rules.extend(policy.endpoint_rules);
     resolved.cpus = policy.cpus.or(resolved.cpus);
     resolved.memory_mib = policy.memory_mib.or(resolved.memory_mib);
     resolved.pids = policy.pids.or(resolved.pids);

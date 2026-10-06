@@ -1,4 +1,8 @@
-use crate::{credential, network::Target, policy::CredentialProvider};
+use crate::{
+    credential,
+    network::Target,
+    policy::{CredentialProvider, EndpointRule},
+};
 use ring::rand::{SecureRandom, SystemRandom};
 use rustls::{ClientConfig, RootCertStore, pki_types::ServerName};
 use std::{
@@ -37,6 +41,7 @@ pub struct Broker {
 impl Broker {
     pub fn start(
         providers: &[CredentialProvider],
+        endpoint_rules: &[EndpointRule],
         reserved_ports: &[u16],
     ) -> io::Result<(Self, Vec<(CredentialProvider, String)>)> {
         let names: Vec<_> = providers
@@ -56,6 +61,7 @@ impl Broker {
             credentials.insert(provider.route().to_owned(), Arc::new(entry));
             session_tokens.push((*provider, token));
         }
+        let endpoint_rules = Arc::new(endpoint_rules.to_vec());
 
         let mut listener = None;
         for _ in 0..64 {
@@ -95,8 +101,9 @@ impl Broker {
                             accepted = listener.accept() => {
                                 let (stream, _) = accepted?;
                                 let credentials = credentials.clone();
+                                let endpoint_rules = endpoint_rules.clone();
                                 tokio::spawn(async move {
-                                    let _ = serve(stream, credentials).await;
+                                    let _ = serve(stream, credentials, endpoint_rules).await;
                                 });
                             }
                         }
@@ -144,6 +151,7 @@ fn session_token() -> io::Result<String> {
 async fn serve(
     mut client: TcpStream,
     credentials: HashMap<String, Arc<Credential>>,
+    endpoint_rules: Arc<Vec<EndpointRule>>,
 ) -> io::Result<()> {
     client.set_nodelay(true)?;
     let header =
@@ -152,10 +160,13 @@ async fn serve(
             Ok(Ok(header)) => header,
             Ok(Err(_)) => return response(&mut client, 400, "Invalid request").await,
         };
-    let request = match parse_request(&header, &credentials) {
+    let request = match parse_request(&header, &credentials, &endpoint_rules) {
         Ok(request) => request,
         Err(RequestError::Unauthorized) => {
             return response(&mut client, 407, "Credential proxy authentication required").await;
+        }
+        Err(RequestError::Forbidden) => {
+            return response(&mut client, 403, "Endpoint is not allowed by Boxer policy").await;
         }
         Err(RequestError::Invalid) => return response(&mut client, 400, "Invalid request").await,
     };
@@ -214,11 +225,13 @@ struct Request {
 enum RequestError {
     Invalid,
     Unauthorized,
+    Forbidden,
 }
 
 fn parse_request(
     header: &[u8],
     credentials: &HashMap<String, Arc<Credential>>,
+    endpoint_rules: &[EndpointRule],
 ) -> Result<Request, RequestError> {
     let text = std::str::from_utf8(header).map_err(|_| RequestError::Invalid)?;
     let mut lines = text.split("\r\n");
@@ -227,7 +240,7 @@ fn parse_request(
     let path = request_line.next().ok_or(RequestError::Invalid)?;
     let version = request_line.next().ok_or(RequestError::Invalid)?;
     if request_line.next().is_some()
-        || !matches!(method, "GET" | "POST")
+        || !valid_http_token(method)
         || version != "HTTP/1.1"
         || !path.starts_with('/')
         || path
@@ -319,6 +332,19 @@ fn parse_request(
     if !bool::from(supplied_token.as_bytes().ct_eq(credential.token.as_bytes())) {
         return Err(RequestError::Unauthorized);
     }
+    if !endpoint_rules.is_empty() {
+        let path = upstream_path
+            .split_once('?')
+            .map(|(path, _)| path)
+            .unwrap_or(&upstream_path);
+        let path = decode_path(path).ok_or(RequestError::Invalid)?;
+        if !endpoint_rules
+            .iter()
+            .any(|rule| rule.matches(credential.provider, method, &path))
+        {
+            return Err(RequestError::Forbidden);
+        }
+    }
 
     let host = credential.provider.host().trim_end_matches(":443");
     let mut upstream_header = format!("{method} {upstream_path} {version}\r\nHost: {host}\r\n");
@@ -342,9 +368,6 @@ fn parse_request(
     }
     upstream_header.push_str("Connection: close\r\n\r\n");
     let server_name = ServerName::try_from(host.to_owned()).map_err(|_| RequestError::Invalid)?;
-    if method == "POST" && content_length.is_none() && !chunked {
-        return Err(RequestError::Invalid);
-    }
     let body_limit = content_length.unwrap_or(if chunked { MAX_CONTENT_LENGTH } else { 0 });
     Ok(Request {
         credential,
@@ -353,6 +376,54 @@ fn parse_request(
         body_limit,
         expect_continue,
     })
+}
+
+fn decode_path(path: &str) -> Option<String> {
+    let input = path.as_bytes();
+    let mut output = Vec::with_capacity(input.len());
+    let mut index = 0;
+    while index < input.len() {
+        if input[index] == b'%' {
+            let high = *input.get(index + 1)?;
+            let low = *input.get(index + 2)?;
+            output.push(hex_digit(high)? * 16 + hex_digit(low)?);
+            index += 3;
+        } else {
+            output.push(input[index]);
+            index += 1;
+        }
+    }
+    let path = String::from_utf8(output).ok()?;
+    let segments: Vec<_> = path.split('/').skip(1).collect();
+    if !path.starts_with('/')
+        || path
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace() || byte == b'\\')
+        || path.split('/').any(|segment| matches!(segment, "." | ".."))
+        || segments
+            .iter()
+            .enumerate()
+            .any(|(index, segment)| segment.is_empty() && index + 1 != segments.len())
+    {
+        return None;
+    }
+    Some(path)
+}
+
+fn valid_http_token(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+}
+
+fn hex_digit(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn tls_connector() -> io::Result<TlsConnector> {
@@ -415,6 +486,7 @@ async fn response(client: &mut TcpStream, status: u16, message: &str) -> io::Res
                 match status {
                     408 => "Request Timeout",
                     407 => "Proxy Authentication Required",
+                    403 => "Forbidden",
                     502 => "Bad Gateway",
                     _ => "Bad Request",
                 },
@@ -447,6 +519,7 @@ mod tests {
         let request = parse_request(
             b"POST /openai/v1/chat/completions?stream=true HTTP/1.1\r\nAuthorization: Bearer session-token\r\nHost: 127.0.0.1\r\nContent-Length: 2\r\n\r\n",
             &credentials(CredentialProvider::Openai),
+            &[],
         )
         .unwrap();
         assert!(request.upstream_header.contains("Host: api.openai.com\r\n"));
@@ -468,6 +541,7 @@ mod tests {
         let result = parse_request(
             b"POST /openai/v1/chat/completions HTTP/1.1\r\nAuthorization: Bearer wrong\r\n\r\n",
             &credentials(CredentialProvider::Openai),
+            &[],
         );
         assert!(matches!(result, Err(RequestError::Unauthorized)));
     }
@@ -477,30 +551,54 @@ mod tests {
         let request = parse_request(
             b"POST /openai/v1/chat/completions HTTP/1.1\r\nAuthorization: bEaReR session-token\r\nContent-Length: 0\r\n\r\n",
             &credentials(CredentialProvider::Openai),
+            &[],
         );
         assert!(request.is_ok());
 
         let duplicate = parse_request(
             b"POST /openai/v1/chat/completions HTTP/1.1\r\nAuthorization: Bearer session-token\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n",
             &credentials(CredentialProvider::Openai),
+            &[],
         );
         assert!(matches!(duplicate, Err(RequestError::Invalid)));
     }
 
     #[test]
-    fn post_requires_framed_body_and_get_without_body_does_not_wait_for_eof() {
+    fn bodyless_requests_do_not_wait_for_eof() {
         let credentials = credentials(CredentialProvider::Openai);
-        let missing_length = parse_request(
+        let post = parse_request(
             b"POST /openai/v1/chat/completions HTTP/1.1\r\nAuthorization: Bearer session-token\r\n\r\n",
             &credentials,
-        );
-        assert!(matches!(missing_length, Err(RequestError::Invalid)));
+            &[],
+        )
+        .unwrap();
+        assert_eq!(post.body_limit, 0);
 
         let get = parse_request(
             b"GET /openai/v1/models HTTP/1.1\r\nAuthorization: Bearer session-token\r\n\r\n",
             &credentials,
+            &[],
         )
         .unwrap();
         assert_eq!(get.body_limit, 0);
+    }
+
+    #[test]
+    fn endpoint_allowlist_blocks_other_paths_and_matches_decoded_path_segments() {
+        let credentials = credentials(CredentialProvider::Openai);
+        let rules = vec![EndpointRule::parse("openai:POST:/v1/chat/completions").unwrap()];
+        let allowed = parse_request(
+            b"POST /openai/v1/%63hat/completions?stream=true HTTP/1.1\r\nAuthorization: Bearer session-token\r\nContent-Length: 0\r\n\r\n",
+            &credentials,
+            &rules,
+        );
+        assert!(allowed.is_ok());
+
+        let denied = parse_request(
+            b"GET /openai/v1/models HTTP/1.1\r\nAuthorization: Bearer session-token\r\n\r\n",
+            &credentials,
+            &rules,
+        );
+        assert!(matches!(denied, Err(RequestError::Forbidden)));
     }
 }

@@ -184,8 +184,11 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
                 .map(|route| crate::network::Target::parse(route, true).map(|target| target.port))
                 .collect::<io::Result<Vec<_>>>()?,
         );
-        let (broker, session_tokens) =
-            proxy::credential::Broker::start(&policy.credentials, &reserved_ports)?;
+        let (broker, session_tokens) = proxy::credential::Broker::start(
+            &policy.credentials,
+            &policy.endpoint_rules,
+            &reserved_ports,
+        )?;
         let port = broker.port();
         policy.local.push(format!("127.0.0.1:{port}"));
         for (provider, token) in session_tokens {

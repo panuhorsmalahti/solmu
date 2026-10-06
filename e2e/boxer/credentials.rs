@@ -62,6 +62,22 @@ fn credential_proxy_requires_isolated_routed_networking() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("Credential proxying"));
 }
 
+#[test]
+fn endpoint_allowlists_require_a_brokered_credential() {
+    let output = run(&[
+        "--allow-endpoint",
+        "openai:POST:/v1/chat/completions",
+        "--",
+        "unused-program",
+    ]);
+    assert_eq!(output.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("require at least one --credential"));
+
+    let invalid = run(&["--allow-endpoint", "openai:POST:/v1/models?verbose=true"]);
+    assert_eq!(invalid.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("Endpoint paths"));
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
@@ -73,6 +89,8 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
             "proxy",
             "--credential",
             "openai",
+            "--allow-endpoint",
+            "openai:POST:/v1/chat/completions",
             "--cwd",
         ])
         .arg(workspace.path())
@@ -87,6 +105,10 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
     );
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["policy"]["credentials"][0], "openai");
+    assert_eq!(
+        result["policy"]["endpoint_rules"][0]["path"],
+        "/v1/chat/completions"
+    );
     assert!(
         result["policy"]["hosts"]
             .as_array()

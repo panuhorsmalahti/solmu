@@ -142,6 +142,22 @@ still need explicit routes. The local broker verifies the session token and
 does not print the stored key. The agent can make requests through the broker,
 but the key itself is not in its environment.
 
+By default, the broker allows any API path on the selected provider. Add one or
+more `--allow-endpoint PROVIDER:METHOD:PATH` options to limit it to specific
+endpoints. Once rules are present, other requests receive `403 Forbidden`:
+
+```sh
+boxer --profile solmu --isolated --network proxy --credential openai \
+  --allow-endpoint openai:POST:/v1/chat/completions \
+  --allow-endpoint openai:POST:/v1/responses \
+  --cwd /path/to/project -- solmu
+```
+
+Methods are uppercase HTTP method names or `*`. In paths, `*` matches one
+non-empty segment and `**` matches zero or more segments. Query strings are not
+part of the match. The same rules can be stored as `endpoint_rules` entries
+with `provider`, `method`, and `path` fields in a Boxer policy file.
+
 ### Give access to an installed toolchain
 
 Runtime groups grant read-only access to detected Node, Python, Rust, or Go
@@ -384,8 +400,10 @@ The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `local`, `publish`, `clean_env`,
 `pass_env`, `env_credentials`, `credentials`, `runtime_groups`, `cpus`,
-`memory_mib`, `pids`, and `cgroup_root`. Proxy credentials are `openai` and
-`anthropic`; runtime groups are `node`, `python`, `rust`, and `go`.
+`endpoint_rules`, `memory_mib`, `pids`, and `cgroup_root`. Endpoint rules have
+`provider`, `method`, and `path` fields and require a matching entry in
+`credentials`. Proxy credentials are `openai` and `anthropic`; runtime groups
+are `node`, `python`, `rust`, and `go`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
 

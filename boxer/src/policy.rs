@@ -63,11 +63,156 @@ pub enum RuntimeGroup {
     Go,
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub enum CredentialProvider {
     Openai,
     Anthropic,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
+pub struct EndpointRule {
+    pub provider: CredentialProvider,
+    pub method: String,
+    pub path: String,
+}
+
+impl EndpointRule {
+    pub fn parse(value: &str) -> io::Result<Self> {
+        let mut fields = value.splitn(3, ':');
+        let provider = CredentialProvider::parse(fields.next().unwrap_or_default())?;
+        let method = fields.next().unwrap_or_default().to_owned();
+        let path = fields.next().unwrap_or_default().to_owned();
+        let rule = Self {
+            provider,
+            method,
+            path,
+        };
+        rule.validate()?;
+        Ok(rule)
+    }
+
+    pub fn validate(&self) -> io::Result<()> {
+        if self.method != "*"
+            && (!http_token(&self.method)
+                || self.method.bytes().any(|byte| byte.is_ascii_lowercase()))
+        {
+            return Err(io::Error::other(
+                "Endpoint methods must be uppercase HTTP tokens or *",
+            ));
+        }
+        if !self.path.starts_with('/')
+            || self.path.starts_with("//")
+            || self
+                .path
+                .chars()
+                .any(|character| matches!(character, '?' | '#' | '%' | '\\'))
+            || self
+                .path
+                .bytes()
+                .any(|byte| byte.is_ascii_control() || byte == b' ')
+        {
+            return Err(io::Error::other(
+                "Endpoint paths must be absolute paths without queries or encoded characters",
+            ));
+        }
+        let segments: Vec<_> = self.path.split('/').skip(1).collect();
+        if segments.len() > 128
+            || segments.iter().enumerate().any(|(index, segment)| {
+                (segment.is_empty() && index + 1 != segments.len())
+                    || matches!(*segment, "." | "..")
+                    || (segment.contains('*') && !matches!(*segment, "*" | "**"))
+            })
+        {
+            return Err(io::Error::other("Invalid endpoint path pattern"));
+        }
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub fn matches(&self, provider: CredentialProvider, method: &str, path: &str) -> bool {
+        if self.provider != provider || (self.method != "*" && self.method != method) {
+            return false;
+        }
+        let pattern: Vec<_> = self.path.split('/').skip(1).collect();
+        let path: Vec<_> = path.split('/').skip(1).collect();
+        let mut matched = vec![false; path.len() + 1];
+        matched[0] = true;
+        for segment in pattern {
+            let mut next = vec![false; path.len() + 1];
+            if segment == "**" {
+                let mut reachable = false;
+                for (index, is_matched) in matched.iter().enumerate() {
+                    reachable |= *is_matched;
+                    next[index] = reachable;
+                }
+            } else {
+                for (index, value) in path.iter().enumerate() {
+                    if matched[index]
+                        && ((segment == "*" && !value.is_empty()) || segment == *value)
+                    {
+                        next[index + 1] = true;
+                    }
+                }
+            }
+            matched = next;
+        }
+        matched[path.len()]
+    }
+}
+
+fn http_token(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+}
+
+#[cfg(test)]
+mod endpoint_rule_tests {
+    use super::*;
+
+    #[test]
+    fn path_patterns_match_one_or_many_segments() {
+        let rule = EndpointRule::parse("openai:POST:/v1/models/*/responses/**").unwrap();
+        assert!(rule.matches(
+            CredentialProvider::Openai,
+            "POST",
+            "/v1/models/gpt-6/responses"
+        ));
+        assert!(rule.matches(
+            CredentialProvider::Openai,
+            "POST",
+            "/v1/models/gpt-6/responses/stream"
+        ));
+        assert!(!rule.matches(
+            CredentialProvider::Openai,
+            "GET",
+            "/v1/models/gpt-6/responses"
+        ));
+        assert!(!rule.matches(
+            CredentialProvider::Anthropic,
+            "POST",
+            "/v1/models/gpt-6/responses"
+        ));
+    }
+
+    #[test]
+    fn endpoint_patterns_reject_ambiguous_paths_and_methods() {
+        for invalid in [
+            "openai:get:/v1/models",
+            "openai:POST:v1/models",
+            "openai:POST:/v1/*/../admin",
+            "openai:POST:/v1/foo*",
+            "openai:GET :/v1/models",
+            "openai:POST:/v1/models?verbose=true",
+            "openai:POST:/v1/%6dodels",
+        ] {
+            assert!(EndpointRule::parse(invalid).is_err(), "accepted {invalid}");
+        }
+        assert!(EndpointRule::parse("openai:*:/v1/**").is_ok());
+    }
 }
 
 impl CredentialProvider {
@@ -95,12 +240,16 @@ impl CredentialProvider {
         }
     }
 
-    #[cfg(target_os = "linux")]
-    pub fn route(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Openai => "openai",
             Self::Anthropic => "anthropic",
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn route(self) -> &'static str {
+        self.name()
     }
 }
 
@@ -202,6 +351,7 @@ pub struct Policy {
     pub env_credentials: Vec<String>,
     pub runtime_groups: Vec<RuntimeGroup>,
     pub credentials: Vec<CredentialProvider>,
+    pub endpoint_rules: Vec<EndpointRule>,
     pub cpus: Option<u32>,
     pub memory_mib: Option<u32>,
     pub pids: Option<u32>,
@@ -300,6 +450,28 @@ impl Policy {
                 return Err(io::Error::other(
                     "The Solmu profile accepts one brokered provider at a time",
                 ));
+            }
+        }
+        if !self.endpoint_rules.is_empty() {
+            if self.credentials.is_empty() {
+                return Err(io::Error::other(
+                    "Endpoint allowlists require at least one --credential provider",
+                ));
+            }
+            let mut rules = std::collections::HashSet::new();
+            for rule in &self.endpoint_rules {
+                rule.validate()?;
+                if !self.credentials.contains(&rule.provider) {
+                    return Err(io::Error::other(format!(
+                        "Endpoint rule provider {} is not configured with --credential",
+                        rule.provider.name()
+                    )));
+                }
+                if !rules.insert(rule) {
+                    return Err(io::Error::other(
+                        "An endpoint rule was specified more than once",
+                    ));
+                }
             }
         }
         if self.network == Network::Proxy && !self.isolated {
