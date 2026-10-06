@@ -19,7 +19,14 @@ fn macos_learn_traces_filesystem_access_using_fs_usage() {
         String::from_utf8_lossy(&result.stderr)
     );
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let input = input.canonicalize().unwrap();
     let output = output.canonicalize().unwrap();
+    assert!(
+        report["filesystem"]["read"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!(input))
+    );
     assert!(
         report["filesystem"]["write"]
             .as_array()

@@ -273,10 +273,13 @@ fn is_read_operation(operation: &str) -> bool {
             | "readlink"
             | "RdData"
             | "read"
+            | "read_nocancel"
             | "pread"
+            | "pread_nocancel"
             | "getattrlist"
             | "getattrlistbulk"
             | "PageIn"
+            | "PAGE_IN"
     )
 }
 
@@ -285,16 +288,22 @@ fn is_write_operation(operation: &str) -> bool {
         operation,
         "WrData"
             | "write"
+            | "write_nocancel"
             | "pwrite"
+            | "pwrite_nocancel"
             | "truncate"
             | "rename"
+            | "renameat"
             | "unlink"
+            | "unlinkat"
             | "mkdir"
             | "rmdir"
             | "remove"
             | "chmod"
             | "WrMeta"
             | "setattrlist"
+            | "PageOut"
+            | "PAGE_OUT"
     )
 }
 
