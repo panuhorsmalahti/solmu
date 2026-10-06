@@ -85,3 +85,98 @@ fn why_explains_workspace_grants_denials_and_unrestricted_access() {
     assert!(out.status.success());
     assert_eq!(result["result"], "allowed");
 }
+
+#[test]
+fn why_explains_network_access_without_connecting() {
+    let (out, result) = why(&["why", "--host", "api.example.com", "--op", "connect"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(result["operation"], "connect");
+    assert_eq!(result["host"], "api.example.com");
+    assert_eq!(result["port"], 443);
+    assert_eq!(result["result"], "allowed");
+
+    let (out, result) = why(&[
+        "why",
+        "--host",
+        "api.example.com:8443",
+        "--op",
+        "connect",
+        "--network",
+        "deny",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        result["result"],
+        if cfg!(windows) {
+            "unsupported"
+        } else {
+            "denied"
+        }
+    );
+
+    let root = tempfile::tempdir().unwrap();
+    let policy = root.path().join("network-policy.json");
+    std::fs::write(&policy, r#"{"version":1,"mode":"isolated","network":"proxy","hosts":["*.example.com"],"deny_hosts":["blocked.example.com"]}"#).unwrap();
+    for (host, expected) in [
+        ("api.example.com", "allowed"),
+        ("example.com", "denied"),
+        ("blocked.example.com", "denied"),
+        ("outside.test", "denied"),
+    ] {
+        let (out, result) = why(&[
+            "why",
+            "--host",
+            host,
+            "--op",
+            "connect",
+            "--policy",
+            policy.to_str().unwrap(),
+        ]);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            result["result"],
+            if cfg!(target_os = "linux") {
+                expected
+            } else {
+                "unsupported"
+            },
+            "{host}"
+        );
+    }
+
+    let (out, result) = why(&[
+        "why",
+        "--host",
+        "127.0.0.1:3000",
+        "--op",
+        "connect",
+        "--network",
+        "deny",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(result["port"], 3000);
+    assert_eq!(
+        result["result"],
+        if cfg!(windows) {
+            "unsupported"
+        } else {
+            "denied"
+        }
+    );
+}

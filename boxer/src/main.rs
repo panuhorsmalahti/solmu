@@ -208,6 +208,7 @@ fn run() -> io::Result<i32> {
     let mut rollback_session = false;
     let mut detached = false;
     let mut why_path = None;
+    let mut why_host = None;
     let mut why_operation = "read";
     let mut trust_key = None;
     let mut trust_policy = None;
@@ -227,7 +228,7 @@ fn run() -> io::Result<i32> {
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."
             );
             println!(
-                "boxer why --path PATH [--op read|write] [policy options]: explain the resolved filesystem policy for a path without launching a program."
+                "boxer why --path PATH [--op read|write] or --host HOST[:PORT] [--op connect] [policy options]: explain resolved filesystem or network policy without launching a program."
             );
             println!(
                 "--trust-key PUBLIC_KEY --verify FILE: verify signed files before launch; repeat --verify for multiple files."
@@ -430,6 +431,13 @@ fn run() -> io::Result<i32> {
                 Some(std::path::PathBuf::from(arguments.next().ok_or_else(
                     || io::Error::other("why requires --path PATH"),
                 )?));
+        } else if argument == "--host" && why_command {
+            why_host = Some(
+                arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| io::Error::other("why requires --host HOST[:PORT]"))?,
+            );
         } else if argument == "--op" && why_command {
             why_operation = match arguments
                 .next()
@@ -438,7 +446,8 @@ fn run() -> io::Result<i32> {
             {
                 Some("read") => "read",
                 Some("write") => "write",
-                _ => return Err(io::Error::other("--op must be read or write")),
+                Some("connect") => "connect",
+                _ => return Err(io::Error::other("--op must be read, write, or connect")),
             };
         } else if argument == "--trust-key" {
             if trust_key.is_some() {
@@ -616,14 +625,25 @@ fn run() -> io::Result<i32> {
         ));
     }
     if why_command {
-        if why_path.is_none()
+        if why_path.is_some() == why_host.is_some()
             || program.is_some()
             || rollback_session
             || check_policy
             || print_policy
         {
             return Err(io::Error::other(
-                "Usage: boxer why --path PATH [--op read|write] [policy options]",
+                "Usage: boxer why --path PATH [--op read|write] or --host HOST[:PORT] [--op connect] [policy options]",
+            ));
+        }
+        if let Some(host) = why_host {
+            if why_operation != "connect" {
+                return Err(io::Error::other("Network queries require --op connect"));
+            }
+            return explain::run_network(&resolved, &host);
+        }
+        if why_operation == "connect" {
+            return Err(io::Error::other(
+                "Filesystem queries require --op read or --op write",
             ));
         }
         return explain::run(&resolved, &workspace, &why_path.unwrap(), why_operation);

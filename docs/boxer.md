@@ -98,6 +98,19 @@ or reports `unsupported` when the current platform backend cannot enforce the
 requested filesystem policy. This explains Boxer’s policy rules, not ambient
 OS permissions, ACLs, or whether a later filesystem operation will succeed.
 
+Use `--host HOST[:PORT] --op connect` to query a network decision without
+opening a connection:
+
+```sh
+boxer why --host api.openai.com --op connect --isolated --network proxy --network-profile minimal
+boxer why --host blocked.example --op connect --policy boxer-policy.json
+```
+
+For network policies, this reports hostname and port matching only. Linux also
+checks resolved destination addresses at connection time, so DNS results,
+private-address protections, and later connection errors cannot be predicted by
+this dry run.
+
 ## Verify trusted instruction files
 
 Boxer can verify signed instruction files before starting an agent. Create a

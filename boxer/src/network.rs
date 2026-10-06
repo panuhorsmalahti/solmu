@@ -98,13 +98,11 @@ impl HostPattern {
         format!("{}:{}", self.host, self.port)
     }
 
-    #[cfg(any(target_os = "linux", test))]
     pub fn matches(&self, host: &str, port: u16) -> bool {
         self.port == port && matches_domain_pattern(host, &self.host)
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
 pub fn matches_domain_pattern(host: &str, pattern: &str) -> bool {
     if pattern == "*" {
         return true;
@@ -123,12 +121,10 @@ pub fn matches_domain_pattern(host: &str, pattern: &str) -> bool {
             .all(|(host_label, pattern_label)| pattern_label == "*" || *host_label == pattern_label)
 }
 
-#[cfg(any(target_os = "linux", test))]
 pub fn is_always_denied_domain(host: &str) -> bool {
     matches!(host, "metadata.google.internal" | "metadata.azure.internal")
 }
 
-#[cfg(any(target_os = "linux", test))]
 pub fn is_denied_domain(host: &str, patterns: &[String]) -> bool {
     is_always_denied_domain(host)
         || patterns

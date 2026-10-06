@@ -1,6 +1,7 @@
 use crate::{
     Policy,
-    policy::{self, Mode},
+    network::{HostPattern, Target},
+    policy::{self, Mode, Network},
 };
 use serde::Serialize;
 use std::{
@@ -80,6 +81,87 @@ pub fn run(
         operation: if operation == "read" { "read" } else { "write" },
         result,
         reason,
+        mode: policy.mode,
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&explanation).map_err(io::Error::other)?
+    );
+    Ok(0)
+}
+
+#[derive(Serialize)]
+struct NetworkExplanation {
+    host: String,
+    port: u16,
+    operation: &'static str,
+    result: &'static str,
+    reason: &'static str,
+    network: Network,
+    mode: Mode,
+}
+
+pub fn run_network(policy: &Policy, requested: &str) -> io::Result<i32> {
+    let target = Target::parse(requested, false).or_else(|_| Target::parse(requested, true))?;
+    let (result, reason) = if cfg!(windows) && policy.network != Network::Allow {
+        (
+            "unsupported",
+            "The Windows Job Object backend does not enforce outbound network policies",
+        )
+    } else {
+        match policy.network {
+            Network::Allow => ("allowed", "Network access is unrestricted by Boxer"),
+            Network::Deny => (
+                "denied",
+                "The configured network policy denies all network access",
+            ),
+            Network::Proxy if !cfg!(target_os = "linux") => (
+                "unsupported",
+                "Routed network policies are enforced only by the Linux isolated backend",
+            ),
+            Network::Proxy
+                if crate::network::is_denied_domain(&target.host, &policy.deny_hosts) =>
+            {
+                (
+                    "denied",
+                    "The destination matches a domain that is always denied or explicitly blocked",
+                )
+            }
+            Network::Proxy
+                if policy
+                    .local
+                    .iter()
+                    .any(|route| Target::parse(route, true).is_ok_and(|local| local == target)) =>
+            {
+                (
+                    "allowed",
+                    "The exact loopback destination is explicitly forwarded",
+                )
+            }
+            Network::Proxy
+                if policy.hosts.iter().any(|host| {
+                    HostPattern::parse(host)
+                        .is_ok_and(|pattern| pattern.matches(&target.host, target.port))
+                }) =>
+            {
+                (
+                    "allowed",
+                    "The destination matches an explicit or profile host allowlist",
+                )
+            }
+            Network::Proxy => (
+                "denied",
+                "The destination is not in the configured network allowlist",
+            ),
+        }
+    };
+    let explanation = NetworkExplanation {
+        host: target.host,
+        port: target.port,
+        operation: "connect",
+        result,
+        reason,
+        network: policy.network,
         mode: policy.mode,
     };
     println!(

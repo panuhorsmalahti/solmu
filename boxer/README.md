@@ -105,8 +105,10 @@ writes; Windows supports process-tree containment only.
 
 See [permissions, platform requirements, and usage](../docs/boxer.md).
 
-Use `boxer why --path PATH --op read|write` with the policy options you plan to
-run to see how Boxer resolves that filesystem access. See the
+Use `boxer why --path PATH --op read|write` or `boxer why --host HOST[:PORT]
+--op connect` with the policy options you plan to run to see how Boxer resolves
+filesystem access or network destination rules. Network queries do not connect
+and cannot predict DNS-based destination checks. See the
 [path explanation guide](../docs/boxer.md#explain-a-path-decision).
 
 Sign instruction files with `boxer trust keygen` and `boxer trust sign`, then
