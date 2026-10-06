@@ -1055,28 +1055,6 @@ fn detach_key(key: &str) -> io::Result<u8> {
     Ok(byte)
 }
 
-#[cfg(test)]
-mod detach_sequence_tests {
-    use super::parse_detach_sequence;
-
-    #[test]
-    fn parses_control_and_named_keys() {
-        assert_eq!(parse_detach_sequence("ctrl-] d").unwrap(), [0x1d, b'd']);
-        assert_eq!(parse_detach_sequence("ctrl-a q").unwrap(), [0x01, b'q']);
-        assert_eq!(
-            parse_detach_sequence("esc space x").unwrap(),
-            [0x1b, b' ', b'x']
-        );
-    }
-
-    #[test]
-    fn rejects_invalid_or_ambiguous_sequences() {
-        assert!(parse_detach_sequence("q").is_err());
-        assert!(parse_detach_sequence("ctrl-z unknown").is_err());
-        assert!(parse_detach_sequence("a b c d e f g h i").is_err());
-    }
-}
-
 struct RawTerminal(libc::termios);
 
 impl RawTerminal {
@@ -1129,4 +1107,26 @@ fn send_resize(root: &std::path::Path, id: &str, rows: u16, cols: u16) -> io::Re
         (cols >> 8) as u8,
         cols as u8,
     ])
+}
+
+#[cfg(test)]
+mod detach_sequence_tests {
+    use super::parse_detach_sequence;
+
+    #[test]
+    fn parses_control_and_named_keys() {
+        assert_eq!(parse_detach_sequence("ctrl-] d").unwrap(), [0x1d, b'd']);
+        assert_eq!(parse_detach_sequence("ctrl-a q").unwrap(), [0x01, b'q']);
+        assert_eq!(
+            parse_detach_sequence("esc space x").unwrap(),
+            [0x1b, b' ', b'x']
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_or_ambiguous_sequences() {
+        assert!(parse_detach_sequence("q").is_err());
+        assert!(parse_detach_sequence("ctrl-z unknown").is_err());
+        assert!(parse_detach_sequence("a b c d e f g h i").is_err());
+    }
 }
