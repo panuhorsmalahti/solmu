@@ -7,14 +7,26 @@ use std::{
     sync::mpsc,
 };
 
-fn wait_for_output(output: &mpsc::Receiver<Vec<u8>>, collected: &mut Vec<u8>, needle: &[u8]) {
+fn wait_for_output(
+    output: &mpsc::Receiver<Vec<u8>>,
+    collected: &mut Vec<u8>,
+    needle: &[u8],
+) -> Result<(), mpsc::RecvTimeoutError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while !collected.windows(needle.len()).any(|part| part == needle) {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        let bytes = output
-            .recv_timeout(remaining)
-            .expect("timed out waiting for attached terminal output");
+        let bytes = output.recv_timeout(remaining)?;
         collected.extend(bytes);
+    }
+    Ok(())
+}
+
+fn assert_output(output: &mpsc::Receiver<Vec<u8>>, collected: &mut Vec<u8>, needle: &[u8]) {
+    if let Err(error) = wait_for_output(output, collected, needle) {
+        panic!(
+            "timed out waiting for attached terminal output ({error}): {}",
+            String::from_utf8_lossy(collected)
+        );
     }
 }
 
@@ -92,9 +104,9 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         }
     });
     let mut attached_output = Vec::new();
-    wait_for_output(&output_rx, &mut attached_output, b"session-ready");
+    assert_output(&output_rx, &mut attached_output, b"session-ready");
     writer.write_all(b"hello\r").unwrap();
-    wait_for_output(&output_rx, &mut attached_output, b"received:hello");
+    assert_output(&output_rx, &mut attached_output, b"received:hello");
     writer.write_all(&[0x1d]).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(30));
     writer.write_all(b"d").unwrap();
