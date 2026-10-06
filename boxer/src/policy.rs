@@ -733,6 +733,10 @@ pub struct Policy {
     pub cpus: Option<u32>,
     pub memory_mib: Option<u32>,
     pub pids: Option<u32>,
+    #[serde(default)]
+    pub linux_signal_scope: bool,
+    #[serde(default)]
+    pub linux_abstract_unix_socket_scope: bool,
     pub cgroup_root: Option<PathBuf>,
     #[serde(skip)]
     pub isolated: bool,
@@ -1139,6 +1143,18 @@ impl Policy {
             {
                 return Err(io::Error::other(
                     "Environment names must use letters, digits, and underscores",
+                ));
+            }
+        }
+        if self.linux_signal_scope || self.linux_abstract_unix_socket_scope {
+            if !cfg!(target_os = "linux") {
+                return Err(io::Error::other(
+                    "Landlock signal and abstract-socket scopes are supported only on Linux",
+                ));
+            }
+            if self.mode == Mode::Unrestricted {
+                return Err(io::Error::other(
+                    "Landlock scopes require --workspace or --isolated sandboxing",
                 ));
             }
         }

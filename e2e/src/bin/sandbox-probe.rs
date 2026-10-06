@@ -12,6 +12,39 @@ fn main() {
         print!("cmd-secret-fixture\n");
         return;
     }
+    #[cfg(target_os = "linux")]
+    if arguments
+        .first()
+        .is_some_and(|value| value == "--abstract-connect")
+    {
+        use std::os::{linux::net::SocketAddrExt, unix::net::UnixDatagram};
+        let name = arguments[1].to_string_lossy();
+        let address = std::os::unix::net::SocketAddr::from_abstract_name(name.as_bytes()).unwrap();
+        let socket = UnixDatagram::unbound().unwrap();
+        let result = socket.connect_addr(&address);
+        assert!(
+            result.is_err(),
+            "abstract Unix sockets outside the Landlock domain must be inaccessible"
+        );
+        println!("abstract Unix socket isolation verified");
+        return;
+    }
+    #[cfg(target_os = "linux")]
+    if arguments
+        .first()
+        .is_some_and(|value| value == "--signal-check")
+    {
+        let pid: libc::pid_t = arguments[1].to_string_lossy().parse().unwrap();
+        let result = unsafe { libc::kill(pid, libc::SIGTERM) };
+        assert_eq!(result, -1, "the host process must not receive the signal");
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM),
+            "Landlock must reject signaling outside its domain"
+        );
+        println!("signal isolation verified");
+        return;
+    }
     if arguments
         .first()
         .is_some_and(|value| value == "--learn-fixture")

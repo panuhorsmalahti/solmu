@@ -271,6 +271,8 @@ fn schema_value() -> Value {
             "cpus": {"type": "integer", "minimum": 1},
             "memory_mib": {"type": "integer", "minimum": 1},
             "pids": {"type": "integer", "minimum": 1},
+            "linux_signal_scope": {"type": "boolean"},
+            "linux_abstract_unix_socket_scope": {"type": "boolean"},
             "cgroup_root": {"type": "string"}
         },
         "allOf": [{
@@ -383,6 +385,8 @@ fn scaffold(extends: Vec<OsString>, full: bool) -> Value {
             ("credentials", json!([])),
             ("custom_credentials", json!({})),
             ("credential_capture", json!({})),
+            ("linux_signal_scope", json!(false)),
+            ("linux_abstract_unix_socket_scope", json!(false)),
             ("endpoint_rules", json!([])),
         ] {
             object.insert(key.into(), value);

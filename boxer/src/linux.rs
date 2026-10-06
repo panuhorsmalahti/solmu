@@ -4,7 +4,7 @@ use crate::{
 };
 use landlock::{
     ABI, Access, AccessFs, CompatLevel, Compatible, PathBeneath, PathFd, Ruleset, RulesetAttr,
-    RulesetCreatedAttr,
+    RulesetCreatedAttr, Scope,
 };
 use std::{
     io,
@@ -45,12 +45,19 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     } else {
         writable
     };
-    let mut rules = Ruleset::default()
+    let mut ruleset = Ruleset::default()
         .set_compatibility(CompatLevel::HardRequirement)
         .handle_access(handled)
-        .map_err(io::Error::other)?
-        .create()
         .map_err(io::Error::other)?;
+    if policy.linux_signal_scope {
+        ruleset = ruleset.scope(Scope::Signal).map_err(io::Error::other)?;
+    }
+    if policy.linux_abstract_unix_socket_scope {
+        ruleset = ruleset
+            .scope(Scope::AbstractUnixSocket)
+            .map_err(io::Error::other)?;
+    }
+    let mut rules = ruleset.create().map_err(io::Error::other)?;
     if policy.mode == Mode::Workspace {
         let executable = policy::executable(&command)?;
         let mut read = policy::runtime_paths();
@@ -391,6 +398,9 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
             .args(program_arguments);
         sandbox = wrapped;
     }
+    if policy.linux_signal_scope || policy.linux_abstract_unix_socket_scope {
+        sandbox = scope_worker(sandbox, &policy)?;
+    }
     // Options must precede the agent separator.
     let mut supervised = Command::new("bwrap");
     supervised
@@ -456,4 +466,80 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
     Ok(status
         .code()
         .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
+}
+
+fn scope_worker(mut sandbox: Command, policy: &Policy) -> io::Result<Command> {
+    let arguments: Vec<_> = sandbox.get_args().map(std::ffi::OsStr::to_owned).collect();
+    let separator = arguments
+        .iter()
+        .position(|argument| argument == "--")
+        .ok_or_else(|| io::Error::other("Bubblewrap command is missing its separator"))?;
+    let program = arguments
+        .get(separator + 1)
+        .ok_or_else(|| io::Error::other("Bubblewrap command is missing its program"))?
+        .clone();
+    let current = std::env::current_exe()?;
+    let boxer_mounted = arguments.windows(3).any(|parts| {
+        parts[0] == "--ro-bind" && parts[1] == current.as_os_str() && parts[2] == "/opt/solmu/boxer"
+    });
+    let mut wrapped = Command::new("bwrap");
+    wrapped.args(&arguments[..separator]);
+    if !boxer_mounted {
+        wrapped
+            .arg("--ro-bind")
+            .arg(&current)
+            .arg("/opt/solmu/boxer");
+    }
+    wrapped
+        .arg("--")
+        .arg("/opt/solmu/boxer")
+        .arg("--scope-worker")
+        .arg(if policy.linux_signal_scope {
+            "signal"
+        } else {
+            "-"
+        })
+        .arg(if policy.linux_abstract_unix_socket_scope {
+            "abstract-unix-socket"
+        } else {
+            "-"
+        })
+        .arg("--")
+        .arg(program)
+        .args(&arguments[separator + 2..]);
+    Ok(wrapped)
+}
+
+pub fn run_scope_worker(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
+    if arguments.len() < 5 || arguments[3] != "--" {
+        return Err(io::Error::other(
+            "Invalid internal Landlock scope worker arguments",
+        ));
+    }
+    let mut ruleset = Ruleset::default().set_compatibility(CompatLevel::HardRequirement);
+    let signal = arguments[1] == "signal";
+    let abstract_socket = arguments[2] == "abstract-unix-socket";
+    if arguments[1] != "-" && !signal {
+        return Err(io::Error::other("Invalid internal signal scope"));
+    }
+    if arguments[2] != "-" && !abstract_socket {
+        return Err(io::Error::other("Invalid internal Unix socket scope"));
+    }
+    if signal {
+        ruleset = ruleset.scope(Scope::Signal).map_err(io::Error::other)?;
+    }
+    if abstract_socket {
+        ruleset = ruleset
+            .scope(Scope::AbstractUnixSocket)
+            .map_err(io::Error::other)?;
+    }
+    ruleset
+        .create()
+        .map_err(io::Error::other)?
+        .restrict_self()
+        .map_err(io::Error::other)?;
+    let program = arguments[4]
+        .to_str()
+        .ok_or_else(|| io::Error::other("Program path is not valid Unicode"))?;
+    Err(Command::new(program).args(&arguments[5..]).exec())
 }

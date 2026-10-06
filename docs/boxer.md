@@ -25,6 +25,16 @@ renaming files and directories. Linux enforces this with Landlock, including
 inside `--isolated`; macOS uses Seatbelt. Atomic-save tools that replace files
 by renaming may fail while this option is enabled. Windows rejects the option.
 
+On Linux kernels with Landlock ABI v6, add `--scope-signal` to prevent the
+sandbox from signaling processes outside its Landlock domain. Add
+`--scope-abstract-unix-socket` to prevent connections to abstract Unix sockets
+created outside that domain. These scopes are opt-in and work with `--workspace`
+or `--isolated`; Boxer refuses the run if the kernel cannot enforce a requested
+scope. They do not control pathname-based Unix sockets.
+
+The same settings can be saved in a policy as `linux_signal_scope: true` and
+`linux_abstract_unix_socket_scope: true`.
+
 ## Run a detached session
 
 On Linux and macOS, add `--detached` to leave a Boxer process running after the

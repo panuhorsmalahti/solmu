@@ -63,7 +63,16 @@ fn main() {
         eprintln!("Solmu Boxer: {error}");
         std::process::exit(125);
     }
-    let result = if session_daemon.is_some() {
+    let result = if arguments.first().is_some_and(|arg| arg == "--scope-worker") {
+        #[cfg(target_os = "linux")]
+        {
+            linux::run_scope_worker(&arguments)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(io::Error::other("Internal Landlock worker is Linux-only"))
+        }
+    } else if session_daemon.is_some() {
         #[cfg(unix)]
         {
             sessions::daemon(&arguments)
@@ -247,7 +256,7 @@ fn run() -> io::Result<i32> {
                 "--deny PATH: block an existing file or directory (repeatable; Linux requires --isolated; Windows unsupported)."
             );
             println!(
-                "--network allow|deny|proxy: unrestricted (default), offline on Linux/macOS, or a routed Linux isolated network. macOS credential proxies use --network allow.\n--allow-host DOMAIN[:PORT]: exact or wildcard remote hostname for proxy networking, default port 443 (repeatable).\n--deny-host DOMAIN: deny a domain even when another rule allows it (repeatable; * matches all and * may replace complete labels).\n--allow-local IP:PORT or --open-port PORT: forward a host loopback service into the private network (repeatable).\n--publish PORT or --listen-port PORT: expose a guest service on the same host loopback port (repeatable).\n--proxy-port PORT: use a fixed local port for the Linux network proxy (otherwise an available port is chosen)."
+                "--network allow|deny|proxy: unrestricted (default), offline on Linux/macOS, or a routed Linux isolated network. macOS credential proxies use --network allow.\n--allow-host DOMAIN[:PORT]: exact or wildcard remote hostname for proxy networking, default port 443 (repeatable).\n--deny-host DOMAIN: deny a domain even when another rule allows it (repeatable; * matches all and * may replace complete labels).\n--allow-local IP:PORT or --open-port PORT: forward a host loopback service into the private network (repeatable).\n--publish PORT or --listen-port PORT: expose a guest service on the same host loopback port (repeatable).\n--proxy-port PORT: use a fixed local port for the Linux network proxy (otherwise an available port is chosen).\n--scope-signal and --scope-abstract-unix-socket: isolate process signals and abstract Unix sockets on Linux kernels with Landlock v6 (repeatable policy fields are linux_signal_scope and linux_abstract_unix_socket_scope)."
             );
             println!(
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."
@@ -305,6 +314,10 @@ fn run() -> io::Result<i32> {
             policy.read_only = true;
         } else if argument == "--protect-unlink" {
             policy.protect_unlink = true;
+        } else if argument == "--scope-signal" {
+            policy.linux_signal_scope = true;
+        } else if argument == "--scope-abstract-unix-socket" {
+            policy.linux_abstract_unix_socket_scope = true;
         } else if argument == "--workspace" || argument == "--allow-cwd" {
             mode = Some(Mode::Workspace);
         } else if argument == "--network" {
@@ -625,6 +638,8 @@ fn run() -> io::Result<i32> {
     resolved.proxy_port = policy.proxy_port.or(resolved.proxy_port);
     resolved.read_only |= policy.read_only;
     resolved.protect_unlink |= policy.protect_unlink;
+    resolved.linux_signal_scope |= policy.linux_signal_scope;
+    resolved.linux_abstract_unix_socket_scope |= policy.linux_abstract_unix_socket_scope;
     resolved.clean_env |= policy.clean_env;
     if let Some(cli_environment) = policy.environment.take() {
         let environment = resolved.environment.get_or_insert_with(Default::default);
