@@ -274,14 +274,24 @@ This makes the value easier to manage and avoids exposing it in Boxer command
 arguments. The value is still present in the agent's environment and available
 to that agent and its child processes.
 
-For Linux launches, use `--credential` to keep the real provider key outside
-the agent process. Boxer sends provider requests through a local proxy, gives
-the agent a random session token, and adds the real key to the upstream HTTPS
-request:
+Use `--credential` to keep the real provider key outside the agent process.
+Boxer sends provider requests through a local proxy, gives the agent a random
+session token, and adds the real key to the upstream HTTPS request:
 
 ```sh
 boxer credential set OPENAI_API_KEY
 boxer --profile solmu --isolated --network proxy --credential openai \
+  --cwd /path/to/project -- solmu
+```
+
+On macOS, use `--network allow` with `--credential`; Boxer runs the local
+credential proxy outside the Seatbelt-sandboxed process. The proxy still accepts
+only its configured provider routes, but macOS mode does not filter unrelated
+outbound connections. Windows currently supports `--env-credential` only.
+For example, a macOS Solmu launch can use:
+
+```sh
+boxer --profile solmu --credential openai --network allow \
   --cwd /path/to/project -- solmu
 ```
 
@@ -333,7 +343,7 @@ boxer credential set SEARCH_API_KEY
 boxer --policy boxer-policy.json --cwd /path/to/project -- solmu
 ```
 
-The route’s upstream host is added to the network policy. By default, Boxer
+On Linux, the route’s upstream host is added to the network policy. By default, Boxer
 sets `SEARCH_API_KEY` in the child to a session-only token and sets
 `SEARCH_API_BASE_URL` to the local proxy route. The real key is injected using
 the configured header and format. Custom routes support header injection,
@@ -343,6 +353,8 @@ route’s environment variable in the configured placeholder. Basic authenticati
 stores the real value as `username:password`; the client sends the Base64 form of
 the session token in its Basic auth field, and Boxer substitutes the stored pair.
 Endpoint rules can limit a route to selected methods and paths.
+On macOS, custom credential routes use the same local proxy but require
+`"network": "allow"`; network destinations outside the broker are not filtered.
 
 For custom routes, `credential_key` can instead point to a 1Password secret
 reference such as `op://Development/Search API/credential`. Boxer reads it with

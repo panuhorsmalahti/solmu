@@ -117,11 +117,70 @@ fn environment_credential_map_accepts_secret_references_and_validates_target_nam
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("Invalid target environment"));
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn credential_proxy_requires_isolated_routed_networking() {
     let output = run(&["--credential", "openai", "--", "unused-program"]);
     assert_eq!(output.status.code(), Some(125));
     assert!(String::from_utf8_lossy(&output.stderr).contains("Credential proxying"));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_credential_proxy_configuration_uses_the_provider_route_without_forwarding_real_keys() {
+    let workspace = tempfile::tempdir().unwrap();
+    let output = Command::new(binary("boxer"))
+        .args([
+            "--profile",
+            "solmu",
+            "--credential",
+            "openai",
+            "--network",
+            "allow",
+            "--cwd",
+        ])
+        .arg(workspace.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .env("OPENAI_API_KEY", "real-secret-fixture")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["policy"]["credentials"][0], "openai");
+    assert!(
+        !result["environment"]["forwarded_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|name| name == "OPENAI_API_KEY")
+    );
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("real-secret-fixture"));
+
+    let denied = Command::new(binary("boxer"))
+        .args([
+            "--credential",
+            "openai",
+            "--network",
+            "deny",
+            "--",
+            "unused",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(denied.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("requires --network allow"));
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_rejects_phantom_token_proxying() {
+    let output = run(&["--credential", "openai", "--", "unused-program"]);
+    assert_eq!(output.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("supported on Linux and macOS"));
 }
 
 #[test]

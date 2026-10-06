@@ -22,6 +22,9 @@ use profiles::Profile;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 
+#[cfg(target_os = "macos")]
+#[path = "linux/proxy/credential.rs"]
+mod credential_proxy;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -244,7 +247,7 @@ fn run() -> io::Result<i32> {
                 "--deny PATH: block an existing file or directory (repeatable; Linux requires --isolated; Windows unsupported)."
             );
             println!(
-                "--network allow|deny|proxy: unrestricted (default), offline on Linux/macOS, or a routed Linux isolated network.\n--allow-host DOMAIN[:PORT]: exact or wildcard remote hostname for proxy networking, default port 443 (repeatable).\n--deny-host DOMAIN: deny a domain even when another rule allows it (repeatable; * matches all and * may replace complete labels).\n--allow-local IP:PORT or --open-port PORT: forward a host loopback service into the private network (repeatable).\n--publish PORT or --listen-port PORT: expose a guest service on the same host loopback port (repeatable).\n--proxy-port PORT: use a fixed local port for the Linux network proxy (otherwise an available port is chosen)."
+                "--network allow|deny|proxy: unrestricted (default), offline on Linux/macOS, or a routed Linux isolated network. macOS credential proxies use --network allow.\n--allow-host DOMAIN[:PORT]: exact or wildcard remote hostname for proxy networking, default port 443 (repeatable).\n--deny-host DOMAIN: deny a domain even when another rule allows it (repeatable; * matches all and * may replace complete labels).\n--allow-local IP:PORT or --open-port PORT: forward a host loopback service into the private network (repeatable).\n--publish PORT or --listen-port PORT: expose a guest service on the same host loopback port (repeatable).\n--proxy-port PORT: use a fixed local port for the Linux network proxy (otherwise an available port is chosen)."
             );
             println!(
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."

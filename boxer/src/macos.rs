@@ -11,7 +11,7 @@ use std::{
     process::Command,
 };
 
-pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
+pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     let executable = policy::executable(&command)?;
     if policy
         .deny
@@ -25,6 +25,38 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
     if policy.network == Network::Deny {
         crate::unix::prepare_network_denial()?;
     }
+    let credential_broker = if policy.credentials.is_empty() {
+        None
+    } else {
+        let (broker, sessions) = crate::credential_proxy::Broker::start(
+            &policy.credentials,
+            &policy.custom_credentials,
+            crate::credential_proxy::BrokerOptions {
+                endpoint_rules: &policy.endpoint_rules,
+                upstream_proxy: None,
+                upstream_bypass: &policy.upstream_bypass,
+                denied_hosts: &policy.deny_hosts,
+                reserved_ports: &[],
+            },
+        )?;
+        for session in sessions {
+            command.env(&session.token_env, &session.token);
+            let base = format!("http://127.0.0.1:{}{}", broker.port(), session.base_path);
+            if policy.solmu {
+                command.env("LLM_ENDPOINT", base);
+            } else {
+                if session.name == "openai" {
+                    command
+                        .env_remove("CODEX_API_KEY")
+                        .env_remove("CODEX_ACCESS_TOKEN");
+                } else if session.name == "anthropic" {
+                    command.env_remove("ANTHROPIC_AUTH_TOKEN");
+                }
+                command.env(&session.base_env, base);
+            }
+        }
+        Some(broker)
+    };
     let mut profile = if policy.mode == Mode::Workspace {
         let executable = policy::executable(&command)?;
         let mut read = policy::runtime_paths();
@@ -154,6 +186,12 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
         }
     }
     if crate::sessions::is_child() {
+        let status = sandbox.status()?;
+        return Ok(status
+            .code()
+            .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)));
+    }
+    if credential_broker.is_some() {
         let status = sandbox.status()?;
         return Ok(status
             .code()

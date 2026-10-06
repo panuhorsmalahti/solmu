@@ -559,7 +559,7 @@ impl CredentialProvider {
         }
     }
 
-    #[cfg(all(target_os = "linux", test))]
+    #[cfg(all(any(target_os = "linux", target_os = "macos"), test))]
     pub fn name(self) -> &'static str {
         match self {
             Self::Openai => "openai",
@@ -570,7 +570,7 @@ impl CredentialProvider {
         }
     }
 
-    #[cfg(all(target_os = "linux", test))]
+    #[cfg(all(any(target_os = "linux", target_os = "macos"), test))]
     pub fn route(self) -> &'static str {
         self.name()
     }
@@ -894,14 +894,19 @@ impl Policy {
             credential.validate(name)?;
         }
         if !self.credentials.is_empty() {
-            if !cfg!(target_os = "linux") {
+            if !cfg!(any(target_os = "linux", target_os = "macos")) {
                 return Err(io::Error::other(
-                    "Credential proxying is currently supported on Linux",
+                    "Credential proxying is supported on Linux and macOS",
                 ));
             }
-            if !self.isolated || self.network != Network::Proxy {
+            if cfg!(target_os = "linux") && (!self.isolated || self.network != Network::Proxy) {
                 return Err(io::Error::other(
                     "Credential proxying requires Linux --isolated --network proxy",
+                ));
+            }
+            if cfg!(target_os = "macos") && self.network != Network::Allow {
+                return Err(io::Error::other(
+                    "macOS credential proxying requires --network allow",
                 ));
             }
             let mut providers = std::collections::HashSet::new();
@@ -952,7 +957,9 @@ impl Policy {
                         )));
                     }
                 }
-                self.hosts.push(host);
+                if cfg!(target_os = "linux") {
+                    self.hosts.push(host);
+                }
             }
             if self.solmu && self.credentials.len() != 1 {
                 return Err(io::Error::other(

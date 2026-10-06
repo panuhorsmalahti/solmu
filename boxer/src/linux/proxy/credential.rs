@@ -315,6 +315,8 @@ async fn serve(
     upstream_proxy: Option<UpstreamProxy>,
     upstream_bypass: Arc<Vec<String>>,
 ) -> io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let _ = (&upstream_proxy, &upstream_bypass);
     client.set_nodelay(true)?;
     let header =
         match tokio::time::timeout(HEADER_TIMEOUT, read_header(&mut client, MAX_HEADER)).await {
@@ -336,13 +338,15 @@ async fn serve(
         client.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").await?;
     }
     let target = Target::parse(&request.credential.authority, false)?;
-    let socket =
-        match super::host::connect_route(&target, false, upstream_proxy.as_ref(), &upstream_bypass)
-            .await
-        {
-            Ok(socket) => socket,
-            Err(_) => return response(&mut client, 502, "Provider connection failed").await,
-        };
+    #[cfg(target_os = "linux")]
+    let connected =
+        super::host::connect_route(&target, false, upstream_proxy.as_ref(), &upstream_bypass).await;
+    #[cfg(target_os = "macos")]
+    let connected = connect_provider(&target).await;
+    let socket = match connected {
+        Ok(socket) => socket,
+        Err(_) => return response(&mut client, 502, "Provider connection failed").await,
+    };
     socket.set_nonblocking(true)?;
     let socket = TcpStream::from_std(socket)?;
     let connector = match tls_connector() {
@@ -376,6 +380,48 @@ async fn serve(
     };
     let _ = tokio::join!(upload, download);
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+async fn connect_provider(target: &Target) -> io::Result<std::net::TcpStream> {
+    let addresses = tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::net::lookup_host((target.host.as_str(), target.port))
+            .await
+            .map(|addresses| addresses.take(32).collect::<Vec<_>>())
+    })
+    .await
+    .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "Provider DNS lookup timed out"))??;
+    if addresses.is_empty()
+        || addresses
+            .iter()
+            .any(|address| !crate::network::is_globally_routable(address.ip()))
+    {
+        return Err(io::Error::other(
+            "Provider route cannot resolve to private or special-use addresses",
+        ));
+    }
+    let mut failure = io::Error::other("No provider address was reachable");
+    for address in addresses {
+        match tokio::time::timeout(
+            Duration::from_millis(750),
+            tokio::net::TcpStream::connect(address),
+        )
+        .await
+        .unwrap_or_else(|_| {
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "Provider timed out",
+            ))
+        }) {
+            Ok(stream) => {
+                let stream = stream.into_std()?;
+                stream.set_nonblocking(false)?;
+                return Ok(stream);
+            }
+            Err(error) => failure = error,
+        }
+    }
+    Err(failure)
 }
 
 struct Request {
@@ -874,6 +920,41 @@ async fn response(client: &mut TcpStream, status: u16, message: &str) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn broker_rejects_requests_without_a_session_token() {
+        keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
+        keyring::Entry::new("solmu-boxer", "OPENAI_API_KEY")
+            .unwrap()
+            .set_password("fixture-real-secret")
+            .unwrap();
+        let (broker, _) = Broker::start(
+            &["openai".to_owned()],
+            &BTreeMap::new(),
+            BrokerOptions {
+                endpoint_rules: &[],
+                upstream_proxy: None,
+                upstream_bypass: &[],
+                denied_hosts: &[],
+                reserved_ports: &[],
+            },
+        )
+        .unwrap();
+        let mut client = std::net::TcpStream::connect(("127.0.0.1", broker.port())).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        client
+            .write_all(
+                b"GET /openai/v1/models HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer invalid\r\nConnection: close\r\n\r\n",
+            )
+            .unwrap();
+        let mut response = String::new();
+        std::io::Read::read_to_string(&mut client, &mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 407"), "{response}");
+        assert!(!response.contains("fixture-real-secret"));
+    }
 
     fn credentials(provider: CredentialProvider) -> HashMap<String, Arc<Credential>> {
         HashMap::from([(
