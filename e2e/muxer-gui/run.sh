@@ -81,7 +81,7 @@ print(space["selected"])
 PY
 )
 [ "$active_tab" = "$first_tab" ] || { echo 'Top tab strip did not switch tabs' >&2; exit 1; }
-xdotool mousemove --window "$window" 450 38 click 1
+xdotool mousemove --window "$window" 420 38 click 1
 sleep 0.3
 active_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
