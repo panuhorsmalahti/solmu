@@ -23,6 +23,7 @@ fn learn_traces_filesystem_access_and_emits_json_discovery() {
         String::from_utf8_lossy(&result.stderr)
     );
     let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert!(report.get("policy_gaps").is_none());
     assert!(
         report["filesystem"]["read"]
             .as_array()
@@ -39,6 +40,64 @@ fn learn_traces_filesystem_access_and_emits_json_discovery() {
     assert_eq!(std::fs::read(&output).unwrap(), b"learned write");
     assert!(String::from_utf8_lossy(&result.stderr).contains("learn fixture stdout"));
     assert!(String::from_utf8_lossy(&result.stderr).contains("learn fixture stderr"));
+}
+
+#[test]
+fn learn_compares_discovered_access_with_a_resolved_boxer_policy() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = root.path().join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let input = root.path().join("external-input.txt");
+    let output = root.path().join("external-output.txt");
+    std::fs::write(&input, "outside the granted workspace").unwrap();
+    let policy = root.path().join("policy.json");
+    std::fs::write(
+        &policy,
+        r#"{"version":1,"mode":"workspace","network":"deny"}"#,
+    )
+    .unwrap();
+
+    let result = Command::new(binary("boxer"))
+        .args(["learn", "--json", "--policy"])
+        .arg(&policy)
+        .args(["--"])
+        .arg(binary("sandbox-probe"))
+        .arg("--learn-fixture")
+        .arg(&input)
+        .arg(&output)
+        .current_dir(&workspace)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert!(
+        report["policy_gaps"]["filesystem"]["read"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(input))
+    );
+    assert!(
+        report["policy_gaps"]["filesystem"]["write"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(output))
+    );
+    assert!(
+        report["policy_gaps"]["network"]["outbound_denied"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        report["policy_gaps"]["network"]["listening_denied"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]

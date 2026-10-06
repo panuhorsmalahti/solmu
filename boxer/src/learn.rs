@@ -1,3 +1,4 @@
+use crate::policy::{self, Mode, Network as NetworkPolicy, Policy};
 use serde::Serialize;
 use std::{
     collections::BTreeSet,
@@ -21,6 +22,8 @@ struct Trace {
 struct Report {
     filesystem: Filesystem,
     network: Network,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    policy_gaps: Option<PolicyGaps>,
     command_exit_code: Option<i32>,
     timed_out: bool,
 }
@@ -44,9 +47,24 @@ struct Endpoint {
     port: u16,
 }
 
+#[derive(Serialize)]
+struct PolicyGaps {
+    filesystem: Filesystem,
+    network: NetworkGaps,
+}
+
+#[derive(Serialize)]
+struct NetworkGaps {
+    outbound_denied: Vec<Endpoint>,
+    outbound_hostname_check_needed: Vec<Endpoint>,
+    listening_denied: Vec<Endpoint>,
+    listening_not_published: Vec<Endpoint>,
+}
+
 pub fn command(arguments: &[OsString]) -> io::Result<i32> {
     let mut json = false;
     let mut timeout = None;
+    let mut policy_file = None;
     let mut index = 1;
     while index < arguments.len() && arguments[index] != "--" {
         if arguments[index] == "--json" {
@@ -60,6 +78,12 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
                 .ok_or_else(|| io::Error::other("--timeout requires seconds from 1 to 86400"))?;
             timeout = Some(Duration::from_secs(seconds));
             index += 2;
+        } else if arguments[index] == "--policy" && index + 1 < arguments.len() {
+            if policy_file.is_some() {
+                return Err(io::Error::other("Specify only one --policy"));
+            }
+            policy_file = Some(PathBuf::from(&arguments[index + 1]));
+            index += 2;
         } else {
             return Err(usage());
         }
@@ -72,6 +96,20 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
     let program = &arguments[index + 1];
     let command_arguments = &arguments[index + 2..];
     let directory = std::env::current_dir()?;
+    let comparison_policy = policy_file
+        .map(|file| {
+            let mut policy = Policy::from_file(&file)?;
+            policy.resolve(&directory)?;
+            Ok::<_, io::Error>(policy)
+        })
+        .transpose()?;
+    let executable = if comparison_policy.is_some() {
+        let mut command = Command::new(program);
+        command.current_dir(&directory);
+        policy::executable(&command).ok()
+    } else {
+        None
+    };
     let temporary = tempfile::tempdir()?;
     let trace_file = temporary.path().join("syscalls.log");
     let mut command = Command::new("strace");
@@ -110,7 +148,10 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
     })?;
     let (status, timed_out) = wait(child, timeout)?;
     let trace = parse(&std::fs::read_to_string(&trace_file)?, &directory);
-    let report = trace.report(status.code(), timed_out);
+    let policy_gaps = comparison_policy
+        .as_ref()
+        .map(|policy| trace.policy_gaps(policy, &directory, executable.as_deref()));
+    let report = trace.report(status.code(), timed_out, policy_gaps);
     if json {
         println!(
             "{}",
@@ -152,7 +193,6 @@ fn wait(
             // Boxer starts strace in a new process group so the tracee and its
             // ordinary descendants are stopped together when the limit hits.
             // SAFETY: a negative PID targets the process group created above.
-            // SAFETY: a negative PID targets the process group created above.
             if unsafe { libc::kill(-(child.id() as i32), libc::SIGTERM) } != 0 {
                 child.kill()?;
             }
@@ -170,7 +210,12 @@ fn wait(
 }
 
 impl Trace {
-    fn report(self, command_exit_code: Option<i32>, timed_out: bool) -> Report {
+    fn report(
+        self,
+        command_exit_code: Option<i32>,
+        timed_out: bool,
+        policy_gaps: Option<PolicyGaps>,
+    ) -> Report {
         let read_write: Vec<_> = self.read.intersection(&self.write).cloned().collect();
         let read: Vec<_> = self.read.difference(&self.write).cloned().collect();
         let write: Vec<_> = self.write.difference(&self.read).cloned().collect();
@@ -192,10 +237,126 @@ impl Trace {
                     .map(|(address, port)| Endpoint { address, port })
                     .collect(),
             },
+            policy_gaps,
             command_exit_code,
             timed_out,
         }
     }
+
+    fn policy_gaps(
+        &self,
+        policy: &Policy,
+        workspace: &Path,
+        executable: Option<&Path>,
+    ) -> PolicyGaps {
+        let mut readable = policy::runtime_paths();
+        readable.extend(policy.read.iter().cloned());
+        readable.extend(policy.write.iter().cloned());
+        if policy.mode != Mode::Unrestricted {
+            readable.push(workspace.to_owned());
+            readable.extend(policy::device_paths());
+        }
+        if let Some(executable) = executable {
+            readable.push(executable.to_owned());
+        }
+
+        let mut writable = policy.write.clone();
+        writable.extend(policy.write_only.iter().cloned());
+        if policy.mode != Mode::Unrestricted {
+            writable.extend(policy::device_paths());
+        }
+        if !policy.read_only && policy.mode != Mode::Unrestricted {
+            writable.push(workspace.to_owned());
+        }
+
+        let read_write_observed: BTreeSet<_> =
+            self.read.intersection(&self.write).cloned().collect();
+        let read_observed: BTreeSet<_> = self.read.difference(&self.write).cloned().collect();
+        let write_observed: BTreeSet<_> = self.write.difference(&self.read).cloned().collect();
+        let read_write = read_write_observed
+            .iter()
+            .filter(|path| {
+                !read_allowed(path, policy, &readable) || !write_allowed(path, policy, &writable)
+            })
+            .cloned()
+            .collect();
+        let read = read_observed
+            .iter()
+            .filter(|path| !read_allowed(path, policy, &readable))
+            .cloned()
+            .collect();
+        let write = write_observed
+            .iter()
+            .filter(|path| !write_allowed(path, policy, &writable))
+            .cloned()
+            .collect();
+
+        let outbound: Vec<_> = self
+            .outbound
+            .iter()
+            .map(|(address, port)| Endpoint {
+                address: address.clone(),
+                port: *port,
+            })
+            .collect();
+        let listening: Vec<_> = self
+            .listening
+            .iter()
+            .map(|(address, port)| Endpoint {
+                address: address.clone(),
+                port: *port,
+            })
+            .collect();
+        let (
+            outbound_denied,
+            outbound_hostname_check_needed,
+            listening_denied,
+            listening_not_published,
+        ) = match policy.network {
+            NetworkPolicy::Allow => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
+            NetworkPolicy::Deny => (outbound, Vec::new(), listening, Vec::new()),
+            // Traces contain IP addresses, while Boxer host rules match DNS
+            // names. Report these for review instead of claiming they are gaps.
+            NetworkPolicy::Proxy => (
+                Vec::new(),
+                outbound,
+                Vec::new(),
+                listening
+                    .into_iter()
+                    .filter(|endpoint| !policy.publish.contains(&endpoint.port))
+                    .collect(),
+            ),
+        };
+        PolicyGaps {
+            filesystem: Filesystem {
+                read,
+                write,
+                read_write,
+            },
+            network: NetworkGaps {
+                outbound_denied,
+                outbound_hostname_check_needed,
+                listening_denied,
+                listening_not_published,
+            },
+        }
+    }
+}
+
+fn read_allowed(path: &Path, policy: &Policy, roots: &[PathBuf]) -> bool {
+    !covered_by(path, &policy.write_only)
+        && (policy.mode == Mode::Unrestricted || covered_by(path, roots))
+}
+
+fn write_allowed(path: &Path, policy: &Policy, roots: &[PathBuf]) -> bool {
+    (policy.mode == Mode::Unrestricted && !policy.read_only)
+        || (policy.mode != Mode::Unrestricted && covered_by(path, roots))
+}
+
+fn covered_by(path: &Path, roots: &[PathBuf]) -> bool {
+    roots
+        .iter()
+        .any(|root| path == root || (root.is_dir() && path.starts_with(root)))
 }
 
 fn parse(contents: &str, directory: &Path) -> Trace {
@@ -411,6 +572,23 @@ fn print_report(report: &Report) {
             report.command_exit_code.unwrap_or(1)
         );
     }
+    if let Some(gaps) = &report.policy_gaps {
+        println!("Filesystem not covered by policy:");
+        println!("  Read:");
+        print_paths(&gaps.filesystem.read);
+        println!("  Write:");
+        print_paths(&gaps.filesystem.write);
+        println!("  Read and write:");
+        print_paths(&gaps.filesystem.read_write);
+        println!("Outbound endpoints denied by policy:");
+        print_endpoints(&gaps.network.outbound_denied);
+        println!("Outbound endpoints to check against hostname rules:");
+        print_endpoints(&gaps.network.outbound_hostname_check_needed);
+        println!("Listening endpoints denied by policy:");
+        print_endpoints(&gaps.network.listening_denied);
+        println!("Listening endpoints not published by policy:");
+        print_endpoints(&gaps.network.listening_not_published);
+    }
 }
 
 fn print_paths(paths: &[PathBuf]) {
@@ -434,7 +612,9 @@ fn print_endpoints(endpoints: &[Endpoint]) {
 }
 
 fn usage() -> io::Error {
-    io::Error::other("Usage: boxer learn [--json] [--timeout SECONDS] -- PROGRAM [ARGS...]")
+    io::Error::other(
+        "Usage: boxer learn [--json] [--timeout SECONDS] [--policy FILE] -- PROGRAM [ARGS...]",
+    )
 }
 
 #[cfg(test)]

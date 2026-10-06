@@ -244,7 +244,7 @@ fn run() -> io::Result<i32> {
                 "boxer why --path PATH [--op read|write] or --host HOST[:PORT] [--op connect] [policy options]: explain resolved filesystem or network policy without launching a program."
             );
             println!(
-                "boxer learn [--json] [--timeout SECONDS] -- PROGRAM [ARGS...]: trace a Linux run and summarize filesystem and network access (requires strace)."
+                "boxer learn [--json] [--timeout SECONDS] [--policy FILE] -- PROGRAM [ARGS...]: trace Linux access and optionally compare it with a policy (requires strace)."
             );
             println!(
                 "--trust-key PUBLIC_KEY --verify FILE: verify signed files before launch; repeat --verify for multiple files."
