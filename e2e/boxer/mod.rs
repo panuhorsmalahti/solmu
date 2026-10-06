@@ -7,6 +7,7 @@ mod permissions;
 mod policies;
 mod profiles;
 mod readiness;
+mod rollback;
 mod routes;
 
 #[cfg(target_os = "linux")]

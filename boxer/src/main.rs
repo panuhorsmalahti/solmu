@@ -2,6 +2,7 @@ use std::{ffi::OsString, io, process::Command};
 mod check;
 mod network;
 mod policy;
+mod rollback;
 use policy::{AgentProfile, Mode, Network, Policy};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
@@ -108,6 +109,20 @@ fn prepare_agent_home(policy: &mut Policy, agent: AgentProfile) -> io::Result<()
 }
 
 fn run() -> io::Result<i32> {
+    let mut raw_arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    let rollback_child = raw_arguments
+        .first()
+        .is_some_and(|argument| argument == rollback::CHILD_ARGUMENT);
+    if rollback_child {
+        raw_arguments.remove(0);
+    }
+    if !rollback_child
+        && raw_arguments
+            .first()
+            .is_some_and(|argument| argument == "rollback")
+    {
+        return rollback::command(&raw_arguments);
+    }
     #[cfg(target_os = "linux")]
     if let Some(code) = linux::proxy::worker()? {
         return Ok(code);
@@ -115,7 +130,7 @@ fn run() -> io::Result<i32> {
     if let Some(code) = check::worker()? {
         return Ok(code);
     }
-    let mut arguments = std::env::args_os().skip(1);
+    let mut arguments = raw_arguments.iter().cloned();
     let mut policy = Policy::default();
     let mut mode = None;
     let mut network = None;
@@ -123,6 +138,7 @@ fn run() -> io::Result<i32> {
     let mut profile = None;
     let mut print_policy = false;
     let mut check_policy = false;
+    let mut rollback_session = false;
     let mut directory = None;
     let mut program: Option<OsString> = None;
     let mut command_arguments = Vec::new();
@@ -136,6 +152,9 @@ fn run() -> io::Result<i32> {
             );
             println!(
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."
+            );
+            println!(
+                "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore` to review or restore changes."
             );
             return Ok(0);
         } else if argument == "--version" {
@@ -197,6 +216,8 @@ fn run() -> io::Result<i32> {
             print_policy = true;
         } else if argument == "--check" {
             check_policy = true;
+        } else if argument == "--rollback" {
+            rollback_session = true;
         } else if argument == "--policy" {
             if policy_file.is_some() {
                 return Err(io::Error::other("Specify only one --policy file"));
@@ -299,6 +320,11 @@ fn run() -> io::Result<i32> {
         return Err(io::Error::other("Workspace must be a directory"));
     }
     resolved.resolve(&workspace)?;
+    if rollback_session && (check_policy || print_policy) {
+        return Err(io::Error::other(
+            "--rollback cannot be combined with --check or --print-policy",
+        ));
+    }
     if check_policy {
         if print_policy {
             return Err(io::Error::other("Choose either --check or --print-policy"));
@@ -309,6 +335,9 @@ fn run() -> io::Result<i32> {
         program.unwrap_or_else(|| profile.map_or("solmu", BuiltinProfile::program).into()),
     );
     command.args(command_arguments).current_dir(&workspace);
+    if rollback_session && !rollback_child {
+        return rollback::run(&raw_arguments, &workspace, command.get_program());
+    }
     resolved.environment(&mut command);
     if print_policy {
         let supported = if cfg!(windows) {

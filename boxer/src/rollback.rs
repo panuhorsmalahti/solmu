@@ -1,0 +1,790 @@
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::{BTreeMap, HashSet},
+    ffi::{OsStr, OsString},
+    fs::{self, File, OpenOptions},
+    io::{self, Read, Write},
+    path::{Component, Path, PathBuf},
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
+use uuid::Uuid;
+use walkdir::WalkDir;
+
+pub const CHILD_ARGUMENT: &str = "--boxer-rollback-child";
+
+#[cfg(unix)]
+static INTERRUPTED: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+#[cfg(unix)]
+extern "C" fn interrupted(signal: i32) {
+    INTERRUPTED.store(signal, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum Entry {
+    Directory { mode: u32 },
+    File { hash: String, mode: u32 },
+    Symlink { target: String, directory: bool },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct Snapshot {
+    root_mode: u32,
+    entries: BTreeMap<String, Entry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct Session {
+    version: u32,
+    id: String,
+    created_unix_ms: u128,
+    workspace: String,
+    program: String,
+    before: Snapshot,
+    after: Option<Snapshot>,
+}
+
+pub fn command(arguments: &[OsString]) -> io::Result<i32> {
+    match arguments.get(1).and_then(|value| value.to_str()) {
+        Some("list") if arguments.len() == 2 => list(),
+        Some("show") if (3..=4).contains(&arguments.len()) => {
+            let diff = arguments.get(3).is_some_and(|arg| arg == "--diff");
+            if arguments.len() == 4 && !diff {
+                return Err(usage());
+            }
+            show(required_text(arguments, 2)?, diff)
+        }
+        Some("restore") if (3..=4).contains(&arguments.len()) => {
+            let dry_run = arguments.get(3).is_some_and(|arg| arg == "--dry-run");
+            if arguments.len() == 4 && !dry_run {
+                return Err(usage());
+            }
+            restore(required_text(arguments, 2)?, dry_run)
+        }
+        _ => Err(usage()),
+    }
+}
+
+pub fn run(arguments: &[OsString], workspace: &Path, program: &OsStr) -> io::Result<i32> {
+    let store = store_root(workspace)?;
+    let id = Uuid::new_v4().hyphenated().to_string();
+    let created_unix_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(io::Error::other)?
+        .as_millis();
+    let workspace_text = workspace
+        .to_str()
+        .ok_or_else(|| io::Error::other("Rollback requires a Unicode workspace path"))?
+        .to_owned();
+    let before = capture(workspace, &store)?;
+    let mut session = Session {
+        version: 1,
+        id: id.clone(),
+        created_unix_ms,
+        workspace: workspace_text,
+        program: Path::new(program)
+            .file_name()
+            .unwrap_or(program)
+            .to_string_lossy()
+            .into_owned(),
+        before,
+        after: None,
+    };
+    save_session(&store, &session)?;
+
+    #[cfg(unix)]
+    for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
+        // The supervised Boxer child is exec'd with default signal dispositions;
+        // this process records a terminal interrupt and stays alive to finish its snapshot.
+        if unsafe { libc::signal(signal, interrupted as *const () as usize) } == libc::SIG_ERR {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    let mut child_command = Command::new(std::env::current_exe()?);
+    child_command
+        .arg(CHILD_ARGUMENT)
+        .args(arguments)
+        .current_dir(workspace);
+    let child_result = child_command.spawn().and_then(|mut child| {
+        #[cfg(unix)]
+        let mut forwarded = false;
+        let status = loop {
+            #[cfg(unix)]
+            {
+                let signal = INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed);
+                if signal != 0 && !forwarded {
+                    forwarded = true;
+                    // The terminal normally signals the whole process group. Forward
+                    // once in case the signal arrived while the child was starting.
+                    unsafe {
+                        libc::kill(child.id() as libc::pid_t, signal);
+                    }
+                }
+            }
+            if let Some(status) = child.try_wait()? {
+                break status;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        Ok(status)
+    });
+
+    let after_result = capture(workspace, &store);
+    match after_result {
+        Ok(after) => {
+            session.after = Some(after);
+            save_session(&store, &session)?;
+        }
+        Err(error) => {
+            return Err(io::Error::other(format!(
+                "Rollback session {id} started, but its final snapshot failed: {error}"
+            )));
+        }
+    }
+    eprintln!("Rollback session: {id}");
+    let status = child_result?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        Ok(status
+            .code()
+            .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(status.code().unwrap_or(1))
+    }
+}
+
+fn usage() -> io::Error {
+    io::Error::other(
+        "Usage: boxer rollback list | show <session-id> [--diff] | restore <session-id> [--dry-run]",
+    )
+}
+
+fn required_text(arguments: &[OsString], index: usize) -> io::Result<&str> {
+    arguments
+        .get(index)
+        .and_then(|value| value.to_str())
+        .ok_or_else(usage)
+}
+
+fn store_root(workspace: &Path) -> io::Result<PathBuf> {
+    let root = if let Some(path) = std::env::var_os("BOXER_ROLLBACK_DIR") {
+        PathBuf::from(path)
+    } else {
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .map(PathBuf::from)
+            .ok_or_else(|| io::Error::other("Cannot find the home directory for rollback data"))?;
+        home.join(".boxer").join("rollback")
+    };
+    let absolute = normalize_absolute(&root)?;
+    if possible_canonical_path(&absolute)?.starts_with(workspace) {
+        return Err(io::Error::other(format!(
+            "Rollback storage ({}) must be outside the workspace; set BOXER_ROLLBACK_DIR to another directory",
+            absolute.display()
+        )));
+    }
+    fs::create_dir_all(root.join("sessions"))?;
+    fs::create_dir_all(root.join("blobs"))?;
+    let root = root.canonicalize()?;
+    for name in ["sessions", "blobs"] {
+        let directory = root.join(name).canonicalize()?;
+        if !directory.starts_with(&root) || directory.starts_with(workspace) {
+            return Err(io::Error::other(format!(
+                "Rollback storage ({}) must stay outside the workspace; set BOXER_ROLLBACK_DIR to another directory",
+                directory.display()
+            )));
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700))?;
+        fs::set_permissions(root.join("sessions"), fs::Permissions::from_mode(0o700))?;
+        fs::set_permissions(root.join("blobs"), fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(root)
+}
+
+fn normalize_absolute(path: &Path) -> io::Result<PathBuf> {
+    let path = if path.is_absolute() {
+        path.to_owned()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Normal(name) => normalized.push(name),
+        }
+    }
+    Ok(normalized)
+}
+
+fn possible_canonical_path(path: &Path) -> io::Result<PathBuf> {
+    let mut ancestor = path;
+    let mut suffix = Vec::new();
+    while !ancestor.exists() {
+        let name = ancestor
+            .file_name()
+            .ok_or_else(|| io::Error::other("Rollback storage has no existing parent"))?;
+        suffix.push(name.to_owned());
+        ancestor = ancestor
+            .parent()
+            .ok_or_else(|| io::Error::other("Rollback storage has no existing parent"))?;
+    }
+    let mut canonical = ancestor.canonicalize()?;
+    for component in suffix.into_iter().rev() {
+        canonical.push(component);
+    }
+    Ok(canonical)
+}
+
+fn capture(workspace: &Path, store: &Path) -> io::Result<Snapshot> {
+    let root_metadata = fs::symlink_metadata(workspace)?;
+    let mut entries = BTreeMap::new();
+    for item in WalkDir::new(workspace)
+        .follow_links(false)
+        .sort_by_file_name()
+        .min_depth(1)
+    {
+        let item = item.map_err(io::Error::other)?;
+        let path = item.path();
+        let relative = path.strip_prefix(workspace).map_err(io::Error::other)?;
+        let key = encode_path(relative);
+        let file_type = item.file_type();
+        let entry = if file_type.is_symlink() {
+            let target = fs::read_link(path)?;
+            Entry::Symlink {
+                target: encode_path(&target),
+                directory: fs::metadata(path).is_ok_and(|metadata| metadata.is_dir()),
+            }
+        } else if file_type.is_dir() {
+            Entry::Directory {
+                mode: file_mode(&item.metadata().map_err(io::Error::other)?),
+            }
+        } else if file_type.is_file() {
+            Entry::File {
+                hash: store_blob(path, store)?,
+                mode: file_mode(&item.metadata().map_err(io::Error::other)?),
+            }
+        } else {
+            return Err(io::Error::other(format!(
+                "Rollback cannot snapshot special file {}",
+                path.display()
+            )));
+        };
+        entries.insert(key, entry);
+    }
+    Ok(Snapshot {
+        root_mode: file_mode(&root_metadata),
+        entries,
+    })
+}
+
+fn store_blob(source: &Path, store: &Path) -> io::Result<String> {
+    let mut input = File::open(source)?;
+    let temporary = tempfile::NamedTempFile::new_in(store.join("blobs"))?;
+    let mut output = temporary.as_file();
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = input.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+        output.write_all(&buffer[..count])?;
+    }
+    output.sync_all()?;
+    let hash = hex::encode(hasher.finalize());
+    let destination = store.join("blobs").join(&hash);
+    match fs::hard_link(temporary.path(), &destination) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            if hash_file(&destination)? != hash {
+                return Err(io::Error::other(format!(
+                    "Rollback content store is corrupt at {}",
+                    destination.display()
+                )));
+            }
+        }
+        Err(error) => return Err(error),
+    }
+    Ok(hash)
+}
+
+fn hash_file(path: &Path) -> io::Result<String> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_file() {
+        return Err(io::Error::other(format!(
+            "Rollback content object is not a regular file: {}",
+            path.display()
+        )));
+    }
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn save_session(store: &Path, session: &Session) -> io::Result<()> {
+    let destination = store.join("sessions").join(format!("{}.json", session.id));
+    let temporary = tempfile::NamedTempFile::new_in(store.join("sessions"))?;
+    serde_json::to_writer(temporary.as_file(), session).map_err(io::Error::other)?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist(&destination)
+        .map_err(|error| error.error)?;
+    Ok(())
+}
+
+fn read_session(store: &Path, id: &str) -> io::Result<Session> {
+    let parsed =
+        Uuid::parse_str(id).map_err(|_| io::Error::other("Invalid rollback session id"))?;
+    let id = parsed.hyphenated().to_string();
+    let path = store.join("sessions").join(format!("{id}.json"));
+    let metadata = fs::metadata(&path)?;
+    if metadata.len() > 16 * 1024 * 1024 {
+        return Err(io::Error::other("Rollback session metadata is too large"));
+    }
+    let session: Session = serde_json::from_reader(File::open(path)?).map_err(io::Error::other)?;
+    if session.version != 1 || session.id != id {
+        return Err(io::Error::other(
+            "Unsupported or mismatched rollback session",
+        ));
+    }
+    Ok(session)
+}
+
+fn list() -> io::Result<i32> {
+    let store = store_root_for_commands()?;
+    let mut sessions = load_sessions(&store)?;
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.created_unix_ms));
+    println!("SESSION\tPROGRAM\tCHANGED\tWORKSPACE");
+    for session in sessions {
+        let changed = session
+            .after
+            .as_ref()
+            .map(|after| changes(&session.before, after).map(|entries| entries.len().to_string()))
+            .transpose()?
+            .unwrap_or_else(|| "pending".into());
+        println!(
+            "{}\t{}\t{}\t{}",
+            session.id, session.program, changed, session.workspace
+        );
+    }
+    Ok(0)
+}
+
+fn show(id: &str, print_diff: bool) -> io::Result<i32> {
+    let store = store_root_for_commands()?;
+    let session = read_session(&store, id)?;
+    println!("Session: {}", session.id);
+    println!("Program: {}", session.program);
+    println!("Workspace: {}", session.workspace);
+    println!("Started: {} ms since Unix epoch", session.created_unix_ms);
+    let Some(after) = &session.after else {
+        println!("Snapshot: incomplete");
+        return Ok(0);
+    };
+    let changes = changes(&session.before, after)?;
+    println!("Paths changed: {}", changes.len());
+    if print_diff {
+        for (kind, path) in changes {
+            println!("{kind}\t{}", display_path(&path));
+        }
+    }
+    Ok(0)
+}
+
+fn changes(before: &Snapshot, after: &Snapshot) -> io::Result<Vec<(&'static str, PathBuf)>> {
+    let keys: HashSet<_> = before
+        .entries
+        .keys()
+        .chain(after.entries.keys())
+        .cloned()
+        .collect();
+    let mut result = keys
+        .into_iter()
+        .filter_map(|key| {
+            let old = before.entries.get(&key);
+            let new = after.entries.get(&key);
+            if old == new {
+                return None;
+            }
+            let kind = match (old, new) {
+                (None, Some(_)) => "added",
+                (Some(_), None) => "deleted",
+                _ => "modified",
+            };
+            Some(decode_path(&key).map(|path| (kind, path)))
+        })
+        .collect::<io::Result<Vec<_>>>()?;
+    if before.root_mode != after.root_mode {
+        result.push(("modified", PathBuf::from(".")));
+    }
+    result.sort_by(|left, right| left.1.cmp(&right.1));
+    Ok(result)
+}
+
+fn restore(id: &str, dry_run: bool) -> io::Result<i32> {
+    let store = store_root_for_commands()?;
+    let session = read_session(&store, id)?;
+    let workspace = PathBuf::from(&session.workspace);
+    let changed = if let Some(after) = &session.after {
+        changes(&session.before, after)?
+    } else {
+        session
+            .before
+            .entries
+            .keys()
+            .map(|path| decode_path(path).map(|path| ("restore", path)))
+            .collect::<io::Result<Vec<_>>>()?
+    };
+    if dry_run {
+        println!(
+            "Would restore pre-session contents of {} ({} recorded paths){}",
+            session.workspace,
+            changed.len(),
+            if session.after.is_none() {
+                " (final snapshot missing)"
+            } else {
+                ""
+            }
+        );
+        for (kind, path) in changed {
+            println!("{kind}\t{}", display_path(&path));
+        }
+        return Ok(0);
+    }
+    if workspace.exists() {
+        let current = workspace.canonicalize()?;
+        if current != workspace {
+            return Err(io::Error::other(
+                "Rollback workspace path changed since the session; refusing to restore",
+            ));
+        }
+    } else if !workspace.parent().is_some_and(|parent| parent.is_dir()) {
+        return Err(io::Error::other(
+            "Rollback workspace and its parent no longer exist",
+        ));
+    }
+    restore_snapshot(&session.before, &workspace, &store)?;
+    println!("Restored workspace to its pre-session snapshot");
+    Ok(0)
+}
+
+fn restore_snapshot(snapshot: &Snapshot, workspace: &Path, store: &Path) -> io::Result<()> {
+    validate_snapshot(snapshot)?;
+    let parent = workspace
+        .parent()
+        .ok_or_else(|| io::Error::other("Cannot restore a filesystem root"))?;
+    let stage = tempfile::Builder::new()
+        .prefix(".boxer-restore-")
+        .tempdir_in(parent)?;
+    populate(stage.path(), snapshot, store)?;
+    let stage = stage.keep();
+    let name = workspace
+        .file_name()
+        .ok_or_else(|| io::Error::other("Workspace has no final path component"))?;
+    let backup = parent.join(format!(
+        ".{}.boxer-backup-{}",
+        name.to_string_lossy(),
+        Uuid::new_v4()
+    ));
+    std::env::set_current_dir(parent)?;
+    let had_workspace = match fs::symlink_metadata(workspace) {
+        Ok(_) => {
+            if let Err(error) = fs::rename(workspace, &backup) {
+                let _ = fs::remove_dir_all(&stage);
+                return Err(error);
+            }
+            true
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&stage);
+            return Err(error);
+        }
+    };
+    if let Err(error) = fs::rename(&stage, workspace) {
+        let recovery = if had_workspace {
+            fs::rename(&backup, workspace)
+        } else {
+            Ok(())
+        };
+        let _ = fs::remove_dir_all(&stage);
+        return match recovery {
+            Ok(()) => Err(error),
+            Err(recovery_error) => Err(io::Error::other(format!(
+                "Restore failed ({error}) and workspace recovery failed ({recovery_error}); original files remain at {}",
+                backup.display()
+            ))),
+        };
+    }
+    std::env::set_current_dir(workspace)?;
+    if had_workspace {
+        fs::remove_dir_all(&backup).map_err(|error| {
+            io::Error::other(format!(
+                "Workspace was restored but the temporary backup {} could not be removed: {error}",
+                backup.display()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_snapshot(snapshot: &Snapshot) -> io::Result<Vec<(PathBuf, Entry)>> {
+    let mut entries = Vec::with_capacity(snapshot.entries.len());
+    for (encoded, entry) in &snapshot.entries {
+        let relative = decode_path(encoded)?;
+        if relative.as_os_str().is_empty()
+            || relative
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(io::Error::other("Invalid path in rollback snapshot"));
+        }
+        if let Entry::Symlink { target, .. } = entry {
+            decode_path(target)?;
+        }
+        if let Entry::File { hash, .. } = entry
+            && (hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        {
+            return Err(io::Error::other(
+                "Invalid content hash in rollback snapshot",
+            ));
+        }
+        entries.push((relative, entry.clone()));
+    }
+    for (relative, _) in &entries {
+        let mut parent = relative.parent();
+        while let Some(path) = parent {
+            if path.as_os_str().is_empty() {
+                break;
+            }
+            if entries.iter().any(|(candidate, entry)| {
+                candidate == path && !matches!(entry, Entry::Directory { .. })
+            }) {
+                return Err(io::Error::other(
+                    "A rollback path is nested beneath a file or symbolic link",
+                ));
+            }
+            parent = path.parent();
+        }
+    }
+    Ok(entries)
+}
+
+fn populate(root: &Path, snapshot: &Snapshot, store: &Path) -> io::Result<()> {
+    let mut entries = validate_snapshot(snapshot)?;
+    entries.sort_by(|left, right| {
+        let left_dir = matches!(left.1, Entry::Directory { .. });
+        let right_dir = matches!(right.1, Entry::Directory { .. });
+        right_dir.cmp(&left_dir).then_with(|| {
+            left.0
+                .components()
+                .count()
+                .cmp(&right.0.components().count())
+        })
+    });
+    for (relative, entry) in &entries {
+        let destination = root.join(relative);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        match entry {
+            Entry::Directory { .. } => fs::create_dir_all(&destination)?,
+            Entry::File { hash, mode } => {
+                let source = store.join("blobs").join(hash);
+                if hash_file(&source)? != *hash {
+                    return Err(io::Error::other(format!(
+                        "Rollback content verification failed for {hash}"
+                    )));
+                }
+                let mut input = File::open(source)?;
+                let mut output = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&destination)?;
+                io::copy(&mut input, &mut output)?;
+                output.sync_all()?;
+                set_file_mode(&destination, *mode)?;
+            }
+            Entry::Symlink { target, directory } => {
+                let target = decode_path(target)?;
+                create_symlink(&target, &destination, *directory)?;
+            }
+        }
+    }
+    for (relative, entry) in entries.iter().rev() {
+        if let Entry::Directory { mode } = entry {
+            set_file_mode(&root.join(relative), *mode)?;
+        }
+    }
+    set_file_mode(root, snapshot.root_mode)
+}
+
+fn load_sessions(store: &Path) -> io::Result<Vec<Session>> {
+    let directory = store.join("sessions");
+    if !directory.exists() {
+        return Ok(Vec::new());
+    }
+    let mut sessions = Vec::new();
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        if entry.path().extension().is_some_and(|ext| ext == "json") {
+            let id = entry
+                .path()
+                .file_stem()
+                .and_then(OsStr::to_str)
+                .ok_or_else(|| io::Error::other("Invalid rollback session filename"))?
+                .to_owned();
+            sessions.push(read_session(store, &id)?);
+        }
+    }
+    Ok(sessions)
+}
+
+fn store_root_for_commands() -> io::Result<PathBuf> {
+    let empty_workspace = Path::new("/__boxer_store_check_only__");
+    let root = store_root(empty_workspace)?;
+    Ok(root)
+}
+
+fn file_mode(metadata: &fs::Metadata) -> u32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        metadata.mode() & 0o7777
+    }
+    #[cfg(windows)]
+    {
+        if metadata.permissions().readonly() {
+            0o444
+        } else {
+            0o666
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = metadata;
+        0o666
+    }
+}
+
+fn set_file_mode(path: &Path, mode: u32) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+    }
+    #[cfg(windows)]
+    {
+        let mut permissions = fs::metadata(path)?.permissions();
+        permissions.set_readonly(mode & 0o222 == 0);
+        fs::set_permissions(path, permissions)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = mode;
+        Ok(())
+    }
+}
+
+fn encode_path(path: &Path) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        hex::encode(path.as_os_str().as_bytes())
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let bytes = path
+            .as_os_str()
+            .encode_wide()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        hex::encode(bytes)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        hex::encode(path.to_string_lossy().as_bytes())
+    }
+}
+
+fn decode_path(encoded: &str) -> io::Result<PathBuf> {
+    let bytes = hex::decode(encoded).map_err(io::Error::other)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        Ok(PathBuf::from(OsString::from_vec(bytes)))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+        if bytes.len() % 2 != 0 {
+            return Err(io::Error::other("Invalid Windows path in rollback data"));
+        }
+        Ok(PathBuf::from(OsString::from_wide(
+            &bytes
+                .chunks_exact(2)
+                .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                .collect::<Vec<_>>(),
+        )))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        Ok(PathBuf::from(
+            String::from_utf8(bytes).map_err(io::Error::other)?,
+        ))
+    }
+}
+
+#[cfg(unix)]
+fn create_symlink(target: &Path, destination: &Path, _: bool) -> io::Result<()> {
+    std::os::unix::fs::symlink(target, destination)
+}
+
+#[cfg(windows)]
+fn create_symlink(target: &Path, destination: &Path, directory: bool) -> io::Result<()> {
+    if directory {
+        std::os::windows::fs::symlink_dir(target, destination)
+    } else {
+        std::os::windows::fs::symlink_file(target, destination)
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn create_symlink(_: &Path, _: &Path, _: bool) -> io::Result<()> {
+    Err(io::Error::other(
+        "Symbolic link restore is unsupported on this OS",
+    ))
+}
+
+fn display_path(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}

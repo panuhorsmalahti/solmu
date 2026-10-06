@@ -4,7 +4,24 @@ use std::{
 };
 
 fn main() {
-    let path = std::env::args().nth(1).expect("probe output path");
+    let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    if arguments
+        .first()
+        .is_some_and(|value| value == "--rollback-set")
+    {
+        let modified = std::path::PathBuf::from(&arguments[1]);
+        let created = std::path::PathBuf::from(&arguments[2]);
+        let deleted = std::path::PathBuf::from(&arguments[3]);
+        std::fs::write(modified, b"Solmu sandbox write allowed").unwrap();
+        std::fs::write(created, b"created during session").unwrap();
+        std::fs::remove_file(deleted).unwrap();
+        std::process::exit(7);
+    }
+    let path = arguments
+        .first()
+        .expect("probe output path")
+        .to_string_lossy()
+        .into_owned();
     #[cfg(target_os = "linux")]
     if path == "--proxy-check" || path == "--proxy-child-check" {
         proxy_boundaries();

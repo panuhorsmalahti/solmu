@@ -94,3 +94,8 @@ Use `--read-only` on Linux/macOS to deny filesystem
 writes; Windows supports process-tree containment only.
 
 See [permissions, platform requirements, and usage](../docs/boxer.md).
+
+Add `--rollback` to save a workspace before and after a run. Review or restore
+those snapshots with `boxer rollback list`, `boxer rollback show <session-id>`,
+and `boxer rollback restore <session-id>`. See the
+[rollback guide](../docs/boxer.md#review-and-restore-a-session).

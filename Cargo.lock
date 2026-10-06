@@ -5070,12 +5070,17 @@ dependencies = [
 name = "solmu-boxer"
 version = "0.1.3"
 dependencies = [
+ "hex",
  "landlock",
  "libc",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
  "tokio",
  "url",
+ "uuid",
+ "walkdir",
  "windows-sys 0.61.2",
 ]
 

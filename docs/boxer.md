@@ -63,6 +63,33 @@ Install the agent CLI before using its profile. OpenCode uses the `opencode`
 command; Pi uses the `pi` command. See the [OpenCode installation guide](https://opencode.ai/docs/)
 and [Pi coding agent guide](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
 
+## Review and restore a session
+
+Add `--rollback` to save the workspace before and after an agent runs:
+
+```sh
+boxer --rollback --profile solmu --cwd /path/to/project -- solmu
+boxer rollback list
+boxer rollback show <session-id> --diff
+boxer rollback restore <session-id> --dry-run
+boxer rollback restore <session-id>
+```
+
+The session list shows the command, workspace, and number of changed paths. The
+diff lists added, changed, and deleted paths. Restore replaces the workspace
+with its saved pre-session contents, including file contents, supported file
+permissions, and symbolic links. Review the preview before restoring; changes
+made after that session will also be discarded. Boxer stores snapshots in
+`.boxer/rollback` under your home folder by default and deduplicates identical
+file contents. Set `BOXER_ROLLBACK_DIR` to store them elsewhere. Snapshot storage
+must be outside the workspace. If a session ends before its final snapshot is
+saved, you can still restore its pre-session snapshot. The preview lists changes
+from the recorded session; it does not include edits made after that session.
+
+Rollback covers files inside the workspace. It does not undo network requests or
+changes made elsewhere on the machine. Snapshots are local and can use substantial
+disk space for large workspaces.
+
 If your CLI or its dependencies are installed outside the system runtime and
 project, grant the installation directory with `--read PATH`. Use `--write PATH`
 for any additional folder the agent needs to change. `boxer --profile codex
