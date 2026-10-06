@@ -73,6 +73,23 @@ impl Broker {
         custom_credentials: &BTreeMap<String, CustomCredential>,
         options: BrokerOptions<'_>,
     ) -> io::Result<(Self, Vec<BrokeredCredential>)> {
+        Self::start_with_loader(
+            providers,
+            custom_credentials,
+            options,
+            credential::load_with_captures,
+        )
+    }
+
+    fn start_with_loader(
+        providers: &[String],
+        custom_credentials: &BTreeMap<String, CustomCredential>,
+        options: BrokerOptions<'_>,
+        mut load: impl FnMut(
+            &[String],
+            &BTreeMap<String, CredentialCapture>,
+        ) -> io::Result<Vec<(String, Zeroizing<String>)>>,
+    ) -> io::Result<(Self, Vec<BrokeredCredential>)> {
         let BrokerOptions {
             endpoint_rules,
             upstream_proxy,
@@ -145,12 +162,9 @@ impl Broker {
                     "Credential route {name} uses a domain denied by the network policy"
                 )));
             }
-            let (_, secret) = credential::load_with_captures(
-                std::slice::from_ref(&credential_key),
-                credential_capture,
-            )?
-            .pop()
-            .ok_or_else(|| io::Error::other("Credential store returned no value"))?;
+            let (_, secret) = load(std::slice::from_ref(&credential_key), credential_capture)?
+                .pop()
+                .ok_or_else(|| io::Error::other("Credential store returned no value"))?;
             if secret.bytes().any(|byte| byte.is_ascii_control()) {
                 return Err(io::Error::other(format!(
                     "Credential {credential_key} contains unsupported control characters"
@@ -932,13 +946,7 @@ mod tests {
 
     #[test]
     fn broker_rejects_requests_without_a_session_token() {
-        let _guard = crate::credential::KEYRING_TEST_LOCK.lock().unwrap();
-        keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
-        keyring::Entry::new("solmu-boxer", "OPENAI_API_KEY")
-            .unwrap()
-            .set_password("fixture-real-secret")
-            .unwrap();
-        let (broker, _) = Broker::start(
+        let (broker, _) = Broker::start_with_loader(
             &["openai".to_owned()],
             &BTreeMap::new(),
             BrokerOptions {
@@ -948,6 +956,17 @@ mod tests {
                 denied_hosts: &[],
                 reserved_ports: &[],
                 credential_capture: &BTreeMap::new(),
+            },
+            |names, _| {
+                Ok(names
+                    .iter()
+                    .map(|name| {
+                        (
+                            name.clone(),
+                            Zeroizing::new("fixture-real-secret".to_owned()),
+                        )
+                    })
+                    .collect())
             },
         )
         .unwrap();

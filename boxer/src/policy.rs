@@ -1572,7 +1572,6 @@ fn load_policy_chain(
         if version != 1 {
             return Err(io::Error::other("Unsupported policy version; expected 1"));
         }
-        object.insert("version".into(), serde_json::json!(1));
         let parents = match object.remove("extends") {
             None => Vec::new(),
             Some(serde_json::Value::String(parent)) => vec![parent],
