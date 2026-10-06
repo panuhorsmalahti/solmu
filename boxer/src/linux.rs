@@ -136,7 +136,6 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         "--new-session",
         "--hostname",
         "solmu",
-        "--clearenv",
     ]);
     if policy.network != Network::Allow {
         sandbox.arg("--unshare-net");
