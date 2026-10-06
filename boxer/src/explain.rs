@@ -49,8 +49,18 @@ pub fn run(
             "allowed",
             "The path is covered by an explicit writable grant",
         )
+    } else if operation == "write" && covered_by(&path, &policy.write_only) {
+        (
+            "allowed",
+            "The path is covered by an explicit write-only grant",
+        )
     } else if operation == "write" && path.starts_with(workspace) {
         ("allowed", "The path is inside the writable workspace")
+    } else if operation == "read" && covered_by(&path, &policy.write_only) {
+        (
+            "denied",
+            "The path is covered by a write-only grant, which does not permit reading",
+        )
     } else if operation == "read"
         && (path.starts_with(workspace)
             || covered_by(&path, &policy.read)

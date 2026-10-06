@@ -86,6 +86,50 @@ fn why_explains_workspace_grants_denials_and_unrestricted_access() {
     assert_eq!(result["result"], "allowed");
 }
 
+#[cfg(unix)]
+#[test]
+fn why_reports_write_only_permissions_accurately() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = root.path().join("workspace");
+    let output = root.path().join("output");
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::create_dir(&output).unwrap();
+    let target = output.join("result.txt");
+
+    for (operation, expected, reason) in [
+        (
+            "read",
+            "denied",
+            "The path is covered by a write-only grant, which does not permit reading",
+        ),
+        (
+            "write",
+            "allowed",
+            "The path is covered by an explicit write-only grant",
+        ),
+    ] {
+        let (output, result) = why(&[
+            "why",
+            "--path",
+            target.to_str().unwrap(),
+            "--op",
+            operation,
+            "--workspace",
+            "--write-only",
+            output.to_str().unwrap(),
+            "--cwd",
+            workspace.to_str().unwrap(),
+        ]);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(result["result"], expected);
+        assert_eq!(result["reason"], reason);
+    }
+}
+
 #[test]
 fn why_explains_network_access_without_connecting() {
     let (out, result) = why(&["why", "--host", "api.example.com", "--op", "connect"]);
