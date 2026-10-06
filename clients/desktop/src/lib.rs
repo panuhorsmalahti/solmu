@@ -1783,7 +1783,17 @@ impl Desktop {
             Some("status") => container(text(format!("{} · {} · {} · {}", if self.connected { "Connected" } else { "Disconnected" }, self.session.current.as_ref().map(|t| t.title.as_str()).unwrap_or("No conversation"), model_label, self.session.current.as_ref().and_then(|t| t.workspace.as_deref()).unwrap_or("No workspace"))).size(13)).padding(12).style(appearance::sidebar).into(),
             Some("context") => container(column![text(format!("{} messages · {} tool calls · {} skills · {} MCP servers · {} plugins\nWorkspace: {}", self.session.messages.len(), self.session.tools.len(), self.session.skills.items.len(), self.session.mcp.servers.len(), self.session.plugins.items.len(), self.session.current.as_ref().and_then(|t| t.workspace.as_deref()).unwrap_or("No workspace"))).size(13), text(&self.info_notice).size(12)]).padding(12).style(appearance::sidebar).into(),
             Some("commands") => {
-                let mut commands = column![text("Chat commands").size(16)].spacing(6);
+                let mut commands = column![
+                    row![
+                        text("Chat commands").size(16),
+                        iced::widget::space().width(Length::Fill),
+                        button("Close")
+                            .style(appearance::ghost)
+                            .on_press(Event::Info("commands")),
+                    ]
+                    .align_y(iced::Alignment::Center),
+                ]
+                .spacing(6);
                 for (command, description) in CHAT_COMMANDS {
                     commands = commands.push(
                         row![

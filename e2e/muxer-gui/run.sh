@@ -115,7 +115,7 @@ done
 marker="$state/gui-command.txt"
 xdotool windowfocus --sync "$window"
 eval "$(xdotool getwindowgeometry --shell "$window")"
-xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT - 45))" click 1
+xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT - 80))" click 1
 xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
