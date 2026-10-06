@@ -125,6 +125,27 @@ arguments. It is still present in the agent's environment and available to that
 agent and its child processes; use a credential proxy when the agent must not
 read the credential itself.
 
+### Give access to an installed toolchain
+
+Runtime groups grant read-only access to detected Node, Python, Rust, or Go
+installations and caches while keeping the rest of your home directory outside
+the workspace policy:
+
+```sh
+boxer --profile solmu --runtime-group rust --cwd /path/to/project -- solmu
+boxer --workspace --runtime-group node --runtime-group python \
+  --cwd /path/to/project -- another-agent
+```
+
+Groups can also be listed in a policy's `runtime_groups` array. Boxer checks
+standard install locations and the matching variables such as `CARGO_HOME`,
+`RUSTUP_HOME`, `NVM_DIR`, and `GOPATH`. Missing locations are skipped. The Rust
+group grants Cargo's `bin`, `registry`, and `git` directories plus the Rust
+toolchain directory; it does not grant the Cargo home root. Runtime groups are
+opt-in and require `--workspace` or `--isolated`. They grant read access, so
+package managers that need to update caches may also need a writable cache
+directory granted with `--write`.
+
 ### Run Pi, OpenCode, Claude Code, or Codex
 
 Install the agent's CLI first, then start it in a project on Linux or macOS:
@@ -345,7 +366,8 @@ mode and resource options override file values, and `--read-only` and
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `local`, `publish`, `clean_env`,
-`pass_env`, `cpus`, `memory_mib`, `pids`, and `cgroup_root`.
+`pass_env`, `env_credentials`, `runtime_groups`, `cpus`, `memory_mib`, `pids`,
+and `cgroup_root`. Runtime groups are `node`, `python`, `rust`, and `go`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
 

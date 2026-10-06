@@ -116,6 +116,10 @@ with `--env-credential NAME`. Boxer uses the OS credential store and prompts
 without echoing the value. The value is available to the agent process. See the
 [credential guide](../docs/boxer.md#store-credentials-for-an-agent).
 
+Use `--runtime-group node|python|rust|go` with `--workspace` or `--isolated` to
+grant read access to detected toolchains. See the
+[runtime group guide](../docs/boxer.md#give-access-to-an-installed-toolchain).
+
 Add `--rollback` to save a workspace before and after a run. Review or restore
 those snapshots with `boxer rollback list`, `boxer rollback show <session-id>`,
 and `boxer rollback restore <session-id>`. See the

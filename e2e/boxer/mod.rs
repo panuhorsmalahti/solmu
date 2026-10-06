@@ -15,6 +15,7 @@ mod profiles;
 mod readiness;
 mod rollback;
 mod routes;
+mod runtime_groups;
 mod trust;
 
 #[cfg(target_os = "linux")]

@@ -54,6 +54,85 @@ pub enum AgentProfile {
     Pi,
 }
 
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeGroup {
+    Node,
+    Python,
+    Rust,
+    Go,
+}
+
+impl RuntimeGroup {
+    pub fn parse(name: &str) -> io::Result<Self> {
+        match name {
+            "node" => Ok(Self::Node),
+            "python" => Ok(Self::Python),
+            "rust" => Ok(Self::Rust),
+            "go" => Ok(Self::Go),
+            _ => Err(io::Error::other(
+                "Unknown runtime group; available groups: node, python, rust, go",
+            )),
+        }
+    }
+
+    fn paths(self, home: &Path) -> Vec<PathBuf> {
+        let env_path = |name: &str, fallback: PathBuf| {
+            std::env::var_os(name)
+                .map(PathBuf::from)
+                .unwrap_or(fallback)
+        };
+        match self {
+            Self::Node => [
+                Some(env_path("NVM_DIR", home.join(".nvm"))),
+                Some(env_path("FNM_DIR", home.join(".fnm"))),
+                Some(env_path("VOLTA_HOME", home.join(".volta"))),
+                Some(env_path("PNPM_HOME", home.join(".local/share/pnpm"))),
+                Some(home.join(".bun")),
+                Some(home.join(".npm")),
+                Some(home.join(".local/share/node")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+            Self::Python => [
+                Some(env_path("PYENV_ROOT", home.join(".pyenv"))),
+                Some(env_path("CONDA_ENVS_PATH", home.join(".conda/envs"))),
+                Some(home.join(".conda/pkgs")),
+                Some(home.join(".local/share/uv")),
+                Some(home.join(".cache/uv")),
+                Some(home.join(".cache/pip")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+            Self::Rust => {
+                let cargo = env_path("CARGO_HOME", home.join(".cargo"));
+                let mut paths = vec![
+                    cargo.join("bin"),
+                    cargo.join("registry"),
+                    cargo.join("git"),
+                    env_path("RUSTUP_HOME", home.join(".rustup")),
+                ];
+                paths.retain(|path| path.exists());
+                paths
+            }
+            Self::Go => {
+                let mut paths = std::env::var_os("GOPATH")
+                    .map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
+                    .filter(|paths| !paths.is_empty())
+                    .unwrap_or_else(|| vec![home.join("go")]);
+                if let Some(root) = std::env::var_os("GOROOT") {
+                    paths.push(PathBuf::from(root));
+                } else {
+                    paths.push(PathBuf::from("/usr/local/go"));
+                }
+                paths
+            }
+        }
+    }
+}
+
 impl AgentProfile {
     pub fn name(self) -> &'static str {
         match self {
@@ -80,6 +159,7 @@ pub struct Policy {
     pub clean_env: bool,
     pub pass_env: Vec<String>,
     pub env_credentials: Vec<String>,
+    pub runtime_groups: Vec<RuntimeGroup>,
     pub cpus: Option<u32>,
     pub memory_mib: Option<u32>,
     pub pids: Option<u32>,
@@ -148,6 +228,26 @@ impl Policy {
             return Err(io::Error::other(
                 "Proxy networking requires Linux --isolated mode",
             ));
+        }
+        if !self.runtime_groups.is_empty() && self.mode == Mode::Unrestricted {
+            return Err(io::Error::other(
+                "Runtime groups require --workspace or --isolated",
+            ));
+        }
+        let mut groups = std::collections::HashSet::new();
+        for group in &self.runtime_groups {
+            if !groups.insert(*group) {
+                return Err(io::Error::other(
+                    "A runtime group was specified more than once",
+                ));
+            }
+        }
+        if !self.runtime_groups.is_empty() {
+            let home = home()?;
+            for group in &self.runtime_groups {
+                self.read
+                    .extend(group.paths(&home).into_iter().filter(|path| path.exists()));
+            }
         }
         if self.network != Network::Proxy
             && (!self.hosts.is_empty() || !self.local.is_empty() || !self.publish.is_empty())

@@ -7,7 +7,7 @@ mod policy;
 mod policy_cli;
 mod rollback;
 mod trust;
-use policy::{AgentProfile, Mode, Network, Policy};
+use policy::{AgentProfile, Mode, Network, Policy, RuntimeGroup};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 
@@ -206,6 +206,9 @@ fn run() -> io::Result<i32> {
                 "--network-profile minimal|developer: add a built-in exact-host allowlist to --isolated --network proxy."
             );
             println!(
+                "--runtime-group node|python|rust|go: read access to detected toolchain files (repeatable; requires --workspace or --isolated)."
+            );
+            println!(
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
@@ -287,6 +290,13 @@ fn run() -> io::Result<i32> {
                     .and_then(|value| value.into_string().ok())
                     .ok_or_else(|| io::Error::other("--env-credential requires a variable name"))?,
             );
+        } else if argument == "--runtime-group" {
+            policy.runtime_groups.push(RuntimeGroup::parse(
+                &arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| io::Error::other("--runtime-group requires a group name"))?,
+            )?);
         } else if argument == "--print-policy" {
             print_policy = true;
         } else if argument == "--check" {
@@ -418,6 +428,7 @@ fn run() -> io::Result<i32> {
     resolved.write.extend(policy.write);
     resolved.pass_env.extend(policy.pass_env);
     resolved.env_credentials.extend(policy.env_credentials);
+    resolved.runtime_groups.extend(policy.runtime_groups);
     resolved.cpus = policy.cpus.or(resolved.cpus);
     resolved.memory_mib = policy.memory_mib.or(resolved.memory_mib);
     resolved.pids = policy.pids.or(resolved.pids);
