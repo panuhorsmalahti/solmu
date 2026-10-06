@@ -79,11 +79,13 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
                 .ok_or_else(|| io::Error::other("--timeout requires seconds from 1 to 86400"))?;
             timeout = Some(Duration::from_secs(seconds));
             index += 2;
-        } else if arguments[index] == "--policy" && index + 1 < arguments.len() {
+        } else if (arguments[index] == "--policy" || arguments[index] == "--profile")
+            && index + 1 < arguments.len()
+        {
             if policy_file.is_some() {
-                return Err(io::Error::other("Specify only one --policy"));
+                return Err(io::Error::other("Specify only one --policy or --profile"));
             }
-            policy_file = Some(PathBuf::from(&arguments[index + 1]));
+            policy_file = Some(resolve_policy_file(Path::new(&arguments[index + 1]))?);
             index += 2;
         } else {
             return Err(usage());
@@ -354,6 +356,28 @@ fn covered_by(path: &Path, roots: &[PathBuf]) -> bool {
         .any(|root| path == root || (root.is_dir() && path.starts_with(root)))
 }
 
+fn resolve_policy_file(reference: &Path) -> io::Result<PathBuf> {
+    if reference.is_file() || reference.components().count() != 1 {
+        return Ok(reference.to_owned());
+    }
+    let name = reference
+        .to_str()
+        .filter(|name| {
+            !name.is_empty()
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        })
+        .ok_or_else(usage)?;
+    let directory = crate::profiles::profile_directory()?;
+    let jsonc = directory.join(format!("{name}.jsonc"));
+    if jsonc.is_file() {
+        Ok(jsonc)
+    } else {
+        Ok(directory.join(format!("{name}.json")))
+    }
+}
+
 fn parse(contents: &str, directory: &Path) -> Trace {
     let mut trace = Trace::default();
     for line in contents.lines() {
@@ -618,7 +642,7 @@ fn print_endpoints(endpoints: &[Endpoint]) {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer learn [--json] [--timeout SECONDS] [--policy FILE] -- PROGRAM [ARGS...]",
+        "Usage: boxer learn [--json] [--timeout SECONDS] [--policy FILE | --profile NAME] -- PROGRAM [ARGS...]",
     )
 }
 

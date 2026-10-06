@@ -98,6 +98,27 @@ fn learn_compares_discovered_access_with_a_resolved_boxer_policy() {
             .unwrap()
             .is_empty()
     );
+
+    let by_profile = Command::new(binary("boxer"))
+        .args(["learn", "--json", "--profile", "policy", "--"])
+        .arg(binary("sandbox-probe"))
+        .arg("--learn-fixture")
+        .arg(&input)
+        .arg(&output)
+        .current_dir(&workspace)
+        .env("BOXER_PROFILE_DIR", root.path())
+        .output()
+        .unwrap();
+    assert!(
+        by_profile.status.success(),
+        "{}",
+        String::from_utf8_lossy(&by_profile.stderr)
+    );
+    let by_profile: Value = serde_json::from_slice(&by_profile.stdout).unwrap();
+    assert_eq!(
+        by_profile["policy_gaps"]["filesystem"]["read"],
+        report["policy_gaps"]["filesystem"]["read"]
+    );
 }
 
 #[test]
