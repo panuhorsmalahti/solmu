@@ -152,6 +152,16 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
             "--isolated requires a project workspace outside /, /sys, /proc, and /dev",
         ));
     }
+    let executable = policy::executable(&command)?;
+    if policy
+        .deny
+        .iter()
+        .any(|denied| executable.as_path() == denied.as_path() || executable.starts_with(denied))
+    {
+        return Err(io::Error::other(
+            "The isolated policy denies the executable Boxer needs to launch",
+        ));
+    }
     let mut sandbox = Command::new("bwrap");
     sandbox.args([
         "--unshare-user",
@@ -199,7 +209,35 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
     for path in &policy.write {
         sandbox.arg("--bind").arg(path).arg(path);
     }
-    let executable = policy::executable(&command)?;
+    let mut exposed_roots = policy.read.clone();
+    exposed_roots.extend(policy.write.clone());
+    exposed_roots.extend(policy.write_only.clone());
+    exposed_roots.extend(policy::device_paths());
+    exposed_roots.push(directory.clone());
+    exposed_roots.extend(
+        policy::ISOLATED_RUNTIME
+            .iter()
+            .map(|path| std::path::PathBuf::from(*path)),
+    );
+    for path in &policy.deny {
+        if !exposed_roots
+            .iter()
+            .any(|root| root.starts_with(path) || path.starts_with(root))
+        {
+            // This path is outside every mount grant and is already absent from
+            // the isolated filesystem view.
+            continue;
+        }
+        if path.is_dir() {
+            sandbox
+                .arg("--tmpfs")
+                .arg(path)
+                .arg("--remount-ro")
+                .arg(path);
+        } else {
+            sandbox.arg("--ro-bind").arg("/dev/null").arg(path);
+        }
+    }
     sandbox
         .arg("--ro-bind")
         .arg(executable)

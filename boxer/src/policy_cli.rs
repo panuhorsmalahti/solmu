@@ -165,6 +165,9 @@ Filesystem
   available in workspace mode on Linux and macOS. `read_only: true` denies
   writes, so it cannot be combined with writable grants. In workspace mode,
   filesystem access starts at the workspace; add grants only when needed.
+  `deny` blocks an existing file or directory even if another grant includes
+  it. Denies accumulate through inheritance. macOS supports them with Seatbelt;
+  Linux requires isolated mode; Windows does not yet enforce filesystem rules.
   Relative grants resolve against the file that declares them. `$HOME` and
   `$WORKSPACE` are the only supported path variables. Grant paths must exist.
 
@@ -246,6 +249,7 @@ fn schema_value() -> Value {
             "read_only": {"type": "boolean"},
             "read": {"type": "array", "items": {"type": "string"}},
             "write": {"type": "array", "items": {"type": "string"}},
+            "deny": {"type": "array", "items": {"type": "string"}},
             "write_only": {"type": "array", "items": {"type": "string"}},
             "clean_env": {"type": "boolean"},
             "pass_env": {"type": "array", "items": {"type": "string"}},
@@ -364,6 +368,7 @@ fn scaffold(extends: Vec<OsString>, full: bool) -> Value {
             ("deny_hosts", json!([])),
             ("local", json!([])),
             ("publish", json!([])),
+            ("deny", json!([])),
             ("write_only", json!([])),
             ("pass_env", json!([])),
             // `allow_vars` and `case_insensitive_vars` affect inherited behavior;

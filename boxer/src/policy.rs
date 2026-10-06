@@ -703,6 +703,7 @@ pub struct Policy {
     pub read_only: bool,
     pub read: Vec<PathBuf>,
     pub write: Vec<PathBuf>,
+    pub deny: Vec<PathBuf>,
     pub write_only: Vec<PathBuf>,
     pub clean_env: bool,
     pub pass_env: Vec<String>,
@@ -1166,6 +1167,7 @@ impl Policy {
             .read
             .iter_mut()
             .chain(&mut self.write)
+            .chain(&mut self.deny)
             .chain(&mut self.write_only)
         {
             let text = path.to_string_lossy();
@@ -1193,8 +1195,47 @@ impl Policy {
         self.read.dedup();
         self.write.sort();
         self.write.dedup();
+        self.deny.sort_by(|left, right| {
+            left.components()
+                .count()
+                .cmp(&right.components().count())
+                .then_with(|| left.cmp(right))
+        });
+        self.deny.dedup();
+        let mut minimal_deny = Vec::new();
+        for path in self.deny.drain(..) {
+            if minimal_deny
+                .iter()
+                .any(|ancestor: &PathBuf| ancestor.is_dir() && path.starts_with(ancestor))
+            {
+                continue;
+            }
+            minimal_deny.push(path);
+        }
+        self.deny = minimal_deny;
         self.write_only.sort();
         self.write_only.dedup();
+        if !self.deny.is_empty() && cfg!(windows) {
+            return Err(io::Error::other(
+                "Filesystem deny rules are not supported by the Windows Job Object backend",
+            ));
+        }
+        if !self.deny.is_empty() && cfg!(target_os = "linux") && !self.isolated {
+            return Err(io::Error::other(
+                "Linux filesystem deny rules require --isolated so Boxer can mask the denied paths",
+            ));
+        }
+        if self.deny.iter().any(|path| {
+            path == Path::new("/")
+                || (cfg!(target_os = "linux")
+                    && ["/sys", "/proc", "/dev"]
+                        .iter()
+                        .any(|root| path.starts_with(root)))
+        }) {
+            return Err(io::Error::other(
+                "Filesystem deny rules cannot target filesystem roots or kernel control directories",
+            ));
+        }
         let mut readable = runtime_paths();
         readable.push(workspace.to_owned());
         readable.extend(self.read.iter().cloned());
@@ -1590,7 +1631,7 @@ fn resolve_policy_layer_paths(
     path: &Path,
 ) -> io::Result<()> {
     let base = path.parent().unwrap_or_else(|| Path::new("."));
-    for key in ["read", "write", "write_only"] {
+    for key in ["read", "write", "deny", "write_only"] {
         if let Some(serde_json::Value::Array(paths)) = object.get_mut(key) {
             for value in paths.iter_mut() {
                 let Some(path_text) = value.as_str() else {

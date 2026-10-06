@@ -4,11 +4,24 @@ use crate::{
 };
 use std::{
     io,
-    os::unix::process::{CommandExt, ExitStatusExt},
+    os::unix::{
+        fs::FileTypeExt,
+        process::{CommandExt, ExitStatusExt},
+    },
     process::Command,
 };
 
 pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
+    let executable = policy::executable(&command)?;
+    if policy
+        .deny
+        .iter()
+        .any(|denied| executable.as_path() == denied.as_path() || executable.starts_with(denied))
+    {
+        return Err(io::Error::other(
+            "The policy denies the executable Boxer needs to launch",
+        ));
+    }
     if policy.network == Network::Deny {
         crate::unix::prepare_network_denial()?;
     }
@@ -96,6 +109,24 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
     } else {
         "(version 1)(allow default)".to_owned()
     };
+    for path in &policy.deny {
+        let kind = if path.is_dir() { "subpath" } else { "literal" };
+        let path = path
+            .to_str()
+            .ok_or_else(|| io::Error::other("Seatbelt paths must be UTF-8"))?;
+        profile.push_str(&format!(
+            "(deny file-read-data file-map-executable file-write* ({kind} {}))",
+            quote(path)
+        ));
+        if std::path::Path::new(path).is_dir()
+            || std::path::Path::new(path)
+                .metadata()?
+                .file_type()
+                .is_socket()
+        {
+            profile.push_str(&format!("(deny network-outbound ({kind} {}))", quote(path)));
+        }
+    }
     if policy.network == Network::Deny {
         profile.push_str("(deny network*)(deny system-socket)");
     }

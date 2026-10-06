@@ -88,6 +88,45 @@ fn why_explains_workspace_grants_denials_and_unrestricted_access() {
 
 #[cfg(unix)]
 #[test]
+fn why_reports_explicit_filesystem_deny_rules() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = root.path().join("workspace");
+    let secret = workspace.join("secret.txt");
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::write(&secret, "secret").unwrap();
+    #[cfg(target_os = "linux")]
+    let mode = "--isolated";
+    #[cfg(target_os = "macos")]
+    let mode = "--workspace";
+
+    let (output, explanation) = why(&[
+        "why",
+        "--path",
+        secret.to_str().unwrap(),
+        "--op",
+        "read",
+        mode,
+        "--deny",
+        secret.to_str().unwrap(),
+        "--cwd",
+        workspace.to_str().unwrap(),
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(explanation["result"], "denied");
+    assert!(
+        explanation["reason"]
+            .as_str()
+            .unwrap()
+            .contains("explicit filesystem deny")
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn why_reports_write_only_permissions_accurately() {
     let root = tempfile::tempdir().unwrap();
     let workspace = root.path().join("workspace");

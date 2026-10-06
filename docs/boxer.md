@@ -692,6 +692,7 @@ mode and resource options override file values, and `--read-only` and
 
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
+`deny`,
 `write_only`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `deny_hosts`,
 `local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`, `env_credential_map`,
@@ -711,6 +712,14 @@ Runtime groups
 are `node`, `python`, `rust`, and `go`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
+
+`deny` lists existing paths whose contents must not be accessible, even when a
+broader workspace or path grant includes them. Denies accumulate through profile
+inheritance and take precedence over grants. macOS enforces them with Seatbelt;
+Linux requires `isolated` mode so Boxer can mask the path in the private mount
+namespace. Windows currently rejects filesystem deny rules because its Job
+Object backend does not enforce filesystem access. Use `boxer why --path PATH`
+to see when an explicit deny rule applies.
 
 Inspect saved policy files without launching the agent:
 

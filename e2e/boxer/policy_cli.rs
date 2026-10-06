@@ -261,6 +261,7 @@ fn full_policy_scaffold_preserves_inherited_scalar_security_settings() {
             .is_none()
     );
     assert_eq!(scaffold["endpoint_rules"], json!([]));
+    assert_eq!(scaffold["deny"], json!([]));
     assert_eq!(scaffold["custom_credentials"], json!({}));
 
     let resolved = Command::new(binary("boxer"))
@@ -447,6 +448,7 @@ fn policy_schema_describes_the_supported_policy_fields() {
         "read_only",
         "read",
         "write",
+        "deny",
         "clean_env",
         "pass_env",
         "env_credentials",

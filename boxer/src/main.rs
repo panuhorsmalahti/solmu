@@ -237,6 +237,9 @@ fn run() -> io::Result<i32> {
                 "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace, --allow-cwd: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--write-only PATH: additional existing write-only file or directory (repeatable; Linux/macOS workspace mode).\n--profile solmu|codex|claude-code|opencode|pi|NAME: built-ins or a custom JSON profile from ~/.config/boxer/profiles (BOXER_PROFILE_DIR overrides it). Agent profiles use separate login homes.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
             );
             println!(
+                "--deny PATH: block an existing file or directory (repeatable; Linux requires --isolated; Windows unsupported)."
+            );
+            println!(
                 "--network allow|deny|proxy: unrestricted (default), offline on Linux/macOS, or a routed Linux isolated network.\n--allow-host DOMAIN[:PORT]: exact or wildcard remote hostname for proxy networking, default port 443 (repeatable).\n--deny-host DOMAIN: deny a domain even when another rule allows it (repeatable; * matches all and * may replace complete labels).\n--allow-local IP:PORT or --open-port PORT: forward a host loopback service into the private network (repeatable).\n--publish PORT or --listen-port PORT: expose a guest service on the same host loopback port (repeatable).\n--proxy-port PORT: use a fixed local port for the Linux network proxy (otherwise an available port is chosen)."
             );
             println!(
@@ -378,7 +381,11 @@ fn run() -> io::Result<i32> {
             );
         } else if argument == "--isolated" {
             mode = Some(Mode::Isolated);
-        } else if argument == "--read" || argument == "--write" || argument == "--write-only" {
+        } else if argument == "--read"
+            || argument == "--write"
+            || argument == "--deny"
+            || argument == "--write-only"
+        {
             let path = arguments
                 .next()
                 .ok_or_else(|| {
@@ -387,6 +394,8 @@ fn run() -> io::Result<i32> {
                 .into();
             if argument == "--read" {
                 policy.read.push(path);
+            } else if argument == "--deny" {
+                policy.deny.push(path);
             } else if argument == "--write-only" {
                 policy.write_only.push(path);
             } else {
@@ -617,6 +626,7 @@ fn run() -> io::Result<i32> {
     }
     resolved.read.extend(policy.read);
     resolved.write.extend(policy.write);
+    resolved.deny.extend(policy.deny);
     resolved.write_only.extend(policy.write_only);
     resolved.pass_env.extend(policy.pass_env);
     resolved.env_credentials.extend(policy.env_credentials);

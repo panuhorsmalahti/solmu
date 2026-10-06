@@ -33,6 +33,11 @@ pub fn run(
             "unsupported",
             "This Boxer backend does not enforce the requested filesystem policy on this platform",
         )
+    } else if covered_by(&path, &policy.deny) {
+        (
+            "denied",
+            "An explicit filesystem deny rule blocks this path, even when another grant includes it",
+        )
     } else if policy.mode == Mode::Unrestricted {
         if operation == "write" && policy.read_only {
             ("denied", "--read-only denies writes")

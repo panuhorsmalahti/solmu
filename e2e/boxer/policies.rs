@@ -268,6 +268,43 @@ fn workspace_allowlists_and_explicit_grants_are_inherited_and_block_symlink_esca
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn filesystem_deny_masks_a_path_inside_an_allowed_workspace() {
+    let workspace = tempfile::tempdir().unwrap();
+    let secret_dir = workspace.path().join("secrets");
+    std::fs::create_dir(&secret_dir).unwrap();
+    let secret = secret_dir.join("token.txt");
+    std::fs::write(&secret, "host secret").unwrap();
+    #[cfg(target_os = "linux")]
+    let mode = "--isolated";
+    #[cfg(target_os = "macos")]
+    let mode = "--workspace";
+    let output = Command::new(binary("boxer"))
+        .arg(mode)
+        .arg("--cwd")
+        .arg(workspace.path())
+        .arg("--deny")
+        .arg(&secret_dir)
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("--access-check-descendant")
+        .env(
+            "SOLMU_TEST_ACCESS",
+            json!([{"path":secret,"read":false,"write":false}]).to_string(),
+        )
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{:?}\n{}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(std::fs::read_to_string(secret).unwrap(), "host secret");
+}
+
 #[test]
 fn clean_environment_removes_unrelated_credentials_and_explicit_names_are_forwarded() {
     let directory = tempfile::tempdir().unwrap();
