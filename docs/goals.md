@@ -8,9 +8,9 @@ its `Goals` tool. A plain question or one-turn request does not need a goal.
 Entering `/goal` lists saved goals. Each goal has a persistent ID and one of
 four states: active, paused, completed, or cancelled. The agent receives active
 goals as context on later replies and can update their status when work is
-paused or finished. Starting a goal does not launch a separate background
-worker; Solmu works on it during the current response and can continue when you
-return to the conversation.
+paused or finished. When Solmu starts a goal while handling a natural-language
+request, it can begin work during that response. `/goal` records the objective
+for follow-up replies. Goals do not launch a separate background worker.
 
 Goals can also be created and managed through `GET /api/v1/goals`,
 `POST /api/v1/goals`, and `PATCH /api/v1/goals/{id}`. Updates are announced to
