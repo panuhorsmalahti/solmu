@@ -975,7 +975,7 @@ fn attach(id: &str) -> io::Result<i32> {
 
 fn configured_detach_sequence() -> io::Result<Vec<u8>> {
     let value = match std::env::var("BOXER_DETACH_SEQUENCE") {
-        Ok(value) => value,
+        Ok(value) => Some(value),
         Err(std::env::VarError::NotPresent) => configured_detach_sequence_from_file()?,
         Err(error) => return Err(io::Error::other(error)),
     }
@@ -1049,7 +1049,7 @@ fn detach_key(key: &str) -> io::Result<u8> {
             Some(b'?') => 0x7f,
             _ => return Err(io::Error::other(format!("Invalid detach key: {key}"))),
         },
-        _ if key.len() == 1 && key.is_ascii_graphic() => key.as_bytes()[0],
+        _ if key.len() == 1 && key.as_bytes()[0].is_ascii_graphic() => key.as_bytes()[0],
         _ => return Err(io::Error::other(format!("Invalid detach key: {key}"))),
     };
     Ok(byte)
