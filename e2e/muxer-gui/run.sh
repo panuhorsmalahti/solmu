@@ -47,7 +47,7 @@ mkdir -p docs/screenshots
 first_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = next(item for item in data["spaces"] if item["id"] == data["active"])
+space = data["spaces"][0]
 print(space["tabs"][0]["id"])
 PY
 )
@@ -56,7 +56,7 @@ for _ in $(seq 1 30); do
   count=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = next(item for item in data["spaces"] if item["id"] == data["active"])
+space = data["spaces"][0]
 print(len(space["tabs"]))
 PY
 )
@@ -67,7 +67,7 @@ done
 second_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = next(item for item in data["spaces"] if item["id"] == data["active"])
+space = data["spaces"][0]
 print(space["tabs"][1]["id"])
 PY
 )
@@ -76,7 +76,7 @@ sleep 0.3
 active_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = next(item for item in data["spaces"] if item["id"] == data["active"])
+space = data["spaces"][0]
 print(space["selected"])
 PY
 )
@@ -86,7 +86,7 @@ sleep 0.3
 active_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = next(item for item in data["spaces"] if item["id"] == data["active"])
+space = data["spaces"][0]
 print(space["selected"])
 PY
 )
