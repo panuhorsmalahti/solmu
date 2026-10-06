@@ -262,7 +262,7 @@ pub fn keyring_reference(value: &str) -> Option<(String, String)> {
         .decode_utf8()
         .ok()?
         .into_owned();
-    if account.is_empty() || account.chars().any(char::is_control) {
+    if account.is_empty() || account.contains('/') || account.chars().any(char::is_control) {
         return None;
     }
     Some((service.to_owned(), account))
