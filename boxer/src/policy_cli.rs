@@ -106,7 +106,7 @@ fn schema() -> io::Result<i32> {
             "version": {"const": 1},
             "mode": {"enum": ["unrestricted", "workspace", "isolated"]},
             "network": {"enum": ["allow", "deny", "proxy"]},
-            "network_profile": {"enum": ["minimal", "developer"]},
+            "network_profile": {"enum": ["minimal", "developer", "claude-code", "codex", "opencode"]},
             "upstream_proxy": {"type": "string", "format": "uri"},
             "upstream_bypass": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
             "hosts": {"type": "array", "items": {"type": "string"}},

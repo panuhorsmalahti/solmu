@@ -275,32 +275,37 @@ mod address_tests {
 }
 
 pub fn profiles() -> &'static [(&'static str, &'static [&'static str])] {
+    const LLM_APIS: &[&str] = &[
+        "api.openai.com",
+        "api.anthropic.com",
+        "generativelanguage.googleapis.com",
+    ];
+    const DEVELOPER: &[&str] = &[
+        "api.openai.com",
+        "api.anthropic.com",
+        "generativelanguage.googleapis.com",
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "index.crates.io",
+        "static.crates.io",
+        "github.com",
+        "api.github.com",
+        "raw.githubusercontent.com",
+        "codeload.github.com",
+        "fulcio.sigstore.dev",
+        "rekor.sigstore.dev",
+        "tuf-repo-cdn.sigstore.dev",
+        "docs.python.org",
+        "developer.mozilla.org",
+        "doc.rust-lang.org",
+    ];
     &[
-        (
-            "minimal",
-            &[
-                "api.openai.com",
-                "api.anthropic.com",
-                "generativelanguage.googleapis.com",
-            ],
-        ),
-        (
-            "developer",
-            &[
-                "api.openai.com",
-                "api.anthropic.com",
-                "generativelanguage.googleapis.com",
-                "github.com",
-                "api.github.com",
-                "raw.githubusercontent.com",
-                "codeload.github.com",
-                "registry.npmjs.org",
-                "pypi.org",
-                "files.pythonhosted.org",
-                "index.crates.io",
-                "static.crates.io",
-            ],
-        ),
+        ("minimal", LLM_APIS),
+        ("developer", DEVELOPER),
+        ("claude-code", DEVELOPER),
+        ("codex", DEVELOPER),
+        ("opencode", DEVELOPER),
     ]
 }
 
@@ -311,7 +316,7 @@ pub fn profile_hosts(name: &str) -> io::Result<Vec<String>> {
         .map(|(_, hosts)| hosts.iter().map(|host| (*host).to_owned()).collect())
         .ok_or_else(|| {
             io::Error::other(format!(
-                "Unknown network profile '{name}'; available profiles: minimal, developer"
+                "Unknown network profile '{name}'; available profiles: minimal, developer, claude-code, codex, opencode"
             ))
         })
 }

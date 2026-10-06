@@ -86,7 +86,7 @@ systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervis
 Networking stays allowed. This uses the host kernel.
 
 On Linux, restrict destinations with `--isolated --network proxy`. Choose a
-built-in host set with `--network-profile minimal|developer` or add exact
+built-in host set with `--network-profile minimal|developer|claude-code|codex|opencode` or add exact
 hosts with `--allow-host api.openai.com`. Forward an existing backend with
 `--allow-local 127.0.0.1:3000`, or expose a boxed backend with `--publish 3000`.
 See [network routes and Solmu examples](../docs/boxer.md#choose-allowed-network-destinations-on-linux).

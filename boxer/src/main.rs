@@ -203,7 +203,7 @@ fn run() -> io::Result<i32> {
                 "--trust-key PUBLIC_KEY --trust-policy FILE: verify a signed list of files before launch."
             );
             println!(
-                "--network-profile minimal|developer: add a built-in exact-host allowlist to --isolated --network proxy."
+                "--network-profile minimal|developer|claude-code|codex|opencode: add a built-in exact-host allowlist to --isolated --network proxy."
             );
             println!(
                 "--runtime-group node|python|rust|go: read access to detected toolchain files (repeatable; requires --workspace or --isolated)."

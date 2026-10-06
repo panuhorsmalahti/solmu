@@ -486,11 +486,15 @@ boxer --isolated --network proxy --network-profile developer \
 ```
 
 `minimal` allows OpenAI, Anthropic, and Google Generative Language API hosts.
-`developer` adds GitHub and common npm, Python, and Rust package registry hosts.
-You can add exact destinations with `--allow-host`; policy-file `hosts` are also
-combined with the selected profile. These are fixed host lists, not endpoint
-filters. Package registries may use additional CDN hosts, which you can add
-explicitly. These profiles configure allowed hostnames, not credentials; use
+`developer` adds GitHub, npm/Python/Rust registries, Sigstore, and selected
+language documentation hosts. `claude-code`, `codex`, and `opencode` are named
+presets with the same network destinations as `developer`; they do not launch
+the corresponding client or configure credentials. Use the separate
+`--profile` option for Boxer’s client launch profiles. You can add exact
+destinations with `--allow-host`; policy-file `hosts` are also combined with
+the selected network profile. These are fixed host lists, not endpoint filters.
+Package registries may use additional CDN hosts, which you can add explicitly.
+Network profiles configure allowed hostnames, not credentials; use
 `--credential` separately when the agent should receive a proxy session token
 instead of the real provider key.
 

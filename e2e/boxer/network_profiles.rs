@@ -62,7 +62,28 @@ fn network_profiles_expand_to_exact_hosts_and_require_the_proxy() {
         .unwrap();
     assert!(profiles.status.success());
     let profiles: Value = serde_json::from_slice(&profiles.stdout).unwrap();
-    assert_eq!(profiles.as_array().unwrap().len(), 2);
+    assert_eq!(profiles.as_array().unwrap().len(), 5);
+    let codex = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--network-profile",
+            "codex",
+            "--print-policy",
+        ])
+        .output()
+        .unwrap();
+    assert!(codex.status.success());
+    let codex: Value = serde_json::from_slice(&codex.stdout).unwrap();
+    assert_eq!(codex["policy"]["network_profile"], "codex");
+    assert!(
+        codex["policy"]["hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|host| { host == "fulcio.sigstore.dev:443" || host == "doc.rust-lang.org:443" })
+    );
 }
 
 #[test]
