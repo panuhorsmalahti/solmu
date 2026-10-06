@@ -16,15 +16,13 @@ binary, daemon, or local control server is needed. The GUI installer includes
 the `solmu` runtime for Solmu spaces; start the Solmu backend before using
 those spaces. Terminal spaces launch local shells and command-line clients.
 
-Terminal spaces use the sidebar to show spaces. Solmu spaces use the full
-window width for Solmu's desktop interface; switch spaces with the compact
-**Spaces** picker above it. When a tab has multiple panes,
+The left sidebar shows spaces in both Terminal and Solmu views. When a tab has multiple panes,
 they appear under **PANES** so you can switch between them; a lone pane needs
 no extra sidebar entry. Tabs appear in a browser-style strip along the top of
 the workspace. Select a tab to switch to it, use **+** to add one, or click its
 **x** to close it. Split panes and send terminal input from the workspace. Click **+** beside
 **Spaces** to choose a new **Terminal** or **Solmu** space. Right-click a space
-in the sidebar or Spaces picker and choose **Delete space** to remove it.
+in the sidebar and choose **Delete space** to remove it.
 Solmu opens the shared native desktop interface, including its conversation
 list and Profile, Audit, Tasks, and other pages. In Muxer GUI, use chat commands
 such as `/plugins`, `/mcp`, `/skills`, `/compact`, `/status`, `/context`,

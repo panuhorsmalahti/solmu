@@ -196,13 +196,11 @@ sleep 2
 # chat command menu instead of a row of extra header buttons.
 import -window "$window" docs/screenshots/muxer-gui.png
 
-# Open Solmu's compact Spaces picker, right-click the original space, delete it,
-# and verify it is removed.
-xdotool mousemove --window "$window" 100 98 click 1
+# The Spaces sidebar stays visible while Solmu is active. Right-click the
+# original space, delete it, and verify it is removed.
+xdotool mousemove --window "$window" 100 174 click 3
 sleep 0.3
-xdotool mousemove --window "$window" 100 132 click 3
-sleep 0.3
-xdotool mousemove --window "$window" 100 165 click 1
+xdotool mousemove --window "$window" 80 224 click 1
 removed=''
 for _ in $(seq 1 30); do
   removed=$(python3 - "$snapshot" "$initial_space" <<'PY'
