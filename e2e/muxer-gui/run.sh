@@ -97,7 +97,7 @@ print(space["selected"])
 PY
 )
 [ "$active_tab" = "$second_tab" ] || { echo 'Top tab strip did not focus the new tab' >&2; exit 1; }
-xdotool mousemove --window "$window" 470 38 click 1
+xdotool mousemove --window "$window" 440 38 click 1
 for _ in $(seq 1 30); do
   count=$(python3 - "$snapshot" <<'PY'
 import json, sys
@@ -109,7 +109,7 @@ PY
   [ "$count" = "1:$first_tab:$first_space" ] && break
   sleep 0.3
 done
-[ "$count" = "1:$first_tab:$first_space" ] || { echo 'Closing a tab did not select the previous tab in the same space' >&2; exit 1; }
+[ "$count" = "1:$first_tab:$first_space" ] || { echo "Closing a tab did not select the previous tab in the same space (state=$count)" >&2; exit 1; }
 
 # Send a shell command through the GUI and verify its file side effect.
 marker="$state/gui-command.txt"
@@ -132,10 +132,10 @@ import json, sys
 print(len(json.load(open(sys.argv[1]))["spaces"]))
 PY
 )
-xdotool mousemove --window "$window" 240 210 click 1
+xdotool mousemove --window "$window" 240 131 click 1
 sleep 0.3
 import -window "$window" docs/screenshots/muxer-gui.png
-xdotool mousemove --window "$window" 75 242 click 1
+xdotool mousemove --window "$window" 75 168 click 1
 sleep 0.3
 created=''
 for _ in $(seq 1 30); do
@@ -153,9 +153,9 @@ done
 [ "$created" = "$((before + 1)):terminal:shell" ] || { echo "Terminal choice did not open a shell (active=$created)" >&2; exit 1; }
 
 # The embedded GUI can create Solmu spaces too, without a Muxer server.
-xdotool mousemove --window "$window" 240 210 click 1
+xdotool mousemove --window "$window" 240 131 click 1
 sleep 0.3
-xdotool mousemove --window "$window" 75 274 click 1
+xdotool mousemove --window "$window" 75 200 click 1
 created=''
 for _ in $(seq 1 30); do
   created=$(python3 - "$snapshot" <<'PY'
@@ -171,9 +171,9 @@ done
 [ "$created" = solmu ] || { echo "GUI did not persist a Solmu space (active=$created)" >&2; exit 1; }
 
 # Right-click a space, choose Delete space, and verify it is removed.
-xdotool mousemove --window "$window" 100 254 click 3
+xdotool mousemove --window "$window" 100 174 click 3
 sleep 0.3
-xdotool mousemove --window "$window" 80 310 click 1
+xdotool mousemove --window "$window" 80 224 click 1
 removed=''
 for _ in $(seq 1 30); do
   removed=$(python3 - "$snapshot" "$initial_space" <<'PY'
