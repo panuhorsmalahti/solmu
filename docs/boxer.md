@@ -148,6 +148,41 @@ still need explicit routes. The local broker verifies the session token and
 does not print the stored key. The agent can make requests through the broker,
 but the key itself is not in its environment.
 
+Policies can also define custom HTTPS credential routes for APIs that do not
+have a built-in provider route. Store the key in Boxer’s credential store, then
+select the route by name in `credentials`:
+
+```json
+{
+  "version": 1,
+  "mode": "isolated",
+  "network": "proxy",
+  "credentials": ["search_api"],
+  "custom_credentials": {
+    "search_api": {
+      "upstream": "https://api.example.com/v1",
+      "credential_key": "SEARCH_API_KEY",
+      "inject_header": "Authorization",
+      "credential_format": "Bearer {}"
+    }
+  },
+  "endpoint_rules": [
+    {"provider": "search_api", "method": "POST", "path": "/v1/search"}
+  ]
+}
+```
+
+```sh
+boxer credential set SEARCH_API_KEY
+boxer --policy boxer-policy.json --cwd /path/to/project -- solmu
+```
+
+The route’s upstream host is added to the network policy. By default, Boxer
+sets `SEARCH_API_KEY` in the child to a session-only token and sets
+`SEARCH_API_BASE_URL` to the local proxy route. The real key is injected using
+the configured header and format. Custom routes currently support HTTPS header
+injection; endpoint rules can limit their allowed methods and paths.
+
 By default, the broker allows any API path on the selected provider. Add one or
 more `--allow-endpoint PROVIDER:METHOD:PATH` options to limit it to specific
 endpoints. Once rules are present, other requests receive `403 Forbidden`:
@@ -407,10 +442,13 @@ The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `deny_hosts`,
 `local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`,
 `credentials`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
-and `cgroup_root`. Endpoint rules have
+`custom_credentials`, and `cgroup_root`. Custom credential definitions provide
+an HTTPS `upstream` and a `credential_key`; `env_var`, `inject_header`, and
+`credential_format` are optional. Endpoint rules have
 `provider`, `method`, and `path` fields and require a matching entry in
-`credentials`. Proxy credentials are `openai`, `anthropic`, `gemini`, `github`,
-and `gitlab`; runtime groups
+`credentials`. Built-in proxy routes are `openai`, `anthropic`, `gemini`,
+`github`, and `gitlab`; custom routes use lowercase names with underscores.
+Runtime groups
 are `node`, `python`, `rust`, and `go`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.

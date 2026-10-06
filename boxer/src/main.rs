@@ -7,7 +7,7 @@ mod policy;
 mod policy_cli;
 mod rollback;
 mod trust;
-use policy::{AgentProfile, CredentialProvider, EndpointRule, Mode, Network, Policy, RuntimeGroup};
+use policy::{AgentProfile, EndpointRule, Mode, Network, Policy, RuntimeGroup};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 
@@ -209,7 +209,7 @@ fn run() -> io::Result<i32> {
                 "--runtime-group node|python|rust|go: read access to detected toolchain files (repeatable; requires --workspace or --isolated)."
             );
             println!(
-                "--credential openai|anthropic|gemini|github|gitlab: proxy a key from the OS credential store so the agent receives only a per-session token (requires --isolated --network proxy)."
+                "--credential PROVIDER: proxy a key from the OS credential store so the agent receives only a per-session token (built-ins: openai, anthropic, gemini, github, gitlab; custom routes come from the policy file). Requires --isolated --network proxy."
             );
             println!(
                 "--allow-endpoint PROVIDER:METHOD:PATH: allow a brokered API endpoint (repeatable; * matches one path segment and ** matches multiple)."
@@ -335,12 +335,12 @@ fn run() -> io::Result<i32> {
                     .ok_or_else(|| io::Error::other("--runtime-group requires a group name"))?,
             )?);
         } else if argument == "--credential" {
-            policy.credentials.push(CredentialProvider::parse(
-                &arguments
+            policy.credentials.push(
+                arguments
                     .next()
                     .and_then(|value| value.into_string().ok())
                     .ok_or_else(|| io::Error::other("--credential requires a provider name"))?,
-            )?);
+            );
         } else if argument == "--allow-endpoint" {
             policy.endpoint_rules.push(EndpointRule::parse(
                 &arguments
@@ -486,6 +486,9 @@ fn run() -> io::Result<i32> {
     resolved.env_credentials.extend(policy.env_credentials);
     resolved.runtime_groups.extend(policy.runtime_groups);
     resolved.credentials.extend(policy.credentials);
+    resolved
+        .custom_credentials
+        .extend(policy.custom_credentials);
     resolved.endpoint_rules.extend(policy.endpoint_rules);
     resolved.cpus = policy.cpus.or(resolved.cpus);
     resolved.memory_mib = policy.memory_mib.or(resolved.memory_mib);

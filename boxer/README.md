@@ -120,7 +120,8 @@ without echoing the value. The value is available to the agent process. See the
 [credential guide](../docs/boxer.md#store-credentials-for-an-agent).
 
 On Linux, `--credential openai|anthropic|gemini|github|gitlab` keeps the stored provider key outside
-the agent and uses a local proxy. It requires `--isolated --network proxy`.
+the agent and uses a local proxy. Policy files can also define custom HTTPS
+credential routes. These features require `--isolated --network proxy`.
 See the [credential guide](../docs/boxer.md#store-credentials-for-an-agent).
 
 Use `--runtime-group node|python|rust|go` with `--workspace` or `--isolated` to

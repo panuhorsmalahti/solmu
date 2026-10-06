@@ -80,6 +80,67 @@ fn endpoint_allowlists_require_a_brokered_credential() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
+    let workspace = tempfile::tempdir().unwrap();
+    let policy = workspace.path().join("policy.json");
+    std::fs::write(
+        &policy,
+        r#"{
+            "version": 1,
+            "mode": "isolated",
+            "network": "proxy",
+            "credentials": ["example_api"],
+            "custom_credentials": {
+                "example_api": {
+                    "upstream": "https://api.example.com/v1",
+                    "credential_key": "EXAMPLE_API_KEY",
+                    "env_var": "EXAMPLE_API_KEY",
+                    "inject_header": "X-API-Key",
+                    "credential_format": "Key {}"
+                }
+            },
+            "endpoint_rules": [
+                {"provider": "example_api", "method": "GET", "path": "/v1/**"}
+            ]
+        }"#,
+    )
+    .unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--policy"])
+        .arg(&policy)
+        .args(["--cwd"])
+        .arg(workspace.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .env("EXAMPLE_API_KEY", "real-secret-fixture")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["policy"]["credentials"][0], "example_api");
+    assert_eq!(
+        result["policy"]["custom_credentials"]["example_api"]["inject_header"],
+        "X-API-Key"
+    );
+    assert_eq!(
+        result["policy"]["endpoint_rules"][0]["provider"],
+        "example_api"
+    );
+    assert!(
+        result["policy"]["hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|host| host == "api.example.com:443")
+    );
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("real-secret-fixture"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
     let workspace = tempfile::tempdir().unwrap();
     let output = Command::new(binary("boxer"))

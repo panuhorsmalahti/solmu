@@ -186,6 +186,7 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
         );
         let (broker, session_tokens) = proxy::credential::Broker::start(
             &policy.credentials,
+            &policy.custom_credentials,
             &policy.endpoint_rules,
             policy
                 .upstream_proxy
@@ -199,50 +200,20 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
         )?;
         let port = broker.port();
         policy.local.push(format!("127.0.0.1:{port}"));
-        for (provider, token) in session_tokens {
-            command.env(provider.key_env(), token);
-            let base = match provider {
-                crate::policy::CredentialProvider::Openai => {
-                    format!("http://127.0.0.1:{port}/openai/v1/")
-                }
-                crate::policy::CredentialProvider::Anthropic => {
-                    format!("http://127.0.0.1:{port}/anthropic/")
-                }
-                crate::policy::CredentialProvider::Gemini => {
-                    format!("http://127.0.0.1:{port}/gemini/")
-                }
-                crate::policy::CredentialProvider::Github => {
-                    format!("http://127.0.0.1:{port}/github/")
-                }
-                crate::policy::CredentialProvider::Gitlab => {
-                    format!("http://127.0.0.1:{port}/gitlab/api/")
-                }
-            };
+        for session in session_tokens {
+            command.env(&session.token_env, session.token);
+            let base = format!("http://127.0.0.1:{port}{}", session.base_path);
             if policy.solmu {
                 command.env("LLM_ENDPOINT", base);
             } else {
-                match provider {
-                    crate::policy::CredentialProvider::Openai => {
-                        command
-                            .env_remove("CODEX_API_KEY")
-                            .env_remove("CODEX_ACCESS_TOKEN")
-                            .env("OPENAI_BASE_URL", base);
-                    }
-                    crate::policy::CredentialProvider::Anthropic => {
-                        command
-                            .env_remove("ANTHROPIC_AUTH_TOKEN")
-                            .env("ANTHROPIC_BASE_URL", base);
-                    }
-                    crate::policy::CredentialProvider::Gemini => {
-                        command.env("GEMINI_BASE_URL", base);
-                    }
-                    crate::policy::CredentialProvider::Github => {
-                        command.env("GITHUB_API_URL", base);
-                    }
-                    crate::policy::CredentialProvider::Gitlab => {
-                        command.env("GITLAB_API_URL", base);
-                    }
+                if session.name == "openai" {
+                    command
+                        .env_remove("CODEX_API_KEY")
+                        .env_remove("CODEX_ACCESS_TOKEN");
+                } else if session.name == "anthropic" {
+                    command.env_remove("ANTHROPIC_AUTH_TOKEN");
                 }
+                command.env(&session.base_env, base);
             }
         }
         credential_broker = Some(broker);

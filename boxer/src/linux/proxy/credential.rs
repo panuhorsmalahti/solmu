@@ -1,12 +1,12 @@
 use crate::{
     credential,
     network::{Target, UpstreamProxy},
-    policy::{CredentialProvider, EndpointRule},
+    policy::{CredentialProvider, CustomCredential, EndpointRule},
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use rustls::{ClientConfig, RootCertStore, pki_types::ServerName};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     io,
     net::TcpListener,
     sync::Arc,
@@ -27,10 +27,21 @@ const MAX_CONTENT_LENGTH: u64 = 32 * 1024 * 1024;
 const HEADER_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct Credential {
-    provider: CredentialProvider,
-    upstream_prefix: &'static str,
+    name: String,
+    authority: String,
+    host: String,
+    incoming_header: String,
+    credential_format: String,
     secret: Zeroizing<String>,
     token: Zeroizing<String>,
+}
+
+pub struct BrokeredCredential {
+    pub name: String,
+    pub token_env: String,
+    pub base_env: String,
+    pub base_path: String,
+    pub token: String,
 }
 
 pub struct Broker {
@@ -41,38 +52,93 @@ pub struct Broker {
 
 impl Broker {
     pub fn start(
-        providers: &[CredentialProvider],
+        providers: &[String],
+        custom_credentials: &BTreeMap<String, CustomCredential>,
         endpoint_rules: &[EndpointRule],
         upstream_proxy: Option<&UpstreamProxy>,
         upstream_bypass: &[String],
         denied_hosts: &[String],
         reserved_ports: &[u16],
-    ) -> io::Result<(Self, Vec<(CredentialProvider, String)>)> {
-        if providers
-            .iter()
-            .any(|provider| crate::network::is_denied_domain(provider.host(), denied_hosts))
-        {
-            return Err(io::Error::other(
-                "A credential provider domain is denied by the network policy",
-            ));
-        }
-        let names: Vec<_> = providers
-            .iter()
-            .map(|provider| provider.key_env().to_owned())
-            .collect();
-        let values = credential::load(&names)?;
+    ) -> io::Result<(Self, Vec<BrokeredCredential>)> {
         let mut credentials = HashMap::new();
         let mut session_tokens = Vec::new();
-        for (provider, (_, secret)) in providers.iter().zip(values) {
+        for name in providers {
+            let (credential_key, token_env, base_path, authority, host, incoming_header, format) =
+                if let Ok(provider) = CredentialProvider::parse(name) {
+                    let (path, header, format) = builtin_route(provider);
+                    (
+                        provider.key_env().to_owned(),
+                        provider.key_env().to_owned(),
+                        path.to_owned(),
+                        provider.host().to_owned(),
+                        provider.host().trim_end_matches(":443").to_owned(),
+                        header.to_owned(),
+                        format.to_owned(),
+                    )
+                } else {
+                    let custom = custom_credentials.get(name).ok_or_else(|| {
+                        io::Error::other(format!("Custom credential route {name} is not defined"))
+                    })?;
+                    let url = url::Url::parse(&custom.upstream).map_err(io::Error::other)?;
+                    let host = url
+                        .host_str()
+                        .ok_or_else(|| io::Error::other("Custom upstream host is missing"))?;
+                    let port = url.port_or_known_default().unwrap_or(443);
+                    let authority = if port == 443 {
+                        format!("{host}:443")
+                    } else {
+                        format!("{host}:{port}")
+                    };
+                    (
+                        custom.credential_key.clone(),
+                        custom.token_env(name),
+                        url.path().trim_end_matches('/').to_owned(),
+                        authority,
+                        host.to_owned(),
+                        custom.inject_header.clone(),
+                        custom.credential_format.clone(),
+                    )
+                };
+            if crate::network::is_denied_domain(&authority, denied_hosts) {
+                return Err(io::Error::other(format!(
+                    "Credential route {name} uses a domain denied by the network policy"
+                )));
+            }
+            let (_, secret) = credential::load(std::slice::from_ref(&credential_key))?
+                .pop()
+                .ok_or_else(|| io::Error::other("Credential store returned no value"))?;
+            if secret.bytes().any(|byte| byte.is_ascii_control()) {
+                return Err(io::Error::other(format!(
+                    "Credential {credential_key} contains unsupported control characters"
+                )));
+            }
             let token = session_token()?;
             let entry = Credential {
-                provider: *provider,
-                upstream_prefix: "",
+                name: name.clone(),
+                authority,
+                host,
+                incoming_header,
+                credential_format: format,
                 secret,
                 token: Zeroizing::new(token.clone()),
             };
-            credentials.insert(provider.route().to_owned(), Arc::new(entry));
-            session_tokens.push((*provider, token));
+            credentials.insert(name.clone(), Arc::new(entry));
+            let local_path = if base_path.is_empty() {
+                format!("/{name}/")
+            } else {
+                format!("/{name}{base_path}/")
+            };
+            session_tokens.push(BrokeredCredential {
+                name: name.clone(),
+                token_env,
+                base_env: if CredentialProvider::parse(name).is_ok() {
+                    builtin_base_env(CredentialProvider::parse(name).unwrap()).to_owned()
+                } else {
+                    CustomCredential::base_env(name)
+                },
+                base_path: local_path,
+                token,
+            });
         }
         let endpoint_rules = Arc::new(endpoint_rules.to_vec());
         let upstream_proxy = upstream_proxy.cloned();
@@ -172,6 +238,26 @@ fn session_token() -> io::Result<String> {
     Ok(hex::encode(bytes))
 }
 
+fn builtin_route(provider: CredentialProvider) -> (&'static str, &'static str, &'static str) {
+    match provider {
+        CredentialProvider::Openai => ("/v1", "Authorization", "Bearer {}"),
+        CredentialProvider::Anthropic => ("", "x-api-key", "{}"),
+        CredentialProvider::Gemini => ("", "x-goog-api-key", "{}"),
+        CredentialProvider::Github => ("", "Authorization", "token {}"),
+        CredentialProvider::Gitlab => ("/api", "Authorization", "Bearer {}"),
+    }
+}
+
+fn builtin_base_env(provider: CredentialProvider) -> &'static str {
+    match provider {
+        CredentialProvider::Openai => "OPENAI_BASE_URL",
+        CredentialProvider::Anthropic => "ANTHROPIC_BASE_URL",
+        CredentialProvider::Gemini => "GEMINI_BASE_URL",
+        CredentialProvider::Github => "GITHUB_API_URL",
+        CredentialProvider::Gitlab => "GITLAB_API_URL",
+    }
+}
+
 async fn serve(
     mut client: TcpStream,
     credentials: HashMap<String, Arc<Credential>>,
@@ -199,7 +285,7 @@ async fn serve(
     if request.expect_continue {
         client.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").await?;
     }
-    let target = Target::parse(request.credential.provider.host(), false)?;
+    let target = Target::parse(&request.credential.authority, false)?;
     let socket =
         match super::host::connect_route(&target, false, upstream_proxy.as_ref(), &upstream_bypass)
             .await
@@ -283,7 +369,7 @@ fn parse_request(
         .get(route)
         .cloned()
         .ok_or(RequestError::Invalid)?;
-    let upstream_path = format!("{}{upstream_path}", credential.upstream_prefix);
+    let upstream_path = format!("/{upstream_path}");
     let mut headers = Vec::new();
     let mut supplied_token = None;
     let mut content_length = None;
@@ -322,14 +408,20 @@ fn parse_request(
                 return Err(RequestError::Invalid);
             }
             expect_continue = true;
-        } else if name.eq_ignore_ascii_case("authorization")
-            || name.eq_ignore_ascii_case("x-api-key")
-            || name.eq_ignore_ascii_case("x-goog-api-key")
-            || name.eq_ignore_ascii_case("anthropic-auth-token")
-        {
+        } else if name.eq_ignore_ascii_case(&credential.incoming_header) {
             if supplied_token.replace(value.to_owned()).is_some() {
                 return Err(RequestError::Unauthorized);
             }
+        } else if [
+            "authorization",
+            "x-api-key",
+            "x-goog-api-key",
+            "anthropic-auth-token",
+        ]
+        .iter()
+        .any(|blocked| name.eq_ignore_ascii_case(blocked))
+        {
+            // Caller-supplied credentials cannot override a brokered route.
         } else if ![
             "host",
             "connection",
@@ -347,36 +439,8 @@ fn parse_request(
         return Err(RequestError::Invalid);
     }
     let supplied_token = supplied_token.ok_or(RequestError::Unauthorized)?;
-    let supplied_token = match credential.provider {
-        CredentialProvider::Openai => {
-            let (scheme, token) = supplied_token
-                .split_once(' ')
-                .ok_or(RequestError::Unauthorized)?;
-            if !scheme.eq_ignore_ascii_case("Bearer") || token.is_empty() {
-                return Err(RequestError::Unauthorized);
-            }
-            token
-        }
-        CredentialProvider::Github => {
-            let (scheme, token) = supplied_token
-                .split_once(' ')
-                .ok_or(RequestError::Unauthorized)?;
-            if !scheme.eq_ignore_ascii_case("token") || token.is_empty() {
-                return Err(RequestError::Unauthorized);
-            }
-            token
-        }
-        CredentialProvider::Gitlab => {
-            let (scheme, token) = supplied_token
-                .split_once(' ')
-                .ok_or(RequestError::Unauthorized)?;
-            if !scheme.eq_ignore_ascii_case("Bearer") || token.is_empty() {
-                return Err(RequestError::Unauthorized);
-            }
-            token
-        }
-        CredentialProvider::Anthropic | CredentialProvider::Gemini => supplied_token.as_str(),
-    };
+    let supplied_token = extract_formatted_token(&credential.credential_format, &supplied_token)
+        .ok_or(RequestError::Unauthorized)?;
     if !bool::from(supplied_token.as_bytes().ct_eq(credential.token.as_bytes())) {
         return Err(RequestError::Unauthorized);
     }
@@ -388,13 +452,13 @@ fn parse_request(
         let path = decode_path(path).ok_or(RequestError::Invalid)?;
         if !endpoint_rules
             .iter()
-            .any(|rule| rule.matches(credential.provider, method, &path))
+            .any(|rule| rule.matches(&credential.name, method, &path))
         {
             return Err(RequestError::Forbidden);
         }
     }
 
-    let host = credential.provider.host().trim_end_matches(":443");
+    let host = credential.authority.trim_end_matches(":443");
     let mut upstream_header = format!("{method} {upstream_path} {version}\r\nHost: {host}\r\n");
     for (name, value) in headers {
         upstream_header.push_str(&name);
@@ -402,35 +466,20 @@ fn parse_request(
         upstream_header.push_str(&value);
         upstream_header.push_str("\r\n");
     }
-    match credential.provider {
-        CredentialProvider::Openai => {
-            upstream_header.push_str("Authorization: Bearer ");
-            upstream_header.push_str(&credential.secret);
-            upstream_header.push_str("\r\n");
-        }
-        CredentialProvider::Anthropic => {
-            upstream_header.push_str("x-api-key: ");
-            upstream_header.push_str(&credential.secret);
-            upstream_header.push_str("\r\n");
-        }
-        CredentialProvider::Gemini => {
-            upstream_header.push_str("x-goog-api-key: ");
-            upstream_header.push_str(&credential.secret);
-            upstream_header.push_str("\r\n");
-        }
-        CredentialProvider::Github => {
-            upstream_header.push_str("Authorization: token ");
-            upstream_header.push_str(&credential.secret);
-            upstream_header.push_str("\r\n");
-        }
-        CredentialProvider::Gitlab => {
-            upstream_header.push_str("Authorization: Bearer ");
-            upstream_header.push_str(&credential.secret);
-            upstream_header.push_str("\r\n");
-        }
-    }
+    let (prefix, suffix) = credential.credential_format.split_once("{}").unwrap();
+    let mut injected = Zeroizing::new(String::with_capacity(
+        prefix.len() + credential.secret.len() + suffix.len(),
+    ));
+    injected.push_str(prefix);
+    injected.push_str(&credential.secret);
+    injected.push_str(suffix);
+    upstream_header.push_str(&credential.incoming_header);
+    upstream_header.push_str(": ");
+    upstream_header.push_str(&injected);
+    upstream_header.push_str("\r\n");
     upstream_header.push_str("Connection: close\r\n\r\n");
-    let server_name = ServerName::try_from(host.to_owned()).map_err(|_| RequestError::Invalid)?;
+    let server_name =
+        ServerName::try_from(credential.host.clone()).map_err(|_| RequestError::Invalid)?;
     let body_limit = content_length.unwrap_or(if chunked { MAX_CONTENT_LENGTH } else { 0 });
     Ok(Request {
         credential,
@@ -439,6 +488,12 @@ fn parse_request(
         body_limit,
         expect_continue,
     })
+}
+
+fn extract_formatted_token<'a>(format: &str, value: &'a str) -> Option<&'a str> {
+    let (prefix, suffix) = format.split_once("{}")?;
+    let token = value.strip_prefix(prefix)?.strip_suffix(suffix)?;
+    (!token.is_empty()).then_some(token)
 }
 
 fn decode_path(path: &str) -> Option<String> {
@@ -574,8 +629,26 @@ mod tests {
         HashMap::from([(
             provider.route().to_owned(),
             Arc::new(Credential {
-                provider,
-                upstream_prefix: "",
+                name: provider.name().to_owned(),
+                authority: provider.host().to_owned(),
+                host: provider.host().trim_end_matches(":443").to_owned(),
+                incoming_header: builtin_route(provider).1.to_owned(),
+                credential_format: builtin_route(provider).2.to_owned(),
+                secret: Zeroizing::new("real-secret".to_owned()),
+                token: Zeroizing::new("session-token".to_owned()),
+            }),
+        )])
+    }
+
+    fn custom_credentials() -> HashMap<String, Arc<Credential>> {
+        HashMap::from([(
+            "example_api".to_owned(),
+            Arc::new(Credential {
+                name: "example_api".to_owned(),
+                authority: "api.example.com:443".to_owned(),
+                host: "api.example.com".to_owned(),
+                incoming_header: "X-API-Key".to_owned(),
+                credential_format: "Key {}".to_owned(),
                 secret: Zeroizing::new("real-secret".to_owned()),
                 token: Zeroizing::new("session-token".to_owned()),
             }),
@@ -668,6 +741,36 @@ mod tests {
                 .contains("GET /api/v4/projects HTTP/1.1")
         );
         assert!(!request.upstream_header.contains("session-token"));
+    }
+
+    #[test]
+    fn custom_proxy_route_pins_host_filters_endpoints_and_injects_configured_header() {
+        let rules = vec![EndpointRule::parse("example_api:GET:/v1/**").unwrap()];
+        let request = parse_request(
+            b"GET /example_api/v1/models HTTP/1.1\r\nX-API-Key: Key session-token\r\nHost: 127.0.0.1\r\n\r\n",
+            &custom_credentials(),
+            &rules,
+        )
+        .unwrap();
+        assert!(
+            request
+                .upstream_header
+                .contains("Host: api.example.com\r\n")
+        );
+        assert!(
+            request
+                .upstream_header
+                .contains("X-API-Key: Key real-secret\r\n")
+        );
+        assert!(request.upstream_header.contains("GET /v1/models HTTP/1.1"));
+        assert!(!request.upstream_header.contains("session-token"));
+
+        let denied = parse_request(
+            b"GET /example_api/admin HTTP/1.1\r\nX-API-Key: Key session-token\r\nHost: 127.0.0.1\r\n\r\n",
+            &custom_credentials(),
+            &rules,
+        );
+        assert!(matches!(denied, Err(RequestError::Forbidden)));
     }
 
     #[test]

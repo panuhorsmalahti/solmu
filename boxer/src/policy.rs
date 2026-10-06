@@ -107,7 +107,7 @@ pub enum CredentialProvider {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(deny_unknown_fields)]
 pub struct EndpointRule {
-    pub provider: CredentialProvider,
+    pub provider: String,
     pub method: String,
     pub path: String,
 }
@@ -115,7 +115,8 @@ pub struct EndpointRule {
 impl EndpointRule {
     pub fn parse(value: &str) -> io::Result<Self> {
         let mut fields = value.splitn(3, ':');
-        let provider = CredentialProvider::parse(fields.next().unwrap_or_default())?;
+        let provider = fields.next().unwrap_or_default().to_owned();
+        validate_credential_name(&provider)?;
         let method = fields.next().unwrap_or_default().to_owned();
         let path = fields.next().unwrap_or_default().to_owned();
         let rule = Self {
@@ -128,6 +129,7 @@ impl EndpointRule {
     }
 
     pub fn validate(&self) -> io::Result<()> {
+        validate_credential_name(&self.provider)?;
         if self.method != "*"
             && (!http_token(&self.method)
                 || self.method.bytes().any(|byte| byte.is_ascii_lowercase()))
@@ -165,7 +167,7 @@ impl EndpointRule {
     }
 
     #[cfg(any(target_os = "linux", test))]
-    pub fn matches(&self, provider: CredentialProvider, method: &str, path: &str) -> bool {
+    pub fn matches(&self, provider: &str, method: &str, path: &str) -> bool {
         if self.provider != provider || (self.method != "*" && self.method != method) {
             return false;
         }
@@ -196,6 +198,182 @@ impl EndpointRule {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CustomCredential {
+    pub upstream: String,
+    pub credential_key: String,
+    #[serde(default)]
+    pub env_var: Option<String>,
+    #[serde(default = "default_credential_header")]
+    pub inject_header: String,
+    #[serde(default = "default_credential_format")]
+    pub credential_format: String,
+}
+
+fn default_credential_header() -> String {
+    "Authorization".to_owned()
+}
+
+fn default_credential_format() -> String {
+    "Bearer {}".to_owned()
+}
+
+fn validate_credential_name(name: &str) -> io::Result<()> {
+    if name.is_empty()
+        || name.len() > 64
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        || !name.as_bytes()[0].is_ascii_lowercase()
+    {
+        return Err(io::Error::other(
+            "Credential route names must be lowercase identifiers and cannot replace built-in providers",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_custom_credential_name(name: &str) -> io::Result<()> {
+    validate_credential_name(name)?;
+    if CredentialProvider::parse(name).is_ok() {
+        return Err(io::Error::other(
+            "Custom credential routes cannot replace built-in providers",
+        ));
+    }
+    Ok(())
+}
+
+impl CustomCredential {
+    pub fn token_env(&self, name: &str) -> String {
+        self.env_var
+            .clone()
+            .unwrap_or_else(|| format!("{}_API_KEY", name.to_ascii_uppercase()))
+    }
+
+    pub fn base_env(name: &str) -> String {
+        format!("{}_BASE_URL", name.to_ascii_uppercase())
+    }
+
+    pub fn validate(&self, name: &str) -> io::Result<String> {
+        validate_custom_credential_name(name)?;
+        if !crate::credential::valid_name(&self.credential_key) {
+            return Err(io::Error::other(format!(
+                "Invalid credential key for custom route {name}"
+            )));
+        }
+        let token_env = self.token_env(name);
+        if !crate::credential::valid_name(&token_env) {
+            return Err(io::Error::other(format!(
+                "Invalid phantom-token environment name for custom route {name}"
+            )));
+        }
+        let base_env = Self::base_env(name);
+        if !crate::credential::valid_name(&base_env) {
+            return Err(io::Error::other(format!(
+                "Invalid base URL environment name for custom route {name}"
+            )));
+        }
+        if !http_token(&self.inject_header)
+            || [
+                "host",
+                "connection",
+                "proxy-connection",
+                "proxy-authorization",
+                "content-length",
+                "transfer-encoding",
+                "expect",
+            ]
+            .iter()
+            .any(|blocked| self.inject_header.eq_ignore_ascii_case(blocked))
+            || self
+                .inject_header
+                .to_ascii_lowercase()
+                .starts_with("proxy-")
+        {
+            return Err(io::Error::other(format!(
+                "Invalid credential injection header for custom route {name}"
+            )));
+        }
+        if self.credential_format.matches("{}").count() != 1
+            || self
+                .credential_format
+                .chars()
+                .any(|character| character.is_ascii_control())
+        {
+            return Err(io::Error::other(format!(
+                "Credential format for custom route {name} must contain one {{}} placeholder"
+            )));
+        }
+        let upstream = url::Url::parse(&self.upstream).map_err(|_| {
+            io::Error::other(format!("Invalid upstream URL for custom route {name}"))
+        })?;
+        if upstream.scheme() != "https"
+            || upstream.host_str().is_none()
+            || !upstream.username().is_empty()
+            || upstream.password().is_some()
+            || upstream.query().is_some()
+            || upstream.fragment().is_some()
+            || upstream.path().contains('%')
+        {
+            return Err(io::Error::other(format!(
+                "Custom credential upstream for {name} must be an HTTPS URL without credentials, query, fragment, or encoded path"
+            )));
+        }
+        let host = upstream.host_str().unwrap();
+        let authority = match upstream.port() {
+            Some(port) => format!("{host}:{port}"),
+            None => format!("{host}:443"),
+        };
+        Ok(crate::network::HostPattern::parse(&authority)?.authority())
+    }
+}
+
+#[cfg(test)]
+mod custom_credential_tests {
+    use super::*;
+
+    fn sample() -> CustomCredential {
+        CustomCredential {
+            upstream: "https://api.example.com/v1".to_owned(),
+            credential_key: "EXAMPLE_API_KEY".to_owned(),
+            env_var: None,
+            inject_header: "Authorization".to_owned(),
+            credential_format: "Bearer {}".to_owned(),
+        }
+    }
+
+    #[test]
+    fn custom_routes_validate_and_generate_safe_host_and_environment_names() {
+        let custom = sample();
+        assert_eq!(
+            custom.validate("example_api").unwrap(),
+            "api.example.com:443"
+        );
+        assert_eq!(custom.token_env("example_api"), "EXAMPLE_API_API_KEY");
+        assert_eq!(
+            CustomCredential::base_env("example_api"),
+            "EXAMPLE_API_BASE_URL"
+        );
+    }
+
+    #[test]
+    fn custom_routes_reject_unsafe_upstreams_headers_and_token_formats() {
+        let mut custom = sample();
+        custom.upstream = "http://api.example.com".to_owned();
+        assert!(custom.validate("example_api").is_err());
+        custom = sample();
+        custom.inject_header = "Host".to_owned();
+        assert!(custom.validate("example_api").is_err());
+        custom = sample();
+        custom.credential_format = "Bearer {} {}".to_owned();
+        assert!(custom.validate("example_api").is_err());
+        custom = sample();
+        custom.upstream = "https://user:secret@api.example.com".to_owned();
+        assert!(custom.validate("example_api").is_err());
+    }
+}
+
 fn http_token(value: &str) -> bool {
     !value.is_empty()
         && value
@@ -210,26 +388,10 @@ mod endpoint_rule_tests {
     #[test]
     fn path_patterns_match_one_or_many_segments() {
         let rule = EndpointRule::parse("openai:POST:/v1/models/*/responses/**").unwrap();
-        assert!(rule.matches(
-            CredentialProvider::Openai,
-            "POST",
-            "/v1/models/gpt-6/responses"
-        ));
-        assert!(rule.matches(
-            CredentialProvider::Openai,
-            "POST",
-            "/v1/models/gpt-6/responses/stream"
-        ));
-        assert!(!rule.matches(
-            CredentialProvider::Openai,
-            "GET",
-            "/v1/models/gpt-6/responses"
-        ));
-        assert!(!rule.matches(
-            CredentialProvider::Anthropic,
-            "POST",
-            "/v1/models/gpt-6/responses"
-        ));
+        assert!(rule.matches("openai", "POST", "/v1/models/gpt-6/responses"));
+        assert!(rule.matches("openai", "POST", "/v1/models/gpt-6/responses/stream"));
+        assert!(!rule.matches("openai", "GET", "/v1/models/gpt-6/responses"));
+        assert!(!rule.matches("anthropic", "POST", "/v1/models/gpt-6/responses"));
     }
 
     #[test]
@@ -283,6 +445,7 @@ impl CredentialProvider {
         }
     }
 
+    #[cfg(target_os = "linux")]
     pub fn name(self) -> &'static str {
         match self {
             Self::Openai => "openai",
@@ -403,7 +566,9 @@ pub struct Policy {
     pub pass_env: Vec<String>,
     pub env_credentials: Vec<String>,
     pub runtime_groups: Vec<RuntimeGroup>,
-    pub credentials: Vec<CredentialProvider>,
+    pub credentials: Vec<String>,
+    #[serde(default)]
+    pub custom_credentials: std::collections::BTreeMap<String, CustomCredential>,
     pub endpoint_rules: Vec<EndpointRule>,
     pub cpus: Option<u32>,
     pub memory_mib: Option<u32>,
@@ -501,6 +666,9 @@ impl Policy {
             }
             self.hosts.extend(crate::network::profile_hosts(profile)?);
         }
+        for (name, credential) in &self.custom_credentials {
+            credential.validate(name)?;
+        }
         if !self.credentials.is_empty() {
             if !cfg!(target_os = "linux") {
                 return Err(io::Error::other(
@@ -513,23 +681,42 @@ impl Policy {
                 ));
             }
             let mut providers = std::collections::HashSet::new();
-            for provider in &self.credentials {
-                if !providers.insert(*provider) {
+            for name in &self.credentials {
+                validate_credential_name(name)?;
+                if !providers.insert(name) {
                     return Err(io::Error::other(
                         "A credential provider was specified more than once",
                     ));
                 }
-                if self
-                    .env_credentials
-                    .iter()
-                    .any(|name| name.eq_ignore_ascii_case(provider.key_env()))
-                {
+                if let Ok(provider) = CredentialProvider::parse(name) {
+                    if self
+                        .env_credentials
+                        .iter()
+                        .any(|env| env.eq_ignore_ascii_case(provider.key_env()))
+                    {
+                        return Err(io::Error::other(format!(
+                            "Use either --credential or --env-credential for {}",
+                            provider.key_env()
+                        )));
+                    }
+                    self.hosts.push(provider.host().to_owned());
+                } else if let Some(custom) = self.custom_credentials.get(name) {
+                    let token_env = custom.token_env(name);
+                    if self
+                        .env_credentials
+                        .iter()
+                        .any(|env| env.eq_ignore_ascii_case(&token_env))
+                    {
+                        return Err(io::Error::other(format!(
+                            "Use either --credential {name} or --env-credential for {token_env}"
+                        )));
+                    }
+                    self.hosts.push(custom.validate(name)?);
+                } else {
                     return Err(io::Error::other(format!(
-                        "Use either --credential or --env-credential for {}",
-                        provider.key_env()
+                        "Unknown credential route {name}; add a custom_credentials definition or choose a built-in route"
                     )));
                 }
-                self.hosts.push(provider.host().to_owned());
             }
             if self.solmu && self.credentials.len() != 1 {
                 return Err(io::Error::other(
@@ -549,7 +736,7 @@ impl Policy {
                 if !self.credentials.contains(&rule.provider) {
                     return Err(io::Error::other(format!(
                         "Endpoint rule provider {} is not configured with --credential",
-                        rule.provider.name()
+                        rule.provider
                     )));
                 }
                 if !rules.insert(rule) {
@@ -734,8 +921,12 @@ impl Policy {
                 }
             }
         }
-        for provider in &self.credentials {
-            command.env_remove(provider.key_env());
+        for name in &self.credentials {
+            if let Ok(provider) = CredentialProvider::parse(name) {
+                command.env_remove(provider.key_env());
+            } else if let Some(custom) = self.custom_credentials.get(name) {
+                command.env_remove(custom.token_env(name));
+            }
         }
         if self.solmu {
             let workspace = command

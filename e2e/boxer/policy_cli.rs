@@ -183,6 +183,7 @@ fn policy_schema_describes_the_supported_policy_fields() {
         "env_credentials",
         "runtime_groups",
         "credentials",
+        "custom_credentials",
         "endpoint_rules",
         "cpus",
         "memory_mib",
