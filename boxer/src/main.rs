@@ -156,6 +156,7 @@ fn run() -> io::Result<i32> {
     let mut why_path = None;
     let mut why_operation = "read";
     let mut trust_key = None;
+    let mut trust_policy = None;
     let mut verify_files = Vec::new();
     let mut directory = None;
     let mut program: Option<OsString> = None;
@@ -176,6 +177,9 @@ fn run() -> io::Result<i32> {
             );
             println!(
                 "--trust-key PUBLIC_KEY --verify FILE: verify signed files before launch; repeat --verify for multiple files."
+            );
+            println!(
+                "--trust-key PUBLIC_KEY --trust-policy FILE: verify a signed list of files before launch."
             );
             println!(
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
@@ -273,6 +277,14 @@ fn run() -> io::Result<i32> {
                     .next()
                     .ok_or_else(|| io::Error::other("--verify requires a file"))?,
             ));
+        } else if argument == "--trust-policy" {
+            if trust_policy.is_some() {
+                return Err(io::Error::other("Specify only one --trust-policy"));
+            }
+            trust_policy =
+                Some(std::path::PathBuf::from(arguments.next().ok_or_else(
+                    || io::Error::other("--trust-policy requires a file"),
+                )?));
         } else if argument == "--policy" {
             if policy_file.is_some() {
                 return Err(io::Error::other("Specify only one --policy file"));
@@ -375,13 +387,23 @@ fn run() -> io::Result<i32> {
         return Err(io::Error::other("Workspace must be a directory"));
     }
     resolved.resolve(&workspace)?;
-    if !verify_files.is_empty() {
+    if !verify_files.is_empty() || trust_policy.is_some() {
         if why_command || check_policy || print_policy {
-            return Err(io::Error::other("--verify requires a normal Boxer launch"));
+            return Err(io::Error::other(
+                "Signature verification requires a normal Boxer launch",
+            ));
         }
-        let key = trust_key
-            .as_deref()
-            .ok_or_else(|| io::Error::other("--verify requires --trust-key PUBLIC_KEY"))?;
+        let key = trust_key.as_deref().ok_or_else(|| {
+            io::Error::other("Signature verification requires --trust-key PUBLIC_KEY")
+        })?;
+        if trust_policy.is_some() && !verify_files.is_empty() {
+            return Err(io::Error::other(
+                "Choose --trust-policy or repeated --verify flags",
+            ));
+        }
+        if let Some(policy) = trust_policy.as_deref() {
+            trust::verify_policy(key, policy, &workspace)?;
+        }
         let files: Vec<_> = verify_files
             .iter()
             .map(|path| {
@@ -395,7 +417,7 @@ fn run() -> io::Result<i32> {
         trust::verify_files(key, &files)?;
     } else if trust_key.is_some() {
         return Err(io::Error::other(
-            "--trust-key requires at least one --verify FILE",
+            "--trust-key requires --verify FILE or --trust-policy FILE",
         ));
     }
     if why_command {

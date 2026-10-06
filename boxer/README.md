@@ -100,7 +100,8 @@ run to see how Boxer resolves that filesystem access. See the
 [path explanation guide](../docs/boxer.md#explain-a-path-decision).
 
 Sign instruction files with `boxer trust keygen` and `boxer trust sign`, then
-require signatures at launch with `--trust-key` and `--verify`. See the
+require signatures at launch with `--trust-key` and `--verify` or a signed
+`--trust-policy`. See the
 [instruction trust guide](../docs/boxer.md#verify-trusted-instruction-files).
 
 Add `--rollback` to save a workspace before and after a run. Review or restore

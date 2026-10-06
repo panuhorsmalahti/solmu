@@ -75,3 +75,66 @@ fn trust_signatures_verify_and_block_tampered_files_before_launch() {
     assert!(!workspace.join("must-not-run.txt").exists());
     assert!(String::from_utf8_lossy(&rejected.stderr).contains("changed after signing"));
 }
+
+#[test]
+fn signed_trust_policy_requires_every_listed_file_before_startup() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = root.path().join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let private = root.path().join("private.pk8");
+    let public = root.path().join("trusted.pub");
+    let instructions = workspace.join("AGENTS.md");
+    let policy = workspace.join("boxer-trust.json");
+    std::fs::write(&instructions, "trusted instructions").unwrap();
+    std::fs::write(&policy, r#"{"version":1,"files":["AGENTS.md"]}"#).unwrap();
+    assert!(
+        Command::new(binary("boxer"))
+            .args(["trust", "keygen", "--private-key"])
+            .arg(&private)
+            .arg("--public-key")
+            .arg(&public)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    for file in [&instructions, &policy] {
+        let signed = Command::new(binary("boxer"))
+            .args(["trust", "sign", "--key"])
+            .arg(&private)
+            .arg(file)
+            .output()
+            .unwrap();
+        assert!(
+            signed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&signed.stderr)
+        );
+    }
+    let run = |marker: &str| {
+        Command::new(binary("boxer"))
+            .arg("--trust-key")
+            .arg(&public)
+            .args(["--trust-policy", "boxer-trust.json", "--cwd"])
+            .arg(&workspace)
+            .arg("--")
+            .arg(binary("sandbox-probe"))
+            .arg(marker)
+            .output()
+            .unwrap()
+    };
+    let accepted = run("accepted.txt");
+    assert_eq!(
+        accepted.status.code(),
+        Some(7),
+        "{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
+    assert!(workspace.join("accepted.txt").exists());
+
+    std::fs::write(&policy, r#"{"version":1,"files":[]}"#).unwrap();
+    let rejected = run("must-not-start.txt");
+    assert_eq!(rejected.status.code(), Some(125));
+    assert!(!workspace.join("must-not-start.txt").exists());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("changed after signing"));
+}

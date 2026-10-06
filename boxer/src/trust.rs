@@ -14,6 +14,13 @@ use std::{
 const MAX_SIGNED_FILE: u64 = 32 * 1024 * 1024;
 const DOMAIN: &[u8] = b"solmu-boxer-trust-v1\0";
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrustPolicy {
+    version: u32,
+    files: Vec<PathBuf>,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct SignatureFile {
@@ -52,6 +59,59 @@ pub fn verify_files(public_key_path: &Path, files: &[PathBuf]) -> io::Result<()>
         verify(public_key_path, file)?;
     }
     Ok(())
+}
+
+pub fn verify_policy(
+    public_key_path: &Path,
+    requested_policy: &Path,
+    workspace: &Path,
+) -> io::Result<()> {
+    let policy_path = workspace_path(workspace, requested_policy)?;
+    verify(public_key_path, &policy_path)?;
+    let metadata = fs::metadata(&policy_path)?;
+    if metadata.len() > 64 * 1024 {
+        return Err(io::Error::other("Trust policy exceeds the 64 KiB limit"));
+    }
+    let policy: TrustPolicy =
+        serde_json::from_slice(&fs::read(&policy_path)?).map_err(io::Error::other)?;
+    if policy.version != 1 {
+        return Err(io::Error::other("Unsupported trust policy version"));
+    }
+    if policy.files.is_empty() || policy.files.len() > 256 {
+        return Err(io::Error::other(
+            "Trust policy must list between 1 and 256 files",
+        ));
+    }
+    let mut unique = std::collections::HashSet::new();
+    let mut files = Vec::with_capacity(policy.files.len());
+    for file in policy.files {
+        let canonical = workspace_path(workspace, &file)?;
+        if !unique.insert(canonical.clone()) {
+            return Err(io::Error::other("Trust policy contains a duplicate file"));
+        }
+        files.push(canonical);
+    }
+    verify_files(public_key_path, &files)
+}
+
+fn workspace_path(workspace: &Path, requested: &Path) -> io::Result<PathBuf> {
+    let requested = if requested.is_absolute() {
+        requested.to_owned()
+    } else {
+        workspace.join(requested)
+    };
+    let canonical = requested.canonicalize().map_err(|error| {
+        io::Error::other(format!(
+            "Cannot resolve trusted workspace file {}: {error}",
+            requested.display()
+        ))
+    })?;
+    if !canonical.starts_with(workspace) || !canonical.is_file() {
+        return Err(io::Error::other(
+            "Trust policies and trusted files must be regular files inside the workspace",
+        ));
+    }
+    Ok(canonical)
 }
 
 fn keygen(private_path: &Path, public_path: &Path) -> io::Result<i32> {

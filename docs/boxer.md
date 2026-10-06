@@ -53,17 +53,33 @@ boxer --trust-key trusted-instructions.pub --verify AGENTS.md \
   --profile solmu --cwd /path/to/project -- solmu
 ```
 
-Repeat `--verify FILE` for each file that must be signed. Relative verification
-paths are resolved from the selected workspace. If a signature is missing,
-invalid, or the file changed, Boxer exits before launching the agent. The
-private key is created with owner-only permissions on Unix. Protect and back it
-up securely; losing it means you cannot sign future updates.
+For repeatable checks, create a trust policy listing workspace-relative files
+and sign the policy itself as well as each listed file:
 
-This is explicit Ed25519 file-signature verification. Boxer does not yet provide
-automatic project trust-policy discovery, signer identity or revocation rules,
-or Sigstore/CI provenance verification. The signature is checked before process
-launch; it does not make the file immutable against later changes by other
-processes.
+```json
+{"version":1,"files":["AGENTS.md",".claude/CLAUDE.md"]}
+```
+
+```sh
+boxer trust sign --key ~/.boxer/keys/instructions.pk8 AGENTS.md
+boxer trust sign --key ~/.boxer/keys/instructions.pk8 .claude/CLAUDE.md
+boxer trust sign --key ~/.boxer/keys/instructions.pk8 boxer-trust.json
+boxer --trust-key trusted-instructions.pub --trust-policy boxer-trust.json \
+  --profile solmu --cwd /path/to/project -- solmu
+```
+
+Boxer verifies the policy signature first, then requires valid signatures for
+every listed file before launching the agent. The policy and listed files must
+be regular files inside the selected workspace. Relative paths are resolved
+from the workspace. Alternatively, repeat `--verify FILE` for explicit per-run
+file checks. The private key is created with owner-only permissions on Unix.
+Protect and back it up securely; losing it means you cannot sign future updates.
+
+This is explicit Ed25519 file-signature verification anchored to the public key
+you provide. Boxer does not yet provide automatic trust-policy discovery,
+publisher identity or revocation rules, or Sigstore/CI provenance verification.
+The signature is checked before process launch; it does not make the file
+immutable against later changes by other processes.
 
 ## Limit access to a project
 
