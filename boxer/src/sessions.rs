@@ -14,7 +14,7 @@ use std::{
     process::{Command, Stdio},
     sync::mpsc,
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use uuid::Uuid;
 
@@ -74,7 +74,33 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
             }
             inspect(text(arguments, 1 + offset)?, json)
         }
-        Some("stop") if arguments.len() == 2 + offset => stop(text(arguments, 1 + offset)?),
+        Some("stop") => {
+            let id = text(arguments, 1 + offset)?;
+            let mut force = false;
+            let mut timeout = None;
+            let mut index = 2 + offset;
+            while index < arguments.len() {
+                match arguments[index].to_str() {
+                    Some("--force") if !force => force = true,
+                    Some("--timeout") if timeout.is_none() && index + 1 < arguments.len() => {
+                        index += 1;
+                        timeout = Some(
+                            arguments[index]
+                                .to_str()
+                                .and_then(|value| value.parse::<u32>().ok())
+                                .filter(|seconds| (1..=3600).contains(seconds))
+                                .ok_or_else(session_usage)?,
+                        );
+                    }
+                    _ => return Err(session_usage()),
+                }
+                index += 1;
+            }
+            if force && timeout.is_some() {
+                return Err(session_usage());
+            }
+            stop(id, force, timeout)
+        }
         Some("logs") if arguments.len() == 2 + offset => logs(text(arguments, 1 + offset)?),
         Some("prune") if arguments.len() == 1 + offset => prune(),
         Some("attach") if arguments.len() == 2 + offset => attach(text(arguments, 1 + offset)?),
@@ -87,7 +113,7 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
 
 fn session_usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer ps [--all] [--json] | boxer attach <id> | boxer detach <id> | boxer inspect <id> [--json] | boxer logs <id> | boxer stop <id> | boxer prune",
+        "Usage: boxer ps [--all] [--json] | boxer attach <id> | boxer detach <id> | boxer inspect <id> [--json] | boxer logs <id> | boxer stop <id> [--timeout SECONDS | --force] | boxer prune",
     )
 }
 
@@ -253,6 +279,8 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
         "open session output log",
     )?;
     let mut stop_requested = false;
+    let mut stop_force = false;
+    let mut stop_deadline = None;
     loop {
         while let Ok(bytes) = output_rx.try_recv() {
             log.write_all(&bytes)?;
@@ -291,12 +319,31 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
                         pending_output.clear();
                         update_attachment(&root, &id, false)?;
                     }
-                    b'K' => {
+                    b'K' | b'F' => {
                         stop_requested = true;
+                        stop_force = message[0] == b'F';
+                        stop_deadline = Some(
+                            Instant::now()
+                                + Duration::from_secs(if stop_force {
+                                    0
+                                } else {
+                                    u32::from_be_bytes(message[1..5].try_into().unwrap()).max(1)
+                                        as u64
+                                }),
+                        );
                         if let Some(pid) = child.process_id() {
-                            signal_child_group(pid, libc::SIGINT);
+                            signal_child_group(
+                                pid,
+                                if stop_force {
+                                    libc::SIGKILL
+                                } else {
+                                    libc::SIGINT
+                                },
+                            );
                         }
-                        let _ = writer.write_all(&[3]);
+                        if !stop_force {
+                            let _ = writer.write_all(&[3]);
+                        }
                     }
                     _ => {}
                 }
@@ -315,14 +362,8 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
             update_attachment(&root, &id, true)?;
         }
 
-        if stop_requested {
-            for _ in 0..50 {
-                if child.try_wait()?.is_some() {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(100));
-            }
-            if child.try_wait()?.is_none() {
+        if stop_requested && child.try_wait()?.is_none() {
+            if stop_force || stop_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
                 if let Some(pid) = child.process_id() {
                     signal_child_group(pid, libc::SIGKILL);
                 }
@@ -477,7 +518,7 @@ fn inspect(id: &str, json: bool) -> io::Result<i32> {
     Ok(0)
 }
 
-fn stop(id: &str) -> io::Result<i32> {
+fn stop(id: &str, force: bool, timeout: Option<u32>) -> io::Result<i32> {
     let root = root()?;
     let mut session = read(&root, id)?;
     refresh_status(&mut session);
@@ -488,8 +529,10 @@ fn stop(id: &str) -> io::Result<i32> {
             println!("Session {}: {}", id, session.status);
             return Ok(0);
         }
-        control(id, b'K')?;
-        for _ in 0..60 {
+        let requested_timeout = timeout.unwrap_or(5);
+        control_with_value(id, if force { b'F' } else { b'K' }, requested_timeout)?;
+        let wait_seconds = if force { 5 } else { requested_timeout + 2 };
+        for _ in 0..wait_seconds * 10 {
             thread::sleep(Duration::from_millis(100));
             session = read(&root, id)?;
             if session.status != "running" {
@@ -497,12 +540,26 @@ fn stop(id: &str) -> io::Result<i32> {
             }
         }
         if session.status == "running" {
-            // SAFETY: the process group was created by this detached Boxer session.
-            unsafe {
-                libc::kill(-(session.pid as i32), libc::SIGKILL);
+            if !force {
+                control_with_value(id, b'F', 0)?;
+                for _ in 0..30 {
+                    thread::sleep(Duration::from_millis(100));
+                    session = read(&root, id)?;
+                    if session.status != "running" {
+                        break;
+                    }
+                }
             }
-            session.status = "stopped".into();
-            save(&root, &session)?;
+            if session.status == "running" && !is_live_session(session.pid) {
+                session.status = "finished".into();
+                session.attached = false;
+                save(&root, &session)?;
+            }
+            if session.status == "running" {
+                return Err(io::Error::other(format!(
+                    "Boxer session {id} did not stop after the force request"
+                )));
+            }
         }
     }
     println!("Session {}: {}", id, session.status);
@@ -675,10 +732,15 @@ fn runtime_socket_path(id: &str, suffix: &str) -> PathBuf {
 }
 
 fn control(id: &str, action: u8) -> io::Result<i32> {
+    control_with_value(id, action, 0)
+}
+
+fn control_with_value(id: &str, action: u8, value: u32) -> io::Result<i32> {
     let id = Uuid::parse_str(id).map_err(|_| io::Error::other("Invalid session ID"))?;
     let root = root()?;
     let mut stream = UnixStream::connect(control_path(&root, &id.hyphenated().to_string()))?;
-    stream.write_all(&[action, 0, 0, 0, 0])?;
+    let value = value.to_be_bytes();
+    stream.write_all(&[action, value[0], value[1], value[2], value[3]])?;
     Ok(0)
 }
 

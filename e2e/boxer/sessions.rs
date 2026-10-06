@@ -199,7 +199,7 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
     );
 
     let stop = Command::new(binary("boxer"))
-        .args(["stop", id])
+        .args(["stop", id, "--timeout", "2"])
         .env("BOXER_SESSIONS_DIR", directory.path())
         .output()
         .unwrap();
@@ -232,4 +232,28 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
     assert!(prune.status.success());
     assert!(String::from_utf8_lossy(&prune.stdout).contains("Removed 1 finished session"));
     assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+
+    let force_start = Command::new(binary("boxer"))
+        .args(["--detached", "--cwd"])
+        .arg(workspace.path())
+        .args(["--", "/bin/sh", "-c", "exec sleep 60"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(force_start.status.success());
+    let force_id = String::from_utf8_lossy(&force_start.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("Detached Boxer session: "))
+        .unwrap();
+    let force_stop = Command::new(binary("boxer"))
+        .args(["stop", force_id, "--force"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(
+        force_stop.status.success(),
+        "{}",
+        String::from_utf8_lossy(&force_stop.stderr)
+    );
+    assert!(String::from_utf8_lossy(&force_stop.stdout).contains("stopped"));
 }
