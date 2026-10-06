@@ -3,6 +3,7 @@ use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod audit;
+mod explain;
 mod network;
 mod permissions;
 mod policies;

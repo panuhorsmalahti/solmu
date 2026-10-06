@@ -1,5 +1,6 @@
 use std::{ffi::OsString, io, process::Command};
 mod check;
+mod explain;
 mod network;
 mod policy;
 mod rollback;
@@ -110,6 +111,12 @@ fn prepare_agent_home(policy: &mut Policy, agent: AgentProfile) -> io::Result<()
 
 fn run() -> io::Result<i32> {
     let mut raw_arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    let why_command = raw_arguments
+        .first()
+        .is_some_and(|argument| argument == "why");
+    if why_command {
+        raw_arguments.remove(0);
+    }
     let rollback_child = raw_arguments
         .first()
         .is_some_and(|argument| argument == rollback::CHILD_ARGUMENT);
@@ -139,6 +146,8 @@ fn run() -> io::Result<i32> {
     let mut print_policy = false;
     let mut check_policy = false;
     let mut rollback_session = false;
+    let mut why_path = None;
+    let mut why_operation = "read";
     let mut directory = None;
     let mut program: Option<OsString> = None;
     let mut command_arguments = Vec::new();
@@ -152,6 +161,9 @@ fn run() -> io::Result<i32> {
             );
             println!(
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."
+            );
+            println!(
+                "boxer why --path PATH [--op read|write] [policy options]: explain the resolved filesystem policy for a path without launching a program."
             );
             println!(
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore` to review or restore changes; `boxer rollback audit list|show|verify` reviews the local audit trail."
@@ -218,6 +230,21 @@ fn run() -> io::Result<i32> {
             check_policy = true;
         } else if argument == "--rollback" {
             rollback_session = true;
+        } else if argument == "--path" && why_command {
+            why_path =
+                Some(std::path::PathBuf::from(arguments.next().ok_or_else(
+                    || io::Error::other("why requires --path PATH"),
+                )?));
+        } else if argument == "--op" && why_command {
+            why_operation = match arguments
+                .next()
+                .and_then(|value| value.into_string().ok())
+                .as_deref()
+            {
+                Some("read") => "read",
+                Some("write") => "write",
+                _ => return Err(io::Error::other("--op must be read or write")),
+            };
         } else if argument == "--policy" {
             if policy_file.is_some() {
                 return Err(io::Error::other("Specify only one --policy file"));
@@ -309,7 +336,7 @@ fn run() -> io::Result<i32> {
     resolved.memory_mib = policy.memory_mib.or(resolved.memory_mib);
     resolved.pids = policy.pids.or(resolved.pids);
     resolved.cgroup_root = policy.cgroup_root.or(resolved.cgroup_root);
-    if let Some(agent) = resolved.agent {
+    if let Some(agent) = resolved.agent.filter(|_| !why_command) {
         prepare_agent_home(&mut resolved, agent)?;
     }
     let workspace = directory
@@ -320,6 +347,19 @@ fn run() -> io::Result<i32> {
         return Err(io::Error::other("Workspace must be a directory"));
     }
     resolved.resolve(&workspace)?;
+    if why_command {
+        if why_path.is_none()
+            || program.is_some()
+            || rollback_session
+            || check_policy
+            || print_policy
+        {
+            return Err(io::Error::other(
+                "Usage: boxer why --path PATH [--op read|write] [policy options]",
+            ));
+        }
+        return explain::run(&resolved, &workspace, &why_path.unwrap(), why_operation);
+    }
     if rollback_session && (check_policy || print_policy) {
         return Err(io::Error::other(
             "--rollback cannot be combined with --check or --print-policy",

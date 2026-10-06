@@ -17,6 +17,22 @@ contains the process tree and terminates remaining descendants on exit.
 `--read-only` denies new filesystem writes on Linux/macOS. Inherited open
 handles retain their access. Windows rejects filesystem restrictions.
 
+## Explain a path decision
+
+Use `boxer why` to inspect how a policy treats a path without launching an
+agent. It accepts the same policy options as a normal run. Relative paths are
+resolved from the selected workspace; read is the default operation.
+
+```sh
+boxer why --path ~/.ssh/id_ed25519 --op read --profile codex --cwd /path/to/project
+boxer why --path src/new-file.rs --op write --workspace --cwd /path/to/project
+```
+
+The JSON result says whether the resolved policy allows or denies the access,
+or reports `unsupported` when the current platform backend cannot enforce the
+requested filesystem policy. This explains Boxer’s policy rules, not ambient
+OS permissions, ACLs, or whether a later filesystem operation will succeed.
+
 ## Limit access to a project
 
 On Linux and macOS, use the built-in Solmu profile for a lightweight workspace

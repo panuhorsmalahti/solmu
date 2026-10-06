@@ -95,6 +95,10 @@ writes; Windows supports process-tree containment only.
 
 See [permissions, platform requirements, and usage](../docs/boxer.md).
 
+Use `boxer why --path PATH --op read|write` with the policy options you plan to
+run to see how Boxer resolves that filesystem access. See the
+[path explanation guide](../docs/boxer.md#explain-a-path-decision).
+
 Add `--rollback` to save a workspace before and after a run. Review or restore
 those snapshots with `boxer rollback list`, `boxer rollback show <session-id>`,
 and `boxer rollback restore <session-id>`. See the
