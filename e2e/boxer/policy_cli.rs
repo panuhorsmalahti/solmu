@@ -64,6 +64,30 @@ fn policy_guide_prints_authoring_rules_and_the_current_schema() {
 }
 
 #[test]
+fn policy_runtime_groups_explain_their_read_grants() {
+    let listed = run(&["policy", "runtime-groups"]);
+    assert!(
+        listed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&listed.stderr)
+    );
+    let listed: Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(listed.as_array().unwrap().len(), 4);
+    for name in ["node", "python", "rust", "go"] {
+        assert!(listed.as_array().unwrap().iter().any(|group| {
+            group["name"] == name && group["access"] == "read" && group["paths"].is_array()
+        }));
+    }
+
+    let rust = run(&["policy", "runtime-groups", "rust"]);
+    assert!(rust.status.success());
+    let rust: Value = serde_json::from_slice(&rust.stdout).unwrap();
+    assert_eq!(rust.as_array().unwrap().len(), 1);
+    assert_eq!(rust[0]["name"], "rust");
+    assert!(rust[0]["description"].as_str().unwrap().contains("Cargo"));
+}
+
+#[test]
 fn policy_init_scaffolds_a_named_profile_with_optional_inheritance() {
     let root = tempfile::tempdir().unwrap();
     let profiles = root.path().join("profiles");

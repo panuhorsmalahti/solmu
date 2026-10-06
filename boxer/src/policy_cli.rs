@@ -28,6 +28,30 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
         Some("init") => init(&args[2..]),
         Some("guide") if args.len() == 2 => guide(),
         Some("schema") if args.len() == 2 => schema(),
+        Some("runtime-groups") if args.len() == 2 || args.len() == 3 => {
+            let groups = match args.get(2) {
+                Some(name) => vec![crate::policy::RuntimeGroup::parse(
+                    name.to_str()
+                        .ok_or_else(|| io::Error::other("Runtime group name must be UTF-8"))?,
+                )?],
+                None => crate::policy::RuntimeGroup::all().to_vec(),
+            };
+            let groups = groups
+                .into_iter()
+                .map(|group| {
+                    let paths = crate::policy::runtime_group_paths(group)?
+                        .into_iter()
+                        .map(|path| json!({"path":path,"exists":path.exists()}))
+                        .collect::<Vec<_>>();
+                    Ok(json!({"name":group.name(),"description":group.description(),"access":"read","paths":paths}))
+                })
+                .collect::<io::Result<Vec<_>>>()?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&groups).map_err(io::Error::other)?
+            );
+            Ok(0)
+        }
         Some("profiles") if args.len() == 2 => {
             let mut profiles: Vec<_> = PROFILES
                 .iter()
@@ -172,7 +196,10 @@ Environment
 
 Runtime and resource limits
   `runtime_groups` grants read access to detected Node, Python, Rust, or Go
-  toolchain files. Groups require workspace or isolated mode. `cpus`,
+  toolchain files. Run `boxer policy runtime-groups [NAME]` to inspect candidate
+  paths and whether each exists on this machine. This is a read-grant
+  explanation, not a broader security group. Runtime groups require workspace
+  or isolated mode. `cpus`,
   `memory_mib`, and `pids` limit an isolated process tree; `cgroup_root` selects
   its delegated Linux cgroup parent. Resource limits require isolated mode.
 
@@ -444,6 +471,6 @@ fn supported(policy: &Policy) -> bool {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer policy guide | init [NAME] [--extends PROFILE [--extends PROFILE ...]] [--full] [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
+        "Usage: boxer policy guide | init [NAME] [--extends PROFILE [--extends PROFILE ...]] [--full] [--output FILE] | schema | profiles | runtime-groups [NAME] | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
     )
 }

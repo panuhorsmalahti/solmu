@@ -577,6 +577,28 @@ impl CredentialProvider {
 }
 
 impl RuntimeGroup {
+    pub fn all() -> [Self; 4] {
+        [Self::Node, Self::Python, Self::Rust, Self::Go]
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Node => "node",
+            Self::Python => "python",
+            Self::Rust => "rust",
+            Self::Go => "go",
+        }
+    }
+
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Node => "Node.js toolchains and package manager state",
+            Self::Python => "Python toolchains and package manager caches",
+            Self::Rust => "Rust toolchains and Cargo registry state",
+            Self::Go => "Go toolchains and workspace state",
+        }
+    }
+
     pub fn parse(name: &str) -> io::Result<Self> {
         match name {
             "node" => Ok(Self::Node),
@@ -589,7 +611,7 @@ impl RuntimeGroup {
         }
     }
 
-    fn paths(self, home: &Path) -> Vec<PathBuf> {
+    pub fn paths(self, home: &Path) -> Vec<PathBuf> {
         let env_path = |name: &str, fallback: PathBuf| {
             std::env::var_os(name)
                 .map(PathBuf::from)
@@ -644,6 +666,10 @@ impl RuntimeGroup {
             }
         }
     }
+}
+
+pub fn runtime_group_paths(group: RuntimeGroup) -> io::Result<Vec<PathBuf>> {
+    Ok(group.paths(&home()?))
 }
 
 impl AgentProfile {

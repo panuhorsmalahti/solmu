@@ -722,6 +722,8 @@ boxer policy init reviewer --extends base --full
 boxer policy init --output ./agent-policy.json
 boxer policy schema
 boxer policy profiles
+boxer policy runtime-groups
+boxer policy runtime-groups rust
 boxer policy validate ./boxer-policy.json --cwd /path/to/project
 boxer policy show ./boxer-policy.json --cwd /path/to/project
 boxer policy show ./boxer-policy.json --raw
@@ -733,6 +735,10 @@ with no additional path grants. It refuses to overwrite an existing file. Edit
 the generated JSON, then validate it before using `--policy` to launch a program.
 `policy schema` prints the JSON Schema for editors and other JSON tooling;
 `policy guide` prints an authoring reference followed by the current schema;
+`policy runtime-groups` lists the Node, Python, Rust, and Go toolchain path
+grants, or shows one group when given its name. It marks which candidate paths
+exist on this host. These groups grant read access to runtime files; they are
+not general-purpose security groups.
 `policy validate` also checks combinations that depend on Boxer runtime rules.
 Add `--raw` to `policy show` to inspect the merged policy before relative paths
 and `$HOME` or `$WORKSPACE` path variables are resolved. Raw output is marked
