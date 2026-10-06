@@ -273,6 +273,9 @@ boxer --env-credential-map 'file:///home/me/.secrets/openai' OPENAI_API_KEY \
 
 boxer --env-credential-map 'keyring://team-secrets/openai_api_key' OPENAI_API_KEY \
   --cwd /path/to/project -- solmu
+
+boxer --env-credential-map 'bw://01234567-89ab-cdef-0123-456789abcdef/password' OPENAI_API_KEY \
+  --cwd /path/to/project -- solmu
 ```
 
 Policies can store the same mapping in `env_credential_map`, with source keys
@@ -282,6 +285,8 @@ sources must be local, readable files; Boxer removes one trailing line ending
 before injecting the value. Keep secret files private. Boxer resolves
 1Password references with the installed, signed-in `op` CLI before starting
 the child.
+Bitwarden references use the installed, unlocked `bw` CLI and accept an item
+ID or an item ID with a field name, such as `bw://ITEM_ID/password`.
 On macOS, mappings can also use an Apple Passwords reference such as
 `apple-password://github.com/alice%40example.com`; Boxer looks up the matching
 server and account using the macOS `security` command.

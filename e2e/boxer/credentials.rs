@@ -177,6 +177,28 @@ fn environment_credential_map_accepts_secret_references_and_validates_target_nam
         "OPENAI_API_KEY"
     );
 
+    let bitwarden = Command::new(binary("boxer"))
+        .args([
+            "--env-credential-map",
+            "bw://01234567-89ab-cdef-0123-456789abcdef/password",
+            "OPENAI_API_KEY",
+            "--cwd",
+        ])
+        .arg(temp.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .output()
+        .unwrap();
+    assert!(
+        bitwarden.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bitwarden.stderr)
+    );
+    let policy: serde_json::Value = serde_json::from_slice(&bitwarden.stdout).unwrap();
+    assert_eq!(
+        policy["policy"]["env_credential_map"]["bw://01234567-89ab-cdef-0123-456789abcdef/password"],
+        "OPENAI_API_KEY"
+    );
+
     let invalid = run(&[
         "--env-credential-map",
         "op://Development/OpenAI API Key/credential",

@@ -71,6 +71,9 @@ pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
         if let Some((service, account)) = keyring_reference(name) {
             return read_keyring(&service, &account);
         }
+        if let Some((item, field)) = bitwarden_reference(name) {
+            return read_bitwarden(&item, field.as_deref());
+        }
         if name.starts_with("op://") {
             return read_onepassword(name);
         }
@@ -112,6 +115,7 @@ pub fn valid_source_key(value: &str) -> bool {
         || environment_reference(value).is_some()
         || is_file_reference(value)
         || keyring_reference(value).is_some()
+        || bitwarden_reference(value).is_some()
         || is_onepassword_reference(value)
         || is_apple_password_reference(value)
 }
@@ -149,6 +153,123 @@ fn read_keyring(service: &str, account: &str) -> io::Result<String> {
         Err(_) => Err(io::Error::other(format!(
             "Could not read credential {account} from keyring service {service}"
         ))),
+    }
+}
+
+pub fn bitwarden_reference(value: &str) -> Option<(String, Option<String>)> {
+    let reference = value.strip_prefix("bw://")?;
+    if reference.chars().any(char::is_control) || reference.contains(['?', '#']) {
+        return None;
+    }
+    let (item, field) = match reference.split_once('/') {
+        Some((item, field)) if !item.is_empty() && !field.is_empty() && !field.contains('/') => {
+            (item, Some(field))
+        }
+        Some(_) => return None,
+        None if !reference.is_empty() => (reference, None),
+        None => return None,
+    };
+    if !item
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    {
+        return None;
+    }
+    let field = match field {
+        Some(field) => Some(
+            percent_encoding::percent_decode_str(field)
+                .decode_utf8()
+                .ok()?
+                .into_owned(),
+        ),
+        None => None,
+    };
+    if field
+        .as_deref()
+        .is_some_and(|field| field.is_empty() || field.chars().any(char::is_control))
+    {
+        return None;
+    }
+    Some((item.to_owned(), field))
+}
+
+fn read_bitwarden(item_id: &str, field: Option<&str>) -> io::Result<String> {
+    read_bitwarden_with(item_id, field, |item| {
+        let mut output = Command::new("bw")
+            .args(["get", "item", item])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|_| io::Error::other("Could not run the Bitwarden CLI"))?;
+        if !output.status.success() {
+            output.stdout.zeroize();
+            output.stderr.zeroize();
+            return Err(io::Error::other(
+                "Could not read the Bitwarden item; check that `bw` is installed and unlocked",
+            ));
+        }
+        let stdout = std::mem::take(&mut output.stdout);
+        output.stderr.zeroize();
+        Ok(stdout)
+    })
+}
+
+fn read_bitwarden_with(
+    item_id: &str,
+    field: Option<&str>,
+    read: impl FnOnce(&str) -> io::Result<Vec<u8>>,
+) -> io::Result<String> {
+    let mut bytes = read(item_id)?;
+    parse_bitwarden_item(&mut bytes, field)
+}
+
+fn parse_bitwarden_item(bytes: &mut Vec<u8>, field: Option<&str>) -> io::Result<String> {
+    let mut item: serde_json::Value = match serde_json::from_slice(bytes) {
+        Ok(item) => item,
+        Err(_) => {
+            bytes.zeroize();
+            return Err(io::Error::other(
+                "Bitwarden returned an invalid item; check that `bw` is unlocked",
+            ));
+        }
+    };
+    bytes.zeroize();
+    let secret = bitwarden_field(&item, field).map(str::to_owned);
+    zeroize_json_strings(&mut item);
+    secret.ok_or_else(|| io::Error::other("The requested Bitwarden item field is empty or missing"))
+}
+
+fn bitwarden_field<'a>(item: &'a serde_json::Value, field: Option<&str>) -> Option<&'a str> {
+    let login = item.get("login");
+    match field {
+        Some("password") => login?.get("password")?.as_str(),
+        Some("username") => login?.get("username")?.as_str(),
+        Some("name") => item.get("name")?.as_str(),
+        Some("notes") => item.get("notes")?.as_str(),
+        Some(field) => item
+            .get("fields")?
+            .as_array()?
+            .iter()
+            .find(|entry| entry.get("name").and_then(serde_json::Value::as_str) == Some(field))?
+            .get("value")?
+            .as_str(),
+        None => login
+            .and_then(|login| login.get("password"))
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| {
+                item.get("fields")?
+                    .as_array()?
+                    .iter()
+                    .find_map(|entry| entry.get("value").and_then(serde_json::Value::as_str))
+            }),
+    }
+}
+
+fn zeroize_json_strings(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(value) => value.zeroize(),
+        serde_json::Value::Array(values) => values.iter_mut().for_each(zeroize_json_strings),
+        serde_json::Value::Object(values) => values.values_mut().for_each(zeroize_json_strings),
+        _ => {}
     }
 }
 
@@ -547,6 +668,37 @@ mod tests {
             "keyring://service/account?query=value",
         ] {
             assert!(keyring_reference(invalid).is_none(), "accepted {invalid}");
+        }
+    }
+
+    #[test]
+    fn bitwarden_references_load_passwords_and_named_fields() {
+        let item = br#"{"login":{"username":"alice","password":"bw-password"},"name":"Example","notes":"memo","fields":[{"name":"api-key","value":"bw-custom-secret"}]}"#;
+        assert_eq!(
+            read_bitwarden_with("01234567-89ab-cdef-0123-456789abcdef", None, |_| {
+                Ok(item.to_vec())
+            })
+            .unwrap(),
+            "bw-password"
+        );
+        assert_eq!(
+            read_bitwarden_with(
+                "01234567-89ab-cdef-0123-456789abcdef",
+                Some("api-key"),
+                |_| { Ok(item.to_vec()) }
+            )
+            .unwrap(),
+            "bw-custom-secret"
+        );
+        assert_eq!(
+            bitwarden_reference("bw://01234567-89ab-cdef-0123-456789abcdef/api%20key"),
+            Some((
+                "01234567-89ab-cdef-0123-456789abcdef".to_owned(),
+                Some("api key".to_owned())
+            ))
+        );
+        for invalid in ["bw://", "bw://item/", "bw://item/a/b", "bw://item?field=x"] {
+            assert!(bitwarden_reference(invalid).is_none(), "accepted {invalid}");
         }
     }
 }
