@@ -186,15 +186,12 @@ fn conversation_markdown(session: &Session) -> String {
 
 fn command_suggestions(input: &str) -> Vec<(&'static str, &'static str)> {
     let input = input.trim_start();
-    if !input.starts_with('/') || input.chars().last().is_some_and(char::is_whitespace) {
+    if !input.starts_with('/') || input.chars().any(char::is_whitespace) {
         return Vec::new();
     }
     let Some(prefix) = input.split_whitespace().next() else {
         return Vec::new();
     };
-    if prefix.contains(char::is_whitespace) {
-        return Vec::new();
-    }
     CHAT_COMMANDS
         .iter()
         .copied()
