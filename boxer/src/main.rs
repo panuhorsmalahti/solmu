@@ -301,7 +301,7 @@ fn run() -> io::Result<i32> {
                 "boxer credential set|status|delete NAME: manage credentials in the OS credential store; --env-credential NAME or --env-credential-map SOURCE TARGET loads a value into a program's environment."
             );
             println!(
-                "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|verify` reviews the local audit trail."
+                "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|export|verify` reviews and exports the local audit trail."
             );
             println!(
                 "--detached: start a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach by default (Linux/macOS). Set BOXER_DETACH_SEQUENCE to configure the key sequence. Manage sessions with `boxer ps|inspect|pause|resume|stop|prune`."

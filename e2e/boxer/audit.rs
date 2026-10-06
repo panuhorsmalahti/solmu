@@ -46,6 +46,12 @@ fn audit_records_lifecycle_and_detects_session_tampering() {
     assert!(text.contains("session_completed"));
     let listed = invoke(root.path(), &["audit", "list"]);
     assert!(String::from_utf8_lossy(&listed.stdout).contains("verified"));
+    let exported = invoke(root.path(), &["audit", "export", &session]);
+    assert!(exported.status.success());
+    let exported: Value = serde_json::from_slice(&exported.stdout).unwrap();
+    assert_eq!(exported["verified"], true);
+    assert_eq!(exported["session_id"], session);
+    assert_eq!(exported["events"].as_array().unwrap().len(), 2);
 
     let session_file = root
         .path()

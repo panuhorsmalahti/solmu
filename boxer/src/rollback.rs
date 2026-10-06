@@ -104,6 +104,7 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
         },
         Some("audit") if (4..=5).contains(&arguments.len()) => match required_text(arguments, 2)? {
             "show" => audit_show(required_text(arguments, 3)?),
+            "export" if arguments.len() == 4 => audit_export(required_text(arguments, 3)?),
             "verify" if arguments.len() == 4 => audit_verify(required_text(arguments, 3)?),
             _ => Err(audit_usage()),
         },
@@ -357,7 +358,9 @@ fn valid_hash(hash: &str) -> bool {
 }
 
 fn audit_usage() -> io::Error {
-    io::Error::other("Usage: boxer rollback audit list | show <session-id> | verify <session-id>")
+    io::Error::other(
+        "Usage: boxer rollback audit list | show <session-id> | export <session-id> | verify <session-id>",
+    )
 }
 
 fn now_ms() -> io::Result<u128> {
@@ -527,6 +530,26 @@ fn audit_verify(id: &str) -> io::Result<i32> {
     let session = read_session(&store, id)?;
     verify_audit(&store, &session)?;
     println!("Audit verified: {} ({} events)", id, session.audit.len());
+    Ok(0)
+}
+
+fn audit_export(id: &str) -> io::Result<i32> {
+    let store = store_root_for_commands()?;
+    let session = read_session(&store, id)?;
+    verify_audit(&store, &session)?;
+    let export = serde_json::json!({
+        "version": 1,
+        "session_id": session.id,
+        "created_unix_ms": session.created_unix_ms,
+        "workspace": session.workspace,
+        "program": session.program,
+        "verified": true,
+        "events": session.audit,
+    });
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&export).map_err(io::Error::other)?
+    );
     Ok(0)
 }
 

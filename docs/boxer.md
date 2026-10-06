@@ -587,8 +587,13 @@ HMAC key stored beside the session data. Inspect or verify them with:
 ```sh
 boxer rollback audit list
 boxer rollback audit show <session-id>
+boxer rollback audit export <session-id> > boxer-audit.json
 boxer rollback audit verify <session-id>
 ```
+
+`audit export` first verifies the session's audit chain, then writes a structured
+JSON record to stdout, including its event payloads and authentication links.
+Redirect it to a file or pipe it into your reporting tools.
 
 This verifies the integrity of Boxer’s local lifecycle and snapshot records. It
 does not record every system call, denied access, or network request, and it is
