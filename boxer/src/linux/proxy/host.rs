@@ -186,12 +186,16 @@ pub(super) async fn connect_route(
     upstream_proxy: Option<&UpstreamProxy>,
     upstream_bypass: &[String],
 ) -> io::Result<TcpStream> {
-    if local || upstream_proxy.is_none() {
+    if local {
         connect(target, local).await
-    } else if crate::network::matches_bypass(&target.host, upstream_bypass) {
-        connect_direct(target, false, true).await
+    } else if let Some(upstream_proxy) = upstream_proxy {
+        if crate::network::matches_bypass(&target.host, upstream_bypass) {
+            connect_direct(target, false, true).await
+        } else {
+            connect_via_upstream(target, upstream_proxy).await
+        }
     } else {
-        connect_via_upstream(target, upstream_proxy.unwrap()).await
+        connect(target, false).await
     }
 }
 
