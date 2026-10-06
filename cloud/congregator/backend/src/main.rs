@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use openshell_sdk::raw::proto::{DeleteServiceRequest, ExposeServiceRequest, ListServicesRequest};
 use openshell_sdk::{
     AuthConfig, ClientConfig, DeleteOptions, ListOptions, OpenShellClient, SandboxPhase,
     SandboxSpec, ServiceExposure,
@@ -35,6 +36,19 @@ struct Agent {
 #[serde(deny_unknown_fields)]
 struct CreateAgent {
     name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExposeIngress {
+    port: u16,
+}
+
+#[derive(Debug, Serialize)]
+struct AgentIngress {
+    name: String,
+    port: u16,
+    url: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -102,6 +116,14 @@ fn api(state: AppState) -> Router {
         .route("/api/v1/agents/{name}", get(get_agent).delete(delete_agent))
         .route("/api/v1/agents/{name}/stop", post(stop_agent))
         .route("/api/v1/agents/{name}/start", post(start_agent))
+        .route(
+            "/api/v1/agents/{name}/ingresses",
+            get(list_ingresses).post(create_ingress),
+        )
+        .route(
+            "/api/v1/agents/{name}/ingresses/{service}",
+            axum::routing::delete(delete_ingress),
+        )
         .with_state(state)
 }
 
@@ -260,6 +282,103 @@ async fn start_agent(
         image: state.image,
         created_at: None,
     }))
+}
+
+async fn list_ingresses(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<Vec<AgentIngress>>, ApiError> {
+    require_managed(&state, &name).await?;
+    let response = state
+        .openshell
+        .raw_grpc_fresh()
+        .await
+        .map_err(gateway_error)?
+        .list_services(ListServicesRequest {
+            sandbox: name,
+            ..Default::default()
+        })
+        .await
+        .map_err(gateway_error)?
+        .into_inner();
+    Ok(Json(
+        response
+            .services
+            .into_iter()
+            .filter_map(|service| {
+                let endpoint = service.endpoint?;
+                Some(AgentIngress {
+                    name: endpoint.name,
+                    port: u16::try_from(endpoint.target_port).ok()?,
+                    url: service.url,
+                })
+            })
+            .collect(),
+    ))
+}
+
+async fn create_ingress(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Json(input): Json<ExposeIngress>,
+) -> Result<(StatusCode, Json<AgentIngress>), ApiError> {
+    require_managed(&state, &name).await?;
+    if input.port == 0 {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            "Choose a port between 1 and 65535".into(),
+        ));
+    }
+    let service = format!("port-{}", input.port);
+    let response = state
+        .openshell
+        .raw_grpc_fresh()
+        .await
+        .map_err(gateway_error)?
+        .expose_service(ExposeServiceRequest {
+            sandbox: name,
+            name: service.clone(),
+            target_port: u32::from(input.port),
+            domain: true,
+            ..Default::default()
+        })
+        .await
+        .map_err(gateway_error)?
+        .into_inner();
+    Ok((
+        StatusCode::CREATED,
+        Json(AgentIngress {
+            name: service,
+            port: input.port,
+            url: response.url,
+        }),
+    ))
+}
+
+async fn delete_ingress(
+    State(state): State<AppState>,
+    Path((name, service)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    require_managed(&state, &name).await?;
+    if service == "solmu" {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            "The Solmu service ingress cannot be removed".into(),
+        ));
+    }
+    state
+        .openshell
+        .raw_grpc_fresh()
+        .await
+        .map_err(gateway_error)?
+        .delete_service(DeleteServiceRequest {
+            sandbox: name,
+            name: service,
+            ..Default::default()
+        })
+        .await
+        .map_err(gateway_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn require_managed(state: &AppState, name: &str) -> Result<(), ApiError> {

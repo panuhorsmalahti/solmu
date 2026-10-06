@@ -60,6 +60,14 @@ through OpenShell. Configure an LLM provider in OpenShell and, if needed, set
 is the published Solmu container image. Override it with `agent.image` if you
 publish a custom Solmu image.
 
+Open **Ports** on an agent to view its service URLs or expose another container
+port. Enter the port the application listens on inside the sandbox. Congregator
+registers a named service endpoint with OpenShell and displays its URL. Remove
+endpoints from the same panel. The built-in Solmu endpoint on port `3000` is
+managed automatically and cannot be removed there. Browser-facing URLs require
+OpenShell's service-domain routing, DNS, and TLS to be configured for the
+gateway; access follows the gateway's configured policy.
+
 ## Configuration
 
 | Setting | Default | Purpose |
@@ -84,6 +92,9 @@ The service exposes:
 | `POST` | `/api/v1/agents/{sandbox-name}/stop` | Stop its sandbox |
 | `POST` | `/api/v1/agents/{sandbox-name}/start` | Start its sandbox |
 | `DELETE` | `/api/v1/agents/{sandbox-name}` | Delete the agent and sandbox |
+| `GET` | `/api/v1/agents/{sandbox-name}/ingresses` | List exposed service URLs |
+| `POST` | `/api/v1/agents/{sandbox-name}/ingresses` | Expose a sandbox port using `{ "port": 8080 }` |
+| `DELETE` | `/api/v1/agents/{sandbox-name}/ingresses/{service-name}` | Remove an exposed port endpoint |
 | `GET` | `/healthz` | Readiness and liveness probe |
 
 Congregator only lists and mutates sandboxes carrying its managed label, so it
