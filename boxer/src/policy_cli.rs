@@ -163,6 +163,7 @@ fn init(args: &[OsString]) -> io::Result<i32> {
     let mut name = None;
     let mut output = None;
     let mut extends = None;
+    let mut full = false;
     let mut index = 0;
     while index < args.len() {
         if args[index] == "--output" && index + 1 < args.len() {
@@ -177,6 +178,9 @@ fn init(args: &[OsString]) -> io::Result<i32> {
             }
             extends = Some(args[index + 1].clone());
             index += 2;
+        } else if args[index] == "--full" && !full {
+            full = true;
+            index += 1;
         } else if name.is_none()
             && let Some(value) = args[index].to_str()
             && valid_profile_name(value)
@@ -196,11 +200,7 @@ fn init(args: &[OsString]) -> io::Result<i32> {
         }
         None => PathBuf::from("boxer-policy.json"),
     };
-    let policy = if let Some(extends) = extends {
-        json!({"version":1,"extends":extends,"read":[],"write":[]})
-    } else {
-        json!({"version":1,"mode":"workspace","network":"allow","read":[],"write":[]})
-    };
+    let policy = scaffold(extends, full);
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -221,6 +221,51 @@ fn init(args: &[OsString]) -> io::Result<i32> {
     file.sync_all()?;
     println!("Created policy: {}", output.display());
     Ok(0)
+}
+
+fn scaffold(extends: Option<OsString>, full: bool) -> Value {
+    let inherited = extends.is_some();
+    let mut policy = if let Some(extends) = extends {
+        json!({"version":1,"extends":extends,"read":[],"write":[]})
+    } else {
+        json!({"version":1,"mode":"workspace","network":"allow","read":[],"write":[]})
+    };
+    if full {
+        let object = policy
+            .as_object_mut()
+            .expect("policy scaffold is an object");
+        for (key, value) in [
+            ("upstream_bypass", json!([])),
+            ("hosts", json!([])),
+            ("deny_hosts", json!([])),
+            ("local", json!([])),
+            ("publish", json!([])),
+            ("write_only", json!([])),
+            ("pass_env", json!([])),
+            // `allow_vars` and `case_insensitive_vars` affect inherited behavior;
+            // keep them absent so a full scaffold remains a neutral extension.
+            ("environment", json!({"deny_vars":[],"set_vars":{}})),
+            ("env_credentials", json!([])),
+            ("env_credential_map", json!({})),
+            ("runtime_groups", json!([])),
+            ("credentials", json!([])),
+            ("custom_credentials", json!({})),
+            ("endpoint_rules", json!([])),
+        ] {
+            object.insert(key.into(), value);
+        }
+        if !inherited {
+            // Make default scalar values visible only for a standalone policy.
+            // In an extending policy even `false` would override its parent.
+            object.insert("read_only".into(), json!(false));
+            object.insert("clean_env".into(), json!(false));
+            object.insert(
+                "environment".into(),
+                json!({"deny_vars":[],"case_insensitive_vars":false,"set_vars":{}}),
+            );
+        }
+    }
+    policy
 }
 
 fn valid_profile_name(name: &str) -> bool {
@@ -283,6 +328,6 @@ fn supported(policy: &Policy) -> bool {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer policy init [NAME] [--extends PROFILE] [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
+        "Usage: boxer policy init [NAME] [--extends PROFILE] [--full] [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
     )
 }

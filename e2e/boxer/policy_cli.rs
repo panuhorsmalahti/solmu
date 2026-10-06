@@ -1,5 +1,5 @@
 use super::*;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 fn run(args: &[&str]) -> std::process::Output {
     Command::new(binary("boxer")).args(args).output().unwrap()
@@ -110,6 +110,66 @@ fn policy_init_scaffolds_a_named_profile_with_optional_inheritance() {
         .unwrap();
     assert_eq!(repeated.status.code(), Some(125));
     assert!(String::from_utf8_lossy(&repeated.stderr).contains("Refusing to overwrite"));
+}
+
+#[test]
+fn full_policy_scaffold_preserves_inherited_scalar_security_settings() {
+    let root = tempfile::tempdir().unwrap();
+    let profiles = root.path().join("profiles");
+    let workspace = root.path().join("workspace");
+    std::fs::create_dir_all(&profiles).unwrap();
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::write(
+        profiles.join("base.json"),
+        r#"{"version":1,"mode":"workspace","network":"deny","read_only":true,"clean_env":true,"environment":{"case_insensitive_vars":true,"deny_vars":["SECRET_*"]}}"#,
+    )
+    .unwrap();
+
+    let created = Command::new(binary("boxer"))
+        .args(["policy", "init", "reviewer", "--extends", "base", "--full"])
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let scaffold: Value =
+        serde_json::from_slice(&std::fs::read(profiles.join("reviewer.json")).unwrap()).unwrap();
+    assert!(scaffold.get("read_only").is_none());
+    assert!(scaffold.get("clean_env").is_none());
+    assert!(
+        scaffold["environment"]
+            .get("case_insensitive_vars")
+            .is_none()
+    );
+    assert_eq!(scaffold["endpoint_rules"], json!([]));
+    assert_eq!(scaffold["custom_credentials"], json!({}));
+
+    let resolved = Command::new(binary("boxer"))
+        .args(["policy", "validate", "reviewer", "--cwd"])
+        .arg(&workspace)
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert!(
+        resolved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&resolved.stderr)
+    );
+    let resolved: Value = serde_json::from_slice(&resolved.stdout).unwrap();
+    assert_eq!(resolved["policy"]["network"], "deny");
+    assert_eq!(resolved["policy"]["read_only"], true);
+    assert_eq!(resolved["policy"]["clean_env"], true);
+    assert_eq!(
+        resolved["policy"]["environment"]["case_insensitive_vars"],
+        true
+    );
+    assert_eq!(
+        resolved["policy"]["environment"]["deny_vars"][0],
+        "SECRET_*"
+    );
 }
 
 #[test]
