@@ -155,6 +155,28 @@ fn environment_credential_map_accepts_secret_references_and_validates_target_nam
         "GITHUB_PASSWORD"
     );
 
+    let custom_keyring = Command::new(binary("boxer"))
+        .args([
+            "--env-credential-map",
+            "keyring://team-secrets/openai_api_key",
+            "OPENAI_API_KEY",
+            "--cwd",
+        ])
+        .arg(temp.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .output()
+        .unwrap();
+    assert!(
+        custom_keyring.status.success(),
+        "{}",
+        String::from_utf8_lossy(&custom_keyring.stderr)
+    );
+    let policy: serde_json::Value = serde_json::from_slice(&custom_keyring.stdout).unwrap();
+    assert_eq!(
+        policy["policy"]["env_credential_map"]["keyring://team-secrets/openai_api_key"],
+        "OPENAI_API_KEY"
+    );
+
     let invalid = run(&[
         "--env-credential-map",
         "op://Development/OpenAI API Key/credential",

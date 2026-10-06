@@ -258,7 +258,8 @@ a Secret Service provider must be available to the user session.
 Use `--env-credential-map SOURCE TARGET` when the credential source differs
 from the child environment variable. Sources can be a Boxer credential name,
 an `env://` host variable, a local `file://` URI, a 1Password reference, or on
-macOS an Apple Passwords reference:
+macOS an Apple Passwords reference. Use `keyring://SERVICE/ACCOUNT` to read
+from another service in the system keyring:
 
 ```sh
 boxer --env-credential-map 'op://Development/OpenAI API Key/credential' OPENAI_API_KEY \
@@ -268,6 +269,9 @@ boxer --env-credential-map 'env://OPENAI_API_KEY' OPENAI_API_KEY \
   --cwd /path/to/project -- solmu
 
 boxer --env-credential-map 'file:///home/me/.secrets/openai' OPENAI_API_KEY \
+  --cwd /path/to/project -- solmu
+
+boxer --env-credential-map 'keyring://team-secrets/openai_api_key' OPENAI_API_KEY \
   --cwd /path/to/project -- solmu
 ```
 

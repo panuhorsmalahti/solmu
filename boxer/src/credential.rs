@@ -68,6 +68,9 @@ pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
         if is_file_reference(name) {
             return read_file_secret(name);
         }
+        if let Some((service, account)) = keyring_reference(name) {
+            return read_keyring(&service, &account);
+        }
         if name.starts_with("op://") {
             return read_onepassword(name);
         }
@@ -108,8 +111,45 @@ pub fn valid_source_key(value: &str) -> bool {
     valid_name(value)
         || environment_reference(value).is_some()
         || is_file_reference(value)
+        || keyring_reference(value).is_some()
         || is_onepassword_reference(value)
         || is_apple_password_reference(value)
+}
+
+pub fn keyring_reference(value: &str) -> Option<(String, String)> {
+    let reference = value.strip_prefix("keyring://")?;
+    if reference.chars().any(char::is_control) || reference.contains(['?', '#']) {
+        return None;
+    }
+    let (service, account) = reference.split_once('/')?;
+    if service.is_empty()
+        || account.contains('/')
+        || !service
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        return None;
+    }
+    let account = percent_encoding::percent_decode_str(account)
+        .decode_utf8()
+        .ok()?
+        .into_owned();
+    if account.is_empty() || account.chars().any(char::is_control) {
+        return None;
+    }
+    Some((service.to_owned(), account))
+}
+
+fn read_keyring(service: &str, account: &str) -> io::Result<String> {
+    match keyring_entry(service, account)?.get_password() {
+        Ok(password) => Ok(password),
+        Err(keyring::Error::NoEntry) => Err(io::Error::other(format!(
+            "Credential {account} is not set in keyring service {service}"
+        ))),
+        Err(_) => Err(io::Error::other(format!(
+            "Could not read credential {account} from keyring service {service}"
+        ))),
+    }
 }
 
 pub fn environment_reference(value: &str) -> Option<&str> {
@@ -307,7 +347,11 @@ fn load_with(
 }
 
 fn entry(name: &str) -> io::Result<Entry> {
-    Entry::new_with_target(TARGET, SERVICE, name).map_err(|_| store_error(name, "open"))
+    keyring_entry(SERVICE, name).map_err(|_| store_error(name, "open"))
+}
+
+fn keyring_entry(service: &str, account: &str) -> io::Result<Entry> {
+    Entry::new_with_target(TARGET, service, account).map_err(|_| store_error(account, "open"))
 }
 
 fn required_name(argument: &OsString) -> io::Result<String> {
@@ -477,5 +521,32 @@ mod tests {
         assert_eq!(read_file_secret(&reference).unwrap(), "file-secret");
         assert!(!is_file_reference("file://remote.example/secrets/key"));
         assert!(!is_file_reference("file:///etc/passwd?copy=1"));
+    }
+
+    #[test]
+    fn custom_keyring_references_load_from_the_selected_service() {
+        keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
+        let (service, account) = keyring_reference("keyring://my-service/openai_api_key").unwrap();
+        keyring_entry(&service, &account)
+            .unwrap()
+            .set_password("keyring-secret")
+            .unwrap();
+        let loaded = load(&["keyring://my-service/openai_api_key".to_owned()]).unwrap();
+        assert_eq!(loaded[0].0, "keyring://my-service/openai_api_key");
+        assert_eq!(loaded[0].1.as_str(), "keyring-secret");
+        assert_eq!(
+            keyring_reference("keyring://My-Service/user%40example.com").unwrap(),
+            ("My-Service".to_owned(), "user@example.com".to_owned())
+        );
+        for invalid in [
+            "keyring://",
+            "keyring:///account",
+            "keyring://service/",
+            "keyring://service/account/extra",
+            "keyring://service/account%2Fextra",
+            "keyring://service/account?query=value",
+        ] {
+            assert!(keyring_reference(invalid).is_none(), "accepted {invalid}");
+        }
     }
 }
