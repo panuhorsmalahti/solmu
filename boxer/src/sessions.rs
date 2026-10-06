@@ -873,6 +873,7 @@ fn attach(id: &str) -> io::Result<i32> {
     if !is_active(&session) {
         return Err(io::Error::other("Session is not running"));
     }
+    let detach_sequence = configured_detach_sequence()?;
     let _terminal = RawTerminal::enter()?;
     let (mut rows, mut cols) = terminal_size()?;
     send_resize(&root, &session.id, rows, cols)?;
@@ -896,7 +897,7 @@ fn attach(id: &str) -> io::Result<i32> {
     let mut stream =
         stream.ok_or_else(|| io::Error::other("Could not connect to the Boxer session"))?;
     send_resize(&root, &session.id, rows, cols)?;
-    let mut pending_escape = false;
+    let mut pending_escape = Vec::with_capacity(detach_sequence.len());
     let mut buffer = [0u8; 8192];
     loop {
         let mut descriptors = [
@@ -927,24 +928,23 @@ fn attach(id: &str) -> io::Result<i32> {
                 let mut forwarded = Vec::with_capacity(count as usize);
                 let mut detach = false;
                 for byte in &buffer[..count as usize] {
-                    if pending_escape {
-                        pending_escape = false;
-                        if *byte == b'd' {
+                    pending_escape.push(*byte);
+                    loop {
+                        if pending_escape == detach_sequence {
+                            pending_escape.clear();
                             detach = true;
                             break;
                         }
-                        forwarded.push(0x1d);
+                        if detach_sequence.starts_with(&pending_escape) {
+                            break;
+                        }
+                        forwarded.push(pending_escape.remove(0));
                     }
-                    if *byte == 0x1d {
-                        pending_escape = true;
-                    } else {
-                        forwarded.push(*byte);
+                    if detach {
+                        break;
                     }
                 }
                 if detach {
-                    if pending_escape {
-                        forwarded.push(0x1d);
-                    }
                     break;
                 }
                 if !forwarded.is_empty() {
@@ -967,10 +967,48 @@ fn attach(id: &str) -> io::Result<i32> {
             send_resize(&root, &session.id, rows, cols)?;
         }
     }
-    if pending_escape {
-        stream.write_all(&[0x1d])?;
+    if !pending_escape.is_empty() {
+        stream.write_all(&pending_escape)?;
     }
     Ok(0)
+}
+
+fn configured_detach_sequence() -> io::Result<Vec<u8>> {
+    let value = std::env::var("BOXER_DETACH_SEQUENCE").unwrap_or_else(|_| "ctrl-] d".into());
+    let sequence = value
+        .split_ascii_whitespace()
+        .map(detach_key)
+        .collect::<io::Result<Vec<_>>>()?;
+    if !(2..=8).contains(&sequence.len()) {
+        return Err(io::Error::other(
+            "BOXER_DETACH_SEQUENCE must contain between 2 and 8 keys",
+        ));
+    }
+    Ok(sequence)
+}
+
+fn detach_key(key: &str) -> io::Result<u8> {
+    let key = key.to_ascii_lowercase();
+    let byte = match key.as_str() {
+        "esc" => 0x1b,
+        "tab" => b'\t',
+        "enter" => b'\r',
+        "space" => b' ',
+        "backspace" => 0x7f,
+        _ if key.starts_with("ctrl-") => match key.as_bytes().get(5).copied() {
+            Some(byte @ b'a'..=b'z') => byte - b'a' + 1,
+            Some(b'[') => 0x1b,
+            Some(b'\\') => 0x1c,
+            Some(b']') => 0x1d,
+            Some(b'^') => 0x1e,
+            Some(b'_') => 0x1f,
+            Some(b'?') => 0x7f,
+            _ => return Err(io::Error::other(format!("Invalid detach key: {key}"))),
+        },
+        _ if key.len() == 1 && key.is_ascii_graphic() => key.as_bytes()[0],
+        _ => return Err(io::Error::other(format!("Invalid detach key: {key}"))),
+    };
+    Ok(byte)
 }
 
 struct RawTerminal(libc::termios);

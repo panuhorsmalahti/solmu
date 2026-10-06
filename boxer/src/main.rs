@@ -312,7 +312,7 @@ fn run() -> io::Result<i32> {
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|verify` reviews the local audit trail."
             );
             println!(
-                "--detached: start a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach (Linux/macOS). Manage sessions with `boxer ps|inspect|pause|resume|stop|prune`."
+                "--detached: start a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach by default (Linux/macOS). Set BOXER_DETACH_SEQUENCE to configure the key sequence. Manage sessions with `boxer ps|inspect|pause|resume|stop|prune`."
             );
             return Ok(0);
         } else if argument == "--version" {

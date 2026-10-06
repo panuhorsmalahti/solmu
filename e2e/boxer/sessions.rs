@@ -137,6 +137,7 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
     let mut attach_command = CommandBuilder::new(binary("boxer"));
     attach_command.args(["attach", id]);
     attach_command.env("BOXER_SESSIONS_DIR", directory.path());
+    attach_command.env("BOXER_DETACH_SEQUENCE", "ctrl-a q");
     let mut attach_child = pair.slave.spawn_command(attach_command).unwrap();
     drop(pair.slave);
     let mut writer = pair.master.take_writer().unwrap();
@@ -180,9 +181,9 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         directory.path(),
         id,
     );
-    writer.write_all(&[0x1d]).unwrap();
+    writer.write_all(&[0x01]).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(30));
-    writer.write_all(b"d").unwrap();
+    writer.write_all(b"q").unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
         if attach_child.try_wait().unwrap().is_some() {
