@@ -606,7 +606,7 @@ fn prune(dry_run: bool, older_than: Option<usize>, keep: Option<usize>) -> io::R
     let root = root()?;
     let mut sessions = all(&root)?;
     for session in &mut sessions {
-        refresh_status(&mut session);
+        refresh_status(session);
         if session.status != "running" {
             save(&root, session)?;
         }
