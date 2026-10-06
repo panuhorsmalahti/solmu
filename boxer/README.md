@@ -109,7 +109,7 @@ Use `boxer why --path PATH --op read|write` or `boxer why --host HOST[:PORT]
 --op connect` with the policy options you plan to run to see how Boxer resolves
 filesystem access or network destination rules. Network queries do not connect
 and cannot predict DNS-based destination checks. See the
-[path explanation guide](../docs/boxer.md#explain-a-path-decision).
+[policy explanation guide](../docs/boxer.md#explain-a-path-or-network-decision).
 
 Sign instruction files with `boxer trust keygen` and `boxer trust sign`, then
 require signatures at launch with `--trust-key` and `--verify` or a signed

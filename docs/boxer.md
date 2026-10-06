@@ -82,7 +82,7 @@ sequence must contain between two and eight keys. `XDG_CONFIG_HOME` changes
 the config directory, and `BOXER_CONFIG` selects a specific config file.
 `BOXER_DETACH_SEQUENCE` overrides the file setting.
 
-## Explain a path decision
+## Explain a path or network decision
 
 Use `boxer why` to inspect how a policy treats a path without launching an
 agent. It accepts the same policy options as a normal run. Relative paths are
