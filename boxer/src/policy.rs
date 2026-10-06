@@ -51,6 +51,7 @@ pub enum AgentProfile {
     Codex,
     ClaudeCode,
     OpenCode,
+    Pi,
 }
 
 impl AgentProfile {
@@ -59,6 +60,7 @@ impl AgentProfile {
             Self::Codex => "codex",
             Self::ClaudeCode => "claude-code",
             Self::OpenCode => "opencode",
+            Self::Pi => "pi",
         }
     }
 }
@@ -292,6 +294,9 @@ impl Policy {
                         .env("OPENCODE_LOG_DIR", home.join("log"))
                         .env("OPENCODE_STATE_DIR", home.join("state"));
                 }
+                AgentProfile::Pi => {
+                    command.env("PI_CODING_AGENT_DIR", home.join("agent"));
+                }
             }
         }
     }
@@ -388,6 +393,31 @@ fn forwarded_for_agent(name: &str, agent: AgentProfile) -> bool {
                         | "GOOGLE_CLOUD_REGION"
                         | "VERTEX_PROJECT_ID"
                         | "VERTEX_LOCATION"
+                )
+        }
+        AgentProfile::Pi => {
+            name.ends_with("_API_KEY")
+                || name.ends_with("_AUTH_TOKEN")
+                || matches!(
+                    name,
+                    "GITHUB_TOKEN"
+                        | "HF_TOKEN"
+                        | "AWS_BEARER_TOKEN_BEDROCK"
+                        | "AWS_REGION"
+                        | "AWS_DEFAULT_REGION"
+                        | "AWS_PROFILE"
+                        | "AWS_ACCESS_KEY_ID"
+                        | "AWS_SECRET_ACCESS_KEY"
+                        | "AWS_SESSION_TOKEN"
+                        | "GOOGLE_APPLICATION_CREDENTIALS"
+                        | "GOOGLE_CLOUD_PROJECT"
+                        | "GOOGLE_CLOUD_REGION"
+                        | "VERTEX_PROJECT_ID"
+                        | "VERTEX_LOCATION"
+                        | "PI_OFFLINE"
+                        | "PI_SKIP_VERSION_CHECK"
+                        | "PI_TELEMETRY"
+                        | "PI_CACHE_RETENTION"
                 )
         }
     }

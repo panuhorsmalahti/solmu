@@ -123,6 +123,29 @@ fn opencode_profile_uses_private_state_and_forwards_provider_auth_without_openco
 }
 
 #[test]
+fn pi_profile_uses_private_agent_directory_and_provider_credentials() {
+    let (root, plan) = profile_plan("pi");
+    let state = root.path().join(".boxer").join("profiles").join("pi");
+    assert_eq!(plan["profile"], "pi");
+    assert_eq!(plan["program"], "pi");
+    assert_eq!(plan["policy"]["mode"], "workspace");
+    assert!(state.join("agent").is_dir());
+    let names = plan["environment"]["forwarded_names"].as_array().unwrap();
+    for name in ["PI_CODING_AGENT_DIR", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"] {
+        assert!(names.contains(&json!(name)), "missing {name}");
+    }
+    for name in ["BOXER_PRIVATE_VALUE", "OPENCODE_SERVER_PASSWORD"] {
+        assert!(!names.contains(&json!(name)), "unexpected {name}");
+    }
+    assert!(
+        plan["policy"]["write"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(state.canonicalize().unwrap()))
+    );
+}
+
+#[test]
 fn unsupported_profiles_and_conflicting_policy_are_rejected() {
     let workspace = tempfile::tempdir().unwrap();
     let policy = workspace.path().join("boxer.json");
@@ -217,5 +240,36 @@ fn agent_profiles_run_with_their_private_home_and_writable_project() {
     assert_eq!(
         std::fs::read_to_string(project.join("agent-paths")).unwrap(),
         paths
+    );
+
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--profile", "pi", "--cwd"])
+        .arg(&project)
+        .args([
+            "--",
+            "/bin/sh",
+            "-c",
+            "printf '%s' \"$PI_CODING_AGENT_DIR\" > agent-path",
+        ])
+        .env("HOME", root.path())
+        .env("PI_CODING_AGENT_DIR", root.path().join("host-pi"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let home = root
+        .path()
+        .join(".boxer/profiles/pi/agent")
+        .canonicalize()
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(project.join("agent-path")).unwrap(),
+        home.to_string_lossy()
     );
 }
