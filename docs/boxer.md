@@ -446,6 +446,29 @@ environment defaults. Add `--clean-env` to filter its environment, or
 `--pass-env NAME` to forward an additional variable. These options work with
 permissive mode too. Existing OS permissions still apply.
 
+For reusable policies, filter environment variable names with an optional
+`environment` object. Omitting `allow_vars` preserves inherited variables
+(except names in `deny_vars`); an empty list passes none. `*` matches any run
+of characters. Deny rules take precedence over allow rules. When filtering is
+active, Boxer also blocks inherited loader and runtime override variables such
+as `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`, `PYTHONPATH`, and `NODE_OPTIONS`.
+Explicitly injected credentials remain available to the launched program.
+
+```json
+{
+  "version": 1,
+  "mode": "workspace",
+  "environment": {
+    "allow_vars": ["PATH", "HOME", "TERM", "LANG", "OPENAI_API_KEY"],
+    "deny_vars": ["*_DEBUG_TOKEN"]
+  }
+}
+```
+
+Use repeated `--allow-env PATTERN` and `--deny-env PATTERN` options to add
+patterns when launching. Add `"case_insensitive_vars": true` for ASCII
+case-insensitive matching. Empty or NUL-containing patterns are rejected.
+
 Add explicit access to dependencies, linked skills, or result directories:
 
 ```sh
@@ -572,7 +595,8 @@ The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `deny_hosts`,
 `local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`, `env_credential_map`,
 `credentials`, `proxy_port`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
-`custom_credentials`, and `cgroup_root`. Custom credential definitions provide
+`custom_credentials`, `cgroup_root`, and `environment` (`allow_vars`, `deny_vars`,
+`case_insensitive_vars`). Custom credential definitions provide
 an HTTPS `upstream` and a `credential_key`; `env_var`, `inject_mode`,
 `inject_header`, `credential_format`, `path_pattern`, `path_replacement`, and
 `query_param_name` are optional, depending on the selected injection mode.

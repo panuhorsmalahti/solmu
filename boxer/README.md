@@ -58,6 +58,8 @@ for permissions and installation notes.
 The Solmu profile also filters the environment and sets the backend's default
 workspace. Tools run in the backend, so launch the backend inside Boxer to protect
 their file access. A boxed client uses its existing backend's permissions.
+Custom policies can filter inherited environment variables with `environment.allow_vars`
+and `environment.deny_vars`; see the [Boxer guide](../docs/boxer.md#run-pi-opencode-claude-code-or-codex).
 Keep reusable grants in an explicit JSON policy and inspect them with
 `boxer --policy /path/to/boxer.json --cwd /path/to/project --print-policy -- solmu`.
 Check that your OS can apply the permissions before launching an agent with

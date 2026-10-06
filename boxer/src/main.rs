@@ -228,6 +228,9 @@ fn run() -> io::Result<i32> {
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."
             );
             println!(
+                "--allow-env PATTERN / --deny-env PATTERN: add inherited environment filter patterns (repeatable; * matches any run of characters). See the Boxer guide."
+            );
+            println!(
                 "boxer why --path PATH [--op read|write] or --host HOST[:PORT] [--op connect] [policy options]: explain resolved filesystem or network policy without launching a program."
             );
             println!(
@@ -369,6 +372,22 @@ fn run() -> io::Result<i32> {
             }
         } else if argument == "--clean-env" {
             policy.clean_env = true;
+        } else if argument == "--allow-env" || argument == "--deny-env" {
+            let value = arguments
+                .next()
+                .and_then(|value| value.into_string().ok())
+                .ok_or_else(|| {
+                    io::Error::other(format!("{} requires a pattern", argument.to_string_lossy()))
+                })?;
+            let environment = policy.environment.get_or_insert_with(Default::default);
+            if argument == "--allow-env" {
+                environment
+                    .allow_vars
+                    .get_or_insert_with(Vec::new)
+                    .push(value);
+            } else {
+                environment.deny_vars.push(value);
+            }
         } else if argument == "--pass-env" {
             policy.pass_env.push(
                 arguments
@@ -563,6 +582,17 @@ fn run() -> io::Result<i32> {
     resolved.proxy_port = policy.proxy_port.or(resolved.proxy_port);
     resolved.read_only |= policy.read_only;
     resolved.clean_env |= policy.clean_env;
+    if let Some(cli_environment) = policy.environment.take() {
+        let environment = resolved.environment.get_or_insert_with(Default::default);
+        if let Some(allow_vars) = cli_environment.allow_vars {
+            environment
+                .allow_vars
+                .get_or_insert_with(Vec::new)
+                .extend(allow_vars);
+        }
+        environment.deny_vars.extend(cli_environment.deny_vars);
+        environment.case_insensitive_vars |= cli_environment.case_insensitive_vars;
+    }
     resolved.read.extend(policy.read);
     resolved.write.extend(policy.write);
     resolved.pass_env.extend(policy.pass_env);

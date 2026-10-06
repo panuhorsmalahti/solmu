@@ -7,6 +7,23 @@ fn main() {
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
     if arguments
         .first()
+        .is_some_and(|value| value == "--env-check")
+    {
+        for check in arguments.iter().skip(1) {
+            let check = check.to_string_lossy();
+            let (name, expectation) = check.split_once('=').expect("NAME=present|absent");
+            let actual = std::env::var_os(name).is_some();
+            assert_eq!(
+                actual,
+                expectation == "present",
+                "unexpected environment variable visibility: {name}"
+            );
+        }
+        println!("environment filtering verified");
+        return;
+    }
+    if arguments
+        .first()
         .is_some_and(|value| value == "--rollback-set")
     {
         let modified = std::path::PathBuf::from(&arguments[1]);

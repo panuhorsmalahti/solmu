@@ -665,6 +665,7 @@ pub struct Policy {
     pub write: Vec<PathBuf>,
     pub clean_env: bool,
     pub pass_env: Vec<String>,
+    pub environment: Option<EnvironmentPolicy>,
     pub env_credentials: Vec<String>,
     pub env_credential_map: std::collections::BTreeMap<String, String>,
     pub runtime_groups: Vec<RuntimeGroup>,
@@ -684,6 +685,78 @@ pub struct Policy {
     pub agent: Option<AgentProfile>,
     #[serde(skip)]
     pub profile_home: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct EnvironmentPolicy {
+    /// `None` inherits all otherwise permitted variables; `Some([])` inherits none.
+    pub allow_vars: Option<Vec<String>>,
+    pub deny_vars: Vec<String>,
+    pub case_insensitive_vars: bool,
+}
+
+impl EnvironmentPolicy {
+    fn validate(&self) -> io::Result<()> {
+        for pattern in self.allow_vars.iter().flatten().chain(&self.deny_vars) {
+            if pattern.is_empty() || pattern.contains('\0') {
+                return Err(io::Error::other(
+                    "Environment variable patterns cannot be empty or contain NUL",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn matches_any(&self, patterns: &[String], name: &str) -> bool {
+        patterns.iter().any(|pattern| {
+            let (pattern, name) = if self.case_insensitive_vars {
+                (pattern.to_ascii_lowercase(), name.to_ascii_lowercase())
+            } else {
+                (pattern.clone(), name.to_owned())
+            };
+            glob_env_name(&pattern, &name)
+        })
+    }
+}
+
+fn glob_env_name(pattern: &str, name: &str) -> bool {
+    // `*` matches any run of characters. Dynamic programming avoids recursive
+    // backtracking for user supplied patterns.
+    let mut matched = vec![false; name.len() + 1];
+    matched[0] = true;
+    for byte in pattern.bytes() {
+        let mut next = vec![false; name.len() + 1];
+        if byte == b'*' {
+            let mut reachable = false;
+            for index in 0..=name.len() {
+                reachable |= matched[index];
+                next[index] = reachable;
+            }
+        } else {
+            for (index, candidate) in name.bytes().enumerate() {
+                if matched[index] && candidate == byte {
+                    next[index + 1] = true;
+                }
+            }
+        }
+        matched = next;
+    }
+    matched[name.len()]
+}
+
+fn dangerous_inherited_env(name: &str) -> bool {
+    let name = name.to_ascii_uppercase();
+    matches!(
+        name.as_str(),
+        "LD_PRELOAD"
+            | "LD_LIBRARY_PATH"
+            | "DYLD_INSERT_LIBRARIES"
+            | "DYLD_LIBRARY_PATH"
+            | "PYTHONPATH"
+            | "PYTHONHOME"
+            | "NODE_OPTIONS"
+    )
 }
 
 impl Policy {
@@ -992,6 +1065,9 @@ impl Policy {
                 ));
             }
         }
+        if let Some(environment) = &self.environment {
+            environment.validate()?;
+        }
         let mut credentials = std::collections::HashSet::new();
         for name in &self.env_credentials {
             if !crate::credential::valid_name(name) {
@@ -1062,14 +1138,33 @@ impl Policy {
     }
 
     pub fn environment(&self, command: &mut Command) {
-        if self.clean_env || self.isolated {
+        let filter_enabled = self.clean_env || self.isolated || self.environment.is_some();
+        if filter_enabled {
             command.env_clear();
             for (name, value) in std::env::vars_os() {
-                if self.agent.map_or_else(
+                let name_text = name.to_string_lossy();
+                let builtin = self.agent.map_or_else(
                     || forwarded(&name.to_string_lossy()),
                     |agent| forwarded_for_agent(&name.to_string_lossy(), agent),
-                ) || self.pass_env.iter().any(|key| name == key.as_str())
-                {
+                );
+                let explicitly_passed = self.pass_env.iter().any(|key| name == key.as_str());
+                let environment = self.environment.as_ref();
+                let allow = environment
+                    .and_then(|rules| rules.allow_vars.as_ref())
+                    .map_or(
+                        if self.clean_env || self.isolated {
+                            builtin
+                        } else {
+                            true
+                        },
+                        |patterns| {
+                            environment.unwrap().matches_any(patterns, &name_text)
+                                || explicitly_passed
+                        },
+                    );
+                let deny = environment
+                    .is_some_and(|rules| rules.matches_any(&rules.deny_vars, &name_text));
+                if allow && !deny && !dangerous_inherited_env(&name_text) {
                     command.env(name, value);
                 }
             }

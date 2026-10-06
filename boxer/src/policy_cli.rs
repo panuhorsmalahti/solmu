@@ -122,6 +122,11 @@ fn schema() -> io::Result<i32> {
             "write": {"type": "array", "items": {"type": "string"}},
             "clean_env": {"type": "boolean"},
             "pass_env": {"type": "array", "items": {"type": "string"}},
+            "environment": {"type": "object", "additionalProperties": false, "properties": {
+                "allow_vars": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                "deny_vars": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                "case_insensitive_vars": {"type": "boolean"}
+            }},
             "env_credentials": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
             "env_credential_map": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
             "runtime_groups": {"type": "array", "uniqueItems": true, "items": {"enum": ["node", "python", "rust", "go"]}},
