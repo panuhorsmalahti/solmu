@@ -90,6 +90,24 @@ Rollback covers files inside the workspace. It does not undo network requests or
 changes made elsewhere on the machine. Snapshots are local and can use substantial
 disk space for large workspaces.
 
+### Audit a session
+
+Each rollback session records a start and completion event and a SHA-256 digest
+for each changed path's snapshot entry. Boxer chains the records with a local
+HMAC key stored beside the session data. Inspect or verify them with:
+
+```sh
+boxer rollback audit list
+boxer rollback audit show <session-id>
+boxer rollback audit verify <session-id>
+```
+
+This verifies the integrity of Boxer’s local lifecycle and snapshot records. It
+does not record every system call, denied access, or network request, and it is
+not remote or hardware-backed evidence. Anyone who can modify both the audit
+store and its local key can replace the records. Treat it as a local tamper
+check, not a complete security audit.
+
 If your CLI or its dependencies are installed outside the system runtime and
 project, grant the installation directory with `--read PATH`. Use `--write PATH`
 for any additional folder the agent needs to change. `boxer --profile codex

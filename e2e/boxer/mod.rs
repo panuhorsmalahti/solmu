@@ -2,6 +2,7 @@ use solmu_e2e::support::binary;
 use std::process::Command;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+mod audit;
 mod network;
 mod permissions;
 mod policies;

@@ -154,7 +154,7 @@ fn run() -> io::Result<i32> {
                 "--check: test enforcement in a short-lived Boxer process without starting the requested program."
             );
             println!(
-                "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore` to review or restore changes."
+                "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore` to review or restore changes; `boxer rollback audit list|show|verify` reviews the local audit trail."
             );
             return Ok(0);
         } else if argument == "--version" {

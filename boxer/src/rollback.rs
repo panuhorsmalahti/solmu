@@ -47,6 +47,37 @@ struct Session {
     program: String,
     before: Snapshot,
     after: Option<Snapshot>,
+    #[serde(default)]
+    audit: Vec<AuditRecord>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AuditPayload {
+    event: String,
+    timestamp_unix_ms: u128,
+    workspace: String,
+    program: String,
+    snapshot_sha256: String,
+    exit_code: Option<i32>,
+    changes: Vec<AuditChange>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct AuditChange {
+    path: String,
+    before_sha256: Option<String>,
+    after_sha256: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AuditRecord {
+    sequence: u64,
+    previous_mac: String,
+    payload: AuditPayload,
+    mac: String,
 }
 
 pub fn command(arguments: &[OsString]) -> io::Result<i32> {
@@ -66,6 +97,15 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
             }
             restore(required_text(arguments, 2)?, dry_run)
         }
+        Some("audit") if arguments.len() == 3 => match required_text(arguments, 2)? {
+            "list" => audit_list(),
+            _ => Err(audit_usage()),
+        },
+        Some("audit") if (4..=5).contains(&arguments.len()) => match required_text(arguments, 2)? {
+            "show" => audit_show(required_text(arguments, 3)?),
+            "verify" if arguments.len() == 4 => audit_verify(required_text(arguments, 3)?),
+            _ => Err(audit_usage()),
+        },
         _ => Err(usage()),
     }
 }
@@ -94,7 +134,18 @@ pub fn run(arguments: &[OsString], workspace: &Path, program: &OsStr) -> io::Res
             .into_owned(),
         before,
         after: None,
+        audit: Vec::new(),
     };
+    let start_audit = AuditPayload {
+        event: "session_started".into(),
+        timestamp_unix_ms: now_ms()?,
+        workspace: session.workspace.clone(),
+        program: session.program.clone(),
+        snapshot_sha256: snapshot_digest(&session.before)?,
+        exit_code: None,
+        changes: Vec::new(),
+    };
+    append_audit(&store, &mut session, start_audit)?;
     save_session(&store, &session)?;
 
     #[cfg(unix)]
@@ -137,7 +188,24 @@ pub fn run(arguments: &[OsString], workspace: &Path, program: &OsStr) -> io::Res
     let after_result = capture(workspace, &store);
     match after_result {
         Ok(after) => {
+            let delta = audit_changes(session.after.as_ref().unwrap_or(&session.before), &after)?;
             session.after = Some(after);
+            let code = child_result
+                .as_ref()
+                .ok()
+                .and_then(std::process::ExitStatus::code);
+            let completion_audit = AuditPayload {
+                event: "session_completed".into(),
+                timestamp_unix_ms: now_ms()?,
+                workspace: session.workspace.clone(),
+                program: session.program.clone(),
+                snapshot_sha256: snapshot_digest(
+                    session.after.as_ref().expect("snapshot just assigned"),
+                )?,
+                exit_code: code,
+                changes: delta,
+            };
+            append_audit(&store, &mut session, completion_audit)?;
             save_session(&store, &session)?;
         }
         Err(error) => {
@@ -165,6 +233,180 @@ fn usage() -> io::Error {
     io::Error::other(
         "Usage: boxer rollback list | show <session-id> [--diff] | restore <session-id> [--dry-run]",
     )
+}
+
+fn audit_usage() -> io::Error {
+    io::Error::other("Usage: boxer rollback audit list | show <session-id> | verify <session-id>")
+}
+
+fn now_ms() -> io::Result<u128> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(io::Error::other)?
+        .as_millis())
+}
+
+fn key(store: &Path) -> io::Result<Vec<u8>> {
+    let path = store.join("audit.key");
+    if !path.exists() {
+        let mut bytes = Vec::with_capacity(32);
+        bytes.extend_from_slice(Uuid::new_v4().as_bytes());
+        bytes.extend_from_slice(Uuid::new_v4().as_bytes());
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                file.write_all(&bytes)?;
+                file.sync_all()?;
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => return fs::read(path),
+            Err(error) => return Err(error),
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+        }
+        return Ok(bytes);
+    }
+    let bytes = fs::read(path)?;
+    if bytes.len() != 32 {
+        return Err(io::Error::other("Invalid Boxer audit key"));
+    }
+    Ok(bytes)
+}
+
+fn append_audit(store: &Path, session: &mut Session, payload: AuditPayload) -> io::Result<()> {
+    let sequence = session.audit.len() as u64;
+    let previous_mac = session
+        .audit
+        .last()
+        .map(|item| item.mac.clone())
+        .unwrap_or_default();
+    let bytes =
+        serde_json::to_vec(&(sequence, &previous_mac, &payload)).map_err(io::Error::other)?;
+    let mut message = b"solmu-boxer-audit-v1\0".to_vec();
+    message.extend_from_slice(&bytes);
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &key(store)?);
+    let mac = ring::hmac::sign(&key, &message);
+    session.audit.push(AuditRecord {
+        sequence,
+        previous_mac,
+        payload,
+        mac: hex::encode(mac.as_ref()),
+    });
+    save_session(store, session)
+}
+
+fn audit_changes(before: &Snapshot, after: &Snapshot) -> io::Result<Vec<AuditChange>> {
+    let mut result = Vec::new();
+    for (kind, path) in changes(before, after)? {
+        let encoded = encode_path(&path);
+        let before_entry = before.entries.get(&encoded);
+        let after_entry = after.entries.get(&encoded);
+        let digest = |entry: Option<&Entry>| -> io::Result<Option<String>> {
+            entry
+                .map(|entry| {
+                    serde_json::to_vec(entry)
+                        .map(|bytes| hex::encode(Sha256::digest(bytes)))
+                        .map_err(io::Error::other)
+                })
+                .transpose()
+        };
+        let _ = kind;
+        result.push(AuditChange {
+            path: display_path(&path),
+            before_sha256: digest(before_entry)?,
+            after_sha256: digest(after_entry)?,
+        });
+    }
+    Ok(result)
+}
+
+fn snapshot_digest(snapshot: &Snapshot) -> io::Result<String> {
+    let bytes = serde_json::to_vec(snapshot).map_err(io::Error::other)?;
+    Ok(hex::encode(Sha256::digest(bytes)))
+}
+
+fn verify_audit(store: &Path, session: &Session) -> io::Result<()> {
+    if session.audit.is_empty() {
+        return Err(io::Error::other("This session has no audit records"));
+    }
+    let key = key(store)?;
+    let mut previous = String::new();
+    for (index, record) in session.audit.iter().enumerate() {
+        if record.sequence != index as u64 || record.previous_mac != previous {
+            return Err(io::Error::other("Audit chain sequence or link is invalid"));
+        }
+        let bytes = serde_json::to_vec(&(record.sequence, &record.previous_mac, &record.payload))
+            .map_err(io::Error::other)?;
+        let expected = hex::decode(&record.mac).map_err(io::Error::other)?;
+        let mut message = b"solmu-boxer-audit-v1\0".to_vec();
+        message.extend_from_slice(&bytes);
+        let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &key);
+        ring::hmac::verify(&key, &message, &expected)
+            .map_err(|_| io::Error::other("Audit record authentication failed"))?;
+        previous = record.mac.clone();
+    }
+    let first = &session.audit[0].payload;
+    if first.event != "session_started"
+        || first.workspace != session.workspace
+        || first.program != session.program
+        || first.snapshot_sha256 != snapshot_digest(&session.before)?
+    {
+        return Err(io::Error::other(
+            "Audit start record does not match the session manifest",
+        ));
+    }
+    if let Some(after) = &session.after {
+        let last = &session.audit[session.audit.len() - 1].payload;
+        if last.event != "session_completed"
+            || last.workspace != session.workspace
+            || last.program != session.program
+            || last.snapshot_sha256 != snapshot_digest(after)?
+            || last.changes != audit_changes(&session.before, after)?
+        {
+            return Err(io::Error::other(
+                "Audit completion record does not match the session snapshot",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn audit_list() -> io::Result<i32> {
+    let store = store_root_for_commands()?;
+    let mut sessions = load_sessions(&store)?;
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.created_unix_ms));
+    println!("SESSION\tEVENTS\tSTATUS");
+    for session in sessions {
+        let status = if session.audit.is_empty() {
+            "not audited"
+        } else if verify_audit(&store, &session).is_ok() {
+            "verified"
+        } else {
+            "invalid"
+        };
+        println!("{}\t{}\t{}", session.id, session.audit.len(), status);
+    }
+    Ok(0)
+}
+fn audit_show(id: &str) -> io::Result<i32> {
+    let store = store_root_for_commands()?;
+    let session = read_session(&store, id)?;
+    println!("Audit for {} ({} events)", id, session.audit.len());
+    for record in session.audit {
+        println!(
+            "{}\t{}\t{}",
+            record.sequence, record.payload.event, record.payload.timestamp_unix_ms
+        );
+    }
+    Ok(0)
+}
+fn audit_verify(id: &str) -> io::Result<i32> {
+    let store = store_root_for_commands()?;
+    let session = read_session(&store, id)?;
+    verify_audit(&store, &session)?;
+    println!("Audit verified: {} ({} events)", id, session.audit.len());
+    Ok(0)
 }
 
 fn required_text(arguments: &[OsString], index: usize) -> io::Result<&str> {
