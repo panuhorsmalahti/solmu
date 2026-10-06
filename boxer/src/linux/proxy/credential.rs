@@ -9,6 +9,7 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
+use subtle::ConstantTimeEq;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -162,7 +163,7 @@ async fn serve(
         client.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").await?;
     }
     let target = Target::parse(request.credential.provider.host(), false)?;
-    let mut socket = match super::host::connect(&target, false).await {
+    let socket = match super::host::connect(&target, false).await {
         Ok(socket) => socket,
         Err(_) => return response(&mut client, 502, "Provider connection failed").await,
     };
@@ -180,7 +181,7 @@ async fn serve(
     remote_writer
         .write_all(request.upstream_header.as_bytes())
         .await?;
-    let (mut client_reader, mut client_writer) = tokio::io::split(client);
+    let (client_reader, mut client_writer) = tokio::io::split(client);
 
     let upload = async {
         let mut limited = client_reader.take(request.body_limit);
@@ -314,12 +315,7 @@ fn parse_request(
         }
         CredentialProvider::Anthropic => supplied_token.as_str(),
     };
-    if ring::constant_time::verify_slices_are_equal(
-        supplied_token.as_bytes(),
-        credential.token.as_bytes(),
-    )
-    .is_err()
-    {
+    if !bool::from(supplied_token.as_bytes().ct_eq(credential.token.as_bytes())) {
         return Err(RequestError::Unauthorized);
     }
 
@@ -348,7 +344,7 @@ fn parse_request(
     if method == "POST" && content_length.is_none() && !chunked {
         return Err(RequestError::Invalid);
     }
-    let body_limit = content_length.unwrap_or_else(|| if chunked { MAX_CONTENT_LENGTH } else { 0 });
+    let body_limit = content_length.unwrap_or(if chunked { MAX_CONTENT_LENGTH } else { 0 });
     Ok(Request {
         credential,
         server_name,
