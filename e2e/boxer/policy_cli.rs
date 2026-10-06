@@ -173,6 +173,34 @@ fn full_policy_scaffold_preserves_inherited_scalar_security_settings() {
 }
 
 #[test]
+fn policy_show_raw_preserves_declared_paths_before_resolution() {
+    let root = tempfile::tempdir().unwrap();
+    let policy_path = root.path().join("policy.json");
+    std::fs::write(
+        &policy_path,
+        r#"{"version":1,"mode":"workspace","network":"allow","read":["$HOME/.ssh","relative/data"]}"#,
+    )
+    .unwrap();
+
+    let output = Command::new(binary("boxer"))
+        .args(["policy", "show"])
+        .arg(&policy_path)
+        .arg("--raw")
+        .current_dir(root.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let shown: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(shown["resolved"], false);
+    assert_eq!(shown["policy"]["read"][0], "$HOME/.ssh");
+    assert_eq!(shown["policy"]["read"][1], "relative/data");
+}
+
+#[test]
 fn policy_commands_validate_resolve_diff_and_list_builtin_profiles() {
     let temp = tempfile::tempdir().unwrap();
     let workspace = temp.path().join("workspace");

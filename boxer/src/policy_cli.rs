@@ -50,9 +50,14 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
             Ok(0)
         }
         Some("show") if args.len() >= 3 => {
-            let (file, workspace) = parse_file_and_cwd(args, 2)?;
-            let policy = load(&file, &workspace)?;
-            println!("{}", serde_json::to_string_pretty(&json!({"platform":std::env::consts::OS,"platform_supported":supported(&policy),"workspace":workspace,"policy":policy})).map_err(io::Error::other)?);
+            let (file, workspace, raw) = parse_show_args(args)?;
+            if raw {
+                let policy = Policy::from_file_raw(&file)?;
+                println!("{}", serde_json::to_string_pretty(&json!({"platform":std::env::consts::OS,"workspace":workspace,"resolved":false,"policy":policy})).map_err(io::Error::other)?);
+            } else {
+                let policy = load(&file, &workspace)?;
+                println!("{}", serde_json::to_string_pretty(&json!({"platform":std::env::consts::OS,"platform_supported":supported(&policy),"workspace":workspace,"policy":policy})).map_err(io::Error::other)?);
+            }
             Ok(0)
         }
         Some("diff") if args.len() >= 4 => {
@@ -288,6 +293,25 @@ fn parse_file_and_cwd(args: &[OsString], file_index: usize) -> io::Result<(PathB
         }
     }
     Ok((file, workspace.canonicalize()?))
+}
+
+fn parse_show_args(args: &[OsString]) -> io::Result<(PathBuf, PathBuf, bool)> {
+    let file = resolve_policy_reference(Path::new(&args[2]))?;
+    let mut workspace = std::env::current_dir()?;
+    let mut raw = false;
+    let mut index = 3;
+    while index < args.len() {
+        if args[index] == "--cwd" && index + 1 < args.len() {
+            workspace = PathBuf::from(&args[index + 1]);
+            index += 2;
+        } else if args[index] == "--raw" && !raw {
+            raw = true;
+            index += 1;
+        } else {
+            return Err(usage());
+        }
+    }
+    Ok((file, workspace.canonicalize()?, raw))
 }
 
 fn resolve_policy_reference(reference: &Path) -> io::Result<PathBuf> {

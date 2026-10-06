@@ -793,8 +793,16 @@ fn dangerous_inherited_env(name: &str) -> bool {
 
 impl Policy {
     pub fn from_file(path: &Path) -> io::Result<Self> {
+        Self::from_file_with_path_resolution(path, true)
+    }
+
+    pub fn from_file_raw(path: &Path) -> io::Result<Self> {
+        Self::from_file_with_path_resolution(path, false)
+    }
+
+    fn from_file_with_path_resolution(path: &Path, resolve_paths: bool) -> io::Result<Self> {
         let mut ancestors = std::collections::HashSet::new();
-        let object = load_policy_chain(path, &mut ancestors, 0)?;
+        let object = load_policy_chain(path, &mut ancestors, 0, resolve_paths)?;
         if !object.contains_key("mode") {
             return Err(io::Error::other(
                 "Policy requires an explicit mode: unrestricted, workspace, or isolated",
@@ -1357,6 +1365,7 @@ fn load_policy_chain(
     path: &Path,
     ancestors: &mut std::collections::HashSet<PathBuf>,
     depth: usize,
+    resolve_paths: bool,
 ) -> io::Result<serde_json::Map<String, serde_json::Value>> {
     if depth >= 16 {
         return Err(io::Error::other("Policy inheritance exceeds 16 levels"));
@@ -1406,11 +1415,13 @@ fn load_policy_chain(
                 ));
             }
         };
-        resolve_policy_layer_paths(&mut object, &path)?;
+        if resolve_paths {
+            resolve_policy_layer_paths(&mut object, &path)?;
+        }
         let mut merged = serde_json::Map::new();
         for parent in parents {
             let parent_path = inherited_policy_path(&path, &parent)?;
-            let base = load_policy_chain(&parent_path, ancestors, depth + 1)?;
+            let base = load_policy_chain(&parent_path, ancestors, depth + 1, resolve_paths)?;
             merge_policy_objects(&mut merged, base);
         }
         merge_policy_objects(&mut merged, object);

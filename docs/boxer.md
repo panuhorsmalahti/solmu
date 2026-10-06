@@ -720,6 +720,7 @@ boxer policy schema
 boxer policy profiles
 boxer policy validate ./boxer-policy.json --cwd /path/to/project
 boxer policy show ./boxer-policy.json --cwd /path/to/project
+boxer policy show ./boxer-policy.json --raw
 boxer policy diff ./before.json ./after.json --cwd /path/to/project
 ```
 
@@ -728,6 +729,9 @@ with no additional path grants. It refuses to overwrite an existing file. Edit
 the generated JSON, then validate it before using `--policy` to launch a program.
 `policy schema` prints the JSON Schema for editors and other JSON tooling;
 `policy validate` also checks combinations that depend on Boxer runtime rules.
+Add `--raw` to `policy show` to inspect the merged policy before relative paths
+and `$HOME` or `$WORKSPACE` path variables are resolved. Raw output is marked
+`"resolved": false` and does not report platform support.
 
 `validate` parses and resolves the policy and reports whether Boxer has a
 backend for it on the current platform. `show` prints its resolved values, and
