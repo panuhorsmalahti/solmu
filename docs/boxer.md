@@ -715,6 +715,7 @@ rejected before launch. Resource controls require `isolated` mode.
 Inspect saved policy files without launching the agent:
 
 ```sh
+boxer policy guide
 boxer policy init
 boxer policy init reviewer --extends base
 boxer policy init reviewer --extends base --full
@@ -731,6 +732,7 @@ boxer policy diff ./before.json ./after.json --cwd /path/to/project
 with no additional path grants. It refuses to overwrite an existing file. Edit
 the generated JSON, then validate it before using `--policy` to launch a program.
 `policy schema` prints the JSON Schema for editors and other JSON tooling;
+`policy guide` prints an authoring reference followed by the current schema;
 `policy validate` also checks combinations that depend on Boxer runtime rules.
 Add `--raw` to `policy show` to inspect the merged policy before relative paths
 and `$HOME` or `$WORKSPACE` path variables are resolved. Raw output is marked

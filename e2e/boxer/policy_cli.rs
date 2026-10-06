@@ -48,6 +48,22 @@ fn policy_init_creates_a_valid_scaffold_without_overwriting_existing_files() {
 }
 
 #[test]
+fn policy_guide_prints_authoring_rules_and_the_current_schema() {
+    let output = run(&["policy", "guide"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let guide = String::from_utf8(output.stdout).unwrap();
+    assert!(guide.contains("Boxer policy authoring guide"));
+    assert!(guide.contains("parents merge from left to right"));
+    assert!(guide.contains("unsupported restrictions fail closed"));
+    assert!(guide.contains("\"$schema\": \"https://json-schema.org/draft/2020-12/schema\""));
+    assert!(guide.contains("\"custom_credentials\""));
+}
+
+#[test]
 fn policy_init_scaffolds_a_named_profile_with_optional_inheritance() {
     let root = tempfile::tempdir().unwrap();
     let profiles = root.path().join("profiles");

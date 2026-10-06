@@ -26,6 +26,7 @@ const PROFILES: &[(&str, &str)] = &[
 pub fn command(args: &[OsString]) -> io::Result<i32> {
     match args.get(1).and_then(|arg| arg.to_str()) {
         Some("init") => init(&args[2..]),
+        Some("guide") if args.len() == 2 => guide(),
         Some("schema") if args.len() == 2 => schema(),
         Some("profiles") if args.len() == 2 => {
             let mut profiles: Vec<_> = PROFILES
@@ -102,8 +103,97 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
     }
 }
 
+fn guide() -> io::Result<i32> {
+    println!(
+        "{}\n\nMachine-readable schema:\n{}",
+        POLICY_GUIDE,
+        serde_json::to_string_pretty(&schema_value()).map_err(io::Error::other)?
+    );
+    Ok(0)
+}
+
+const POLICY_GUIDE: &str = r#"Boxer policy authoring guide
+
+Purpose
+  A policy controls the filesystem, network, environment, and resource limits
+  visible to a launched process. Policies are JSON or JSONC, versioned with
+  `version: 1`. `mode` is required: `unrestricted`, `workspace`, or `isolated`.
+  Validate and inspect a policy before using it to start an agent.
+
+Start and inspect
+  `boxer policy init [NAME] [--extends BASE ...] [--full] [--output FILE]`
+  creates a starter policy and never overwrites an existing file. `--extends`
+  may be repeated; parents merge from left to right, then the child is applied.
+  List fields are combined without duplicates, nested objects merge, and later
+  scalar values override earlier ones. Missing parents and malformed policies
+  are rejected before the child is written.
+
+  `boxer policy validate FILE --cwd WORKSPACE` resolves paths and checks policy
+  combinations. `boxer policy show FILE --cwd WORKSPACE` prints resolved policy
+  values. Add `--raw` to show the merged values before path resolution.
+  `boxer policy diff BEFORE AFTER --cwd WORKSPACE` compares resolved fields.
+  `boxer policy schema` prints the machine-readable schema; this guide appends
+  the same schema below.
+
+Filesystem
+  `read` grants existing files or directories read access. `write` grants
+  read/write access. `write_only` grants write access without reading and is
+  available in workspace mode on Linux and macOS. `read_only: true` denies
+  writes, so it cannot be combined with writable grants. In workspace mode,
+  filesystem access starts at the workspace; add grants only when needed.
+  Relative grants resolve against the file that declares them. `$HOME` and
+  `$WORKSPACE` are the only supported path variables. Grant paths must exist.
+
+Network
+  `network` is `allow`, `deny`, or `proxy`. `allow` is the default for an
+  initialized standalone policy. `deny` blocks socket networking. `proxy` is
+  supported only in Linux isolated mode and routes HTTP(S) through Boxer's
+  broker. `hosts` allows destination hosts; `deny_hosts` blocks them before
+  allow rules. `network_profile` selects a built-in host set. `upstream_proxy`
+  and `upstream_bypass` configure the proxy's upstream. `local` forwards a host
+  service into the sandbox and `publish` exposes sandbox ports on the host.
+  `proxy_port` selects the broker port. Proxy-specific fields require proxy
+  mode and applicable isolated networking.
+
+Credentials and endpoints
+  `credentials` selects built-in credential routes. `custom_credentials` maps
+  route names to HTTPS upstreams and injection settings. `endpoint_rules`
+  restricts a route by provider, HTTP method, and path; each provider must also
+  appear in `credentials`. Never put secret values in a policy file.
+
+Environment
+  `clean_env: true` forwards only Boxer-approved variables; `pass_env` adds
+  names to that baseline. `environment.allow_vars` and `deny_vars` filter names
+  (patterns support `*`); `case_insensitive_vars` changes matching behavior;
+  `set_vars` adds literal values. `env_credentials` forwards named credentials
+  through Boxer, while `env_credential_map` maps host names to child names.
+  When extending a policy, omit scalar settings you want to inherit. Empty
+  additive lists and maps do not remove values from a parent.
+
+Runtime and resource limits
+  `runtime_groups` grants read access to detected Node, Python, Rust, or Go
+  toolchain files. Groups require workspace or isolated mode. `cpus`,
+  `memory_mib`, and `pids` limit an isolated process tree; `cgroup_root` selects
+  its delegated Linux cgroup parent. Resource limits require isolated mode.
+
+Important boundaries
+  Policies describe requested rules, but available enforcement depends on the
+  host OS. `policy validate` and `policy show` report current-platform support;
+  they do not apply kernel controls. `boxer --policy FILE --cwd PATH --check`
+  probes enforcement before launch. Unsupported restrictions fail closed.
+  Do not infer that a policy is enforced merely because it parses successfully.
+"#;
+
 fn schema() -> io::Result<i32> {
-    let schema = json!({
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&schema_value()).map_err(io::Error::other)?
+    );
+    Ok(0)
+}
+
+fn schema_value() -> Value {
+    json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://solmu.dev/schemas/boxer-policy-v1.json",
         "title": "Solmu Boxer policy",
@@ -156,12 +246,7 @@ fn schema() -> io::Result<i32> {
             "if": {"properties": {"network": {"const": "proxy"}}, "required": ["network"]},
             "then": {"properties": {"mode": {"const": "isolated"}}}
         }]
-    });
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&schema).map_err(io::Error::other)?
-    );
-    Ok(0)
+    })
 }
 
 fn init(args: &[OsString]) -> io::Result<i32> {
@@ -359,6 +444,6 @@ fn supported(policy: &Policy) -> bool {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer policy init [NAME] [--extends PROFILE [--extends PROFILE ...]] [--full] [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
+        "Usage: boxer policy guide | init [NAME] [--extends PROFILE [--extends PROFILE ...]] [--full] [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
     )
 }
