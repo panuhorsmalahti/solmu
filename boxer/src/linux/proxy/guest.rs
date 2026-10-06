@@ -144,23 +144,6 @@ fn bind_proxy_listener(proxy_port: Option<u16>, reserved_ports: &[u16]) -> io::R
     ))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn network_proxy_binds_the_requested_port_and_rejects_collisions() {
-        let occupied = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = occupied.local_addr().unwrap().port();
-        assert!(bind_proxy_listener(Some(port), &[]).is_err());
-        drop(occupied);
-
-        let listener = bind_proxy_listener(Some(port), &[]).unwrap();
-        assert_eq!(listener.local_addr().unwrap().port(), port);
-        assert!(bind_proxy_listener(Some(port), &[port]).is_err());
-    }
-}
-
 struct Active(Arc<AtomicUsize>);
 impl Drop for Active {
     fn drop(&mut self) {
@@ -337,4 +320,21 @@ fn proxy_request(header: &[u8]) -> io::Result<(Target, Option<String>)> {
 
 fn authority(value: &str) -> io::Result<Target> {
     Target::parse(value, false).or_else(|_| Target::parse(value, true))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn network_proxy_binds_the_requested_port_and_rejects_collisions() {
+        let occupied = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = occupied.local_addr().unwrap().port();
+        assert!(bind_proxy_listener(Some(port), &[]).is_err());
+        drop(occupied);
+
+        let listener = bind_proxy_listener(Some(port), &[]).unwrap();
+        assert_eq!(listener.local_addr().unwrap().port(), port);
+        assert!(bind_proxy_listener(Some(port), &[port]).is_err());
+    }
 }
