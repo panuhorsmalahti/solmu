@@ -701,7 +701,7 @@ fn query_credential(
                     form_urlencoded::byte_serialize(secret.as_bytes()).collect::<String>(),
                 );
                 let raw_key = item.split_once('=').map_or(item, |(key, _)| key);
-                rewritten.push(format!("{raw_key}={encoded}"));
+                rewritten.push(format!("{raw_key}={}", encoded.as_str()));
             } else {
                 found = Some(value.into_owned());
                 rewritten.push(item.to_owned());
@@ -885,6 +885,10 @@ mod tests {
                 host: "api.example.com".to_owned(),
                 incoming_header: "X-API-Key".to_owned(),
                 credential_format: "Key {}".to_owned(),
+                inject_mode: CredentialInjectionMode::Header,
+                path_pattern: None,
+                path_replacement: None,
+                query_param_name: None,
                 secret: Zeroizing::new("real-secret".to_owned()),
                 token: Zeroizing::new("session-token".to_owned()),
             }),
