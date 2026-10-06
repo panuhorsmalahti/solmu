@@ -34,31 +34,40 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     }
     // The launcher is single-threaded. Apply the irreversible policy before exec,
     // rather than allocating or taking locks in a post-fork pre_exec callback.
-    let abi = filesystem_abi()?;
-    let handled = AccessFs::from_all(abi);
+    let handled = AccessFs::from_all(ABI::V5);
     let writable = if policy.protect_unlink {
         handled & !AccessFs::RemoveDir & !AccessFs::RemoveFile
     } else {
         handled
     };
     let allowed = if policy.read_only {
-        AccessFs::from_read(abi)
+        AccessFs::from_read(ABI::V5)
     } else {
         writable
     };
     let mut ruleset = Ruleset::default()
         .set_compatibility(CompatLevel::HardRequirement)
+        .handle_access(AccessFs::from_all(ABI::V3))
+        .map_err(io::Error::other)?
+        .set_compatibility(CompatLevel::BestEffort)
         .handle_access(handled)
         .map_err(io::Error::other)?;
     if policy.linux_signal_scope {
-        ruleset = ruleset.scope(Scope::Signal).map_err(io::Error::other)?;
+        ruleset = ruleset
+            .set_compatibility(CompatLevel::HardRequirement)
+            .scope(Scope::Signal)
+            .map_err(io::Error::other)?;
     }
     if policy.linux_abstract_unix_socket_scope {
         ruleset = ruleset
+            .set_compatibility(CompatLevel::HardRequirement)
             .scope(Scope::AbstractUnixSocket)
             .map_err(io::Error::other)?;
     }
-    let mut rules = ruleset.create().map_err(io::Error::other)?;
+    let mut rules = ruleset
+        .set_compatibility(CompatLevel::BestEffort)
+        .create()
+        .map_err(io::Error::other)?;
     if policy.mode == Mode::Workspace {
         let executable = policy::executable(&command)?;
         let mut read = policy::runtime_paths();
@@ -76,9 +85,9 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
         policy.validate_write_only_overlaps(&readable_grants)?;
         for path in read {
             let access = if path.is_file() {
-                AccessFs::from_read(abi) & AccessFs::from_file(abi)
+                AccessFs::from_read(ABI::V5) & AccessFs::from_file(ABI::V5)
             } else {
-                AccessFs::from_read(abi)
+                AccessFs::from_read(ABI::V5)
             };
             rules = rules
                 .add_rule(PathBeneath::new(
@@ -96,7 +105,7 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
             .map_err(io::Error::other)?;
         for path in &policy.write {
             let access = if path.is_file() {
-                writable & AccessFs::from_file(abi)
+                writable & AccessFs::from_file(ABI::V5)
             } else {
                 writable
             };
@@ -108,14 +117,14 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
                 .map_err(io::Error::other)?;
         }
         for path in &policy.write_only {
-            let write_only = AccessFs::from_write(abi) & !AccessFs::IoctlDev;
+            let write_only = AccessFs::from_write(ABI::V5) & !AccessFs::IoctlDev;
             let write_only = if policy.protect_unlink {
                 write_only & !AccessFs::RemoveDir & !AccessFs::RemoveFile
             } else {
                 write_only
             };
             let access = if path.is_file() {
-                write_only & AccessFs::from_file(abi)
+                write_only & AccessFs::from_file(ABI::V5)
             } else {
                 write_only
             };
@@ -130,7 +139,7 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
             rules = rules
                 .add_rule(PathBeneath::new(
                     PathFd::new(path).map_err(io::Error::other)?,
-                    AccessFs::from_file(abi),
+                    AccessFs::from_file(ABI::V5),
                 ))
                 .map_err(io::Error::other)?;
         }
@@ -142,7 +151,14 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
             ))
             .map_err(io::Error::other)?;
     }
-    rules.restrict_self().map_err(io::Error::other)?;
+    let status = rules.restrict_self().map_err(io::Error::other)?;
+    if let LandlockStatus::Available { effective_abi, .. } = status.landlock
+        && effective_abi < ABI::V5
+    {
+        eprintln!(
+            "Warning: Landlock {effective_abi:?} is available; Boxer is using its supported filesystem controls, but device ioctl restrictions from ABI v5 are unavailable"
+        );
+    }
     if policy.network == Network::Deny {
         seccomp::install_network_denial()?;
     }
@@ -154,22 +170,6 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
         });
     }
     Err(command.exec())
-}
-
-fn filesystem_abi() -> io::Result<ABI> {
-    let detected = ABI::from(LandlockStatus::current());
-    if detected < ABI::V3 {
-        return Err(io::Error::other(format!(
-            "Landlock ABI v3 or newer is required for workspace filesystem isolation (detected {detected:?})"
-        )));
-    }
-    let selected = detected.min(ABI::V5);
-    if selected < ABI::V5 {
-        eprintln!(
-            "Warning: Landlock ABI {selected:?} is available; Boxer is using its supported filesystem controls, but device ioctl restrictions from ABI v5 are unavailable"
-        );
-    }
-    Ok(selected)
 }
 
 fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
@@ -485,7 +485,7 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
         .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
 }
 
-fn scope_worker(mut sandbox: Command, policy: &Policy) -> io::Result<Command> {
+fn scope_worker(sandbox: Command, policy: &Policy) -> io::Result<Command> {
     let arguments: Vec<_> = sandbox.get_args().map(std::ffi::OsStr::to_owned).collect();
     let separator = arguments
         .iter()
