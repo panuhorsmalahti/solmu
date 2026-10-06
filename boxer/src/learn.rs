@@ -1,7 +1,7 @@
 use crate::policy::{self, Mode, Network as NetworkPolicy, Policy};
 use serde::Serialize;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     io,
     os::unix::process::CommandExt,
@@ -14,8 +14,8 @@ use std::{
 struct Trace {
     read: BTreeSet<PathBuf>,
     write: BTreeSet<PathBuf>,
-    outbound: BTreeSet<(String, u16)>,
-    listening: BTreeSet<(String, u16)>,
+    outbound: BTreeMap<(String, u16), usize>,
+    listening: BTreeMap<(String, u16), usize>,
 }
 
 #[derive(Serialize)]
@@ -45,6 +45,7 @@ struct Network {
 struct Endpoint {
     address: String,
     port: u16,
+    count: usize,
 }
 
 #[derive(Serialize)]
@@ -226,16 +227,8 @@ impl Trace {
                 read_write,
             },
             network: Network {
-                outbound: self
-                    .outbound
-                    .into_iter()
-                    .map(|(address, port)| Endpoint { address, port })
-                    .collect(),
-                listening: self
-                    .listening
-                    .into_iter()
-                    .map(|(address, port)| Endpoint { address, port })
-                    .collect(),
+                outbound: self.outbound.into_iter().map(endpoint_record).collect(),
+                listening: self.listening.into_iter().map(endpoint_record).collect(),
             },
             policy_gaps,
             command_exit_code,
@@ -291,22 +284,8 @@ impl Trace {
             .cloned()
             .collect();
 
-        let outbound: Vec<_> = self
-            .outbound
-            .iter()
-            .map(|(address, port)| Endpoint {
-                address: address.clone(),
-                port: *port,
-            })
-            .collect();
-        let listening: Vec<_> = self
-            .listening
-            .iter()
-            .map(|(address, port)| Endpoint {
-                address: address.clone(),
-                port: *port,
-            })
-            .collect();
+        let outbound: Vec<_> = self.outbound.iter().map(endpoint_record_ref).collect();
+        let listening: Vec<_> = self.listening.iter().map(endpoint_record_ref).collect();
         let (
             outbound_denied,
             outbound_hostname_check_needed,
@@ -343,6 +322,22 @@ impl Trace {
     }
 }
 
+fn endpoint_record(((address, port), count): ((String, u16), usize)) -> Endpoint {
+    Endpoint {
+        address,
+        port,
+        count,
+    }
+}
+
+fn endpoint_record_ref(((address, port), count): (&(String, u16), &usize)) -> Endpoint {
+    Endpoint {
+        address: address.clone(),
+        port: *port,
+        count: *count,
+    }
+}
+
 fn read_allowed(path: &Path, policy: &Policy, roots: &[PathBuf]) -> bool {
     !covered_by(path, &policy.write_only)
         && (policy.mode == Mode::Unrestricted || covered_by(path, roots))
@@ -376,13 +371,13 @@ fn parse(contents: &str, directory: &Path) -> Trace {
         if matches!(call, "connect" | "sendto")
             && let Some((address, port)) = endpoint(arguments)
         {
-            trace.outbound.insert((address, port));
+            *trace.outbound.entry((address, port)).or_default() += 1;
             continue;
         }
         if call == "bind"
             && let Some((address, port)) = endpoint(arguments)
         {
-            trace.listening.insert((address, port));
+            *trace.listening.entry((address, port)).or_default() += 1;
             continue;
         }
         let paths = quoted_values(arguments);
@@ -606,7 +601,17 @@ fn print_endpoints(endpoints: &[Endpoint]) {
         println!("  (none)");
     } else {
         for endpoint in endpoints {
-            println!("  {}:{}", endpoint.address, endpoint.port);
+            println!(
+                "  {}:{} ({} {})",
+                endpoint.address,
+                endpoint.port,
+                endpoint.count,
+                if endpoint.count == 1 {
+                    "access"
+                } else {
+                    "accesses"
+                }
+            );
         }
     }
 }
@@ -630,6 +635,7 @@ mod tests {
                 "[pid 123] openat(AT_FDCWD</work/project>, \"output.txt\", O_WRONLY|O_CREAT|O_CLOEXEC, 0666) = 4\n",
                 "[pid 123] openat(AT_FDCWD</work/project>, \"both.txt\", O_RDWR|O_CLOEXEC) = 5\n",
                 "[pid 123] connect(3, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr(\"203.0.113.8\")}, 16) = 0\n",
+                "[pid 123] connect(3, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr(\"203.0.113.8\")}, 16) = 0\n",
                 "[pid 123] bind(4, {sa_family=AF_INET6, sin6_port=htons(8080), inet_pton(AF_INET6, \"::1\", &sin6_addr)}, 28) = 0\n",
             ),
             directory,
@@ -638,7 +644,7 @@ mod tests {
         assert!(trace.write.contains(Path::new("/work/project/output.txt")));
         assert!(trace.read.contains(Path::new("/work/project/both.txt")));
         assert!(trace.write.contains(Path::new("/work/project/both.txt")));
-        assert!(trace.outbound.contains(&("203.0.113.8".into(), 443)));
-        assert!(trace.listening.contains(&("::1".into(), 8080)));
+        assert_eq!(trace.outbound.get(&("203.0.113.8".into(), 443)), Some(&2));
+        assert_eq!(trace.listening.get(&("::1".into(), 8080)), Some(&1));
     }
 }

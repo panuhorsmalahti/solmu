@@ -17,6 +17,16 @@ fn main() {
         eprintln!("learn fixture stderr");
         return;
     }
+    if arguments
+        .first()
+        .is_some_and(|value| value == "--learn-network-fixture")
+    {
+        let address = arguments[1].to_string_lossy();
+        for _ in 0..2 {
+            TcpStream::connect(address.as_ref()).unwrap();
+        }
+        return;
+    }
     if arguments.first().is_some_and(|value| {
         value == "--write-only-check" || value == "--write-only-directory-check"
     }) {

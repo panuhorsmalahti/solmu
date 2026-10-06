@@ -101,6 +101,36 @@ fn learn_compares_discovered_access_with_a_resolved_boxer_policy() {
 }
 
 #[test]
+fn learn_counts_repeated_network_access_to_each_endpoint() {
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let result = Command::new(binary("boxer"))
+        .args(["learn", "--json", "--"])
+        .arg(binary("sandbox-probe"))
+        .arg("--learn-network-fixture")
+        .arg(address.to_string())
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    for _ in 0..2 {
+        let (stream, _) = listener.accept().unwrap();
+        drop(stream);
+    }
+    let report: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let outbound = report["network"]["outbound"].as_array().unwrap();
+    assert_eq!(outbound.len(), 1);
+    assert_eq!(outbound[0]["address"], "127.0.0.1");
+    assert_eq!(outbound[0]["port"], address.port());
+    assert_eq!(outbound[0]["count"], 2);
+}
+
+#[test]
 fn learn_requires_a_command_and_rejects_invalid_timeouts() {
     for arguments in [
         vec!["learn"],

@@ -126,7 +126,8 @@ boxer learn --policy boxer-policy.json -- solmu
 ```
 
 JSON output separates read, write, and read/write paths and includes numeric
-network addresses and ports. DNS names are not resolved, and the report only
+network addresses and ports, with counts for repeated connections or listeners.
+Paths are deduplicated. DNS names are not resolved, and the report only
 includes successful traced operations. `--timeout` stops the traced process
 group and returns status 124 when the limit is reached. This feature currently
 requires Linux; other platforms report that it is unavailable. With `--json`,
