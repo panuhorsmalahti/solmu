@@ -386,7 +386,11 @@ fn decode_path(path: &str) -> Option<String> {
         if input[index] == b'%' {
             let high = *input.get(index + 1)?;
             let low = *input.get(index + 2)?;
-            output.push(hex_digit(high)? * 16 + hex_digit(low)?);
+            let decoded = hex_digit(high)? * 16 + hex_digit(low)?;
+            if matches!(decoded, b'/' | b'\\') {
+                return None;
+            }
+            output.push(decoded);
             index += 3;
         } else {
             output.push(input[index]);
@@ -600,5 +604,14 @@ mod tests {
             &rules,
         );
         assert!(matches!(denied, Err(RequestError::Forbidden)));
+    }
+
+    #[test]
+    fn endpoint_path_decoding_rejects_encoded_separators_and_traversal() {
+        assert!(decode_path("/v1/chat%2Fcompletions").is_none());
+        assert!(decode_path("/v1/chat%5ccompletions").is_none());
+        assert!(decode_path("/v1/%2e%2e/admin").is_none());
+        assert_eq!(decode_path("/v1/chat%2Fcompletions"), None);
+        assert_eq!(decode_path("/v1/chat%20completions"), None);
     }
 }
