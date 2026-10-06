@@ -135,6 +135,8 @@ PY
 xdotool mousemove --window "$window" 240 131 click 1
 sleep 0.3
 import -window "$window" docs/screenshots/muxer-gui.png
+single_pane_color=$(convert docs/screenshots/muxer-gui.png -format '%[pixel:p{100,310}]' info:)
+[ "$single_pane_color" != 'srgb(224,233,223)' ] || { echo 'A single pane should not appear as a selectable sidebar item' >&2; exit 1; }
 xdotool mousemove --window "$window" 75 168 click 1
 sleep 0.3
 created=''
