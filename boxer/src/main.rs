@@ -41,6 +41,10 @@ fn main() {
         }
     };
     #[cfg(unix)]
+    let session_daemon = sessions::daemon_id(&arguments);
+    #[cfg(not(unix))]
+    let session_daemon: Option<String> = None;
+    #[cfg(unix)]
     sessions::set_child(session_child.is_some());
     #[cfg(unix)]
     if let Some(id) = &session_child
@@ -49,7 +53,24 @@ fn main() {
         eprintln!("Solmu Boxer: {error}");
         std::process::exit(125);
     }
-    let result = if arguments.first().is_some_and(|arg| arg == "sessions") {
+    let result = if session_daemon.is_some() {
+        #[cfg(unix)]
+        {
+            sessions::daemon(&arguments)
+        }
+        #[cfg(not(unix))]
+        {
+            Err(io::Error::other(
+                "Detached sessions are currently supported on Linux and macOS",
+            ))
+        }
+    } else if arguments.first().is_some_and(|arg| {
+        [
+            "sessions", "ps", "attach", "detach", "inspect", "stop", "prune",
+        ]
+        .iter()
+        .any(|command| arg == command)
+    }) {
         #[cfg(unix)]
         {
             sessions::command(&arguments)
@@ -291,7 +312,7 @@ fn run() -> io::Result<i32> {
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|verify` reviews the local audit trail."
             );
             println!(
-                "--detached: start a background session; manage it with `boxer sessions list|inspect|logs|stop|prune` (Linux/macOS)."
+                "--detached: start a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach (Linux/macOS). Manage sessions with `boxer ps|inspect|stop|prune`."
             );
             return Ok(0);
         } else if argument == "--version" {

@@ -29,17 +29,21 @@ standard output and errors there. Review, stop, and clean up sessions with:
 
 ```sh
 boxer --detached --profile solmu --cwd /path/to/project -- solmu
-boxer sessions list
-boxer sessions inspect <session-id>
+boxer ps
+boxer attach <session-id>
+# Press Ctrl-] followed by d to detach and leave the session running.
+boxer detach <session-id>
+boxer inspect <session-id>
 boxer sessions logs <session-id>
-boxer sessions stop <session-id>
-boxer sessions prune
+boxer stop <session-id>
+boxer prune
 ```
 
 The session runs in its own process group so stopping it also signals ordinary
-child processes. Boxer stores the workspace and command with each session. This
-first detached-session workflow captures logs rather than reconnecting an
-interactive terminal.
+child processes. Boxer stores the workspace and command with each session.
+Attaching reconnects to the same terminal, including interactive prompts; output
+produced while detached is kept in a short terminal history and in the session
+log. Session records and the local attach socket are private to your account.
 
 ## Explain a path decision
 
