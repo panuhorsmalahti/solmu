@@ -122,7 +122,11 @@ async fn connect(target: &Target, local: bool) -> io::Result<TcpStream> {
             .await?
             .take(32)
             .collect::<Vec<_>>();
-        if addresses.is_empty() || (!local && addresses.iter().any(|address| !public(address.ip())))
+        if addresses.is_empty()
+            || (!local
+                && addresses
+                    .iter()
+                    .any(|address| !crate::network::is_globally_routable(address.ip())))
         {
             return Err(io::Error::other(
                 "Remote routes cannot resolve to private or special-use addresses",
@@ -149,90 +153,4 @@ async fn connect(target: &Target, local: bool) -> io::Result<TcpStream> {
     })
     .await
     .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "Network route timed out"))?
-}
-
-fn public(address: IpAddr) -> bool {
-    match address {
-        IpAddr::V4(address) => {
-            let address = u32::from(address);
-            ![
-                (0x0000_0000, 8),  // This network
-                (0x0a00_0000, 8),  // Private use
-                (0x6440_0000, 10), // Shared address space
-                (0x7f00_0000, 8),  // Loopback
-                (0xa9fe_0000, 16), // Link local
-                (0xac10_0000, 12), // Private use
-                (0xc000_0000, 24), // IETF protocol assignments
-                (0xc000_0200, 24), // Documentation
-                (0xc058_6300, 24), // Deprecated 6to4 relay anycast
-                (0xc0a8_0000, 16), // Private use
-                (0xc612_0000, 15), // Benchmarking
-                (0xc633_6400, 24), // Documentation
-                (0xcb00_7100, 24), // Documentation
-                (0xe000_0000, 4),  // Multicast
-                (0xf000_0000, 4),  // Reserved
-            ]
-            .iter()
-            .any(|(network, prefix)| ipv4_in_subnet(address, *network, *prefix))
-        }
-        IpAddr::V6(address) => {
-            if let Some(address) = address.to_ipv4_mapped() {
-                return public(IpAddr::V4(address));
-            }
-            let segments = address.segments();
-            let address = u128::from(address);
-            (segments[0] & 0xe000 == 0x2000)
-                && ![
-                    (0x2001_0000_0000_0000_0000_0000_0000_0000, 23), // IETF assignments
-                    (0x2001_0000_0000_0000_0000_0000_0000_0000, 32), // Teredo
-                    (0x2001_0002_0000_0000_0000_0000_0000_0000, 48), // Benchmarking
-                    (0x2001_0db8_0000_0000_0000_0000_0000_0000, 32), // Documentation
-                    (0x2002_0000_0000_0000_0000_0000_0000_0000, 16), // 6to4
-                    (0x3fff_0000_0000_0000_0000_0000_0000_0000, 20), // Documentation
-                    (0x5f00_0000_0000_0000_0000_0000_0000_0000, 16), // Segment routing
-                ]
-                .iter()
-                .any(|(network, prefix)| ipv6_in_subnet(address, *network, *prefix))
-        }
-    }
-}
-
-fn ipv4_in_subnet(address: u32, network: u32, prefix: u32) -> bool {
-    address >> (32 - prefix) == network >> (32 - prefix)
-}
-
-fn ipv6_in_subnet(address: u128, network: u128, prefix: u32) -> bool {
-    address >> (128 - prefix) == network >> (128 - prefix)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::public;
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
-    #[test]
-    fn proxy_routes_reject_non_global_ipv4_and_ipv6_destinations() {
-        for address in [
-            "192.88.99.1", // deprecated 6to4 relay anycast
-            "192.0.2.10",  // documentation
-            "198.18.0.1",  // benchmarking
-            "255.255.255.255",
-            "2001:2::1", // benchmarking
-            "2002::1",   // 6to4
-            "3fff::1",   // documentation
-            "5f00::1",   // segment routing
-        ] {
-            assert!(
-                !public(address.parse().unwrap()),
-                "{address} must be denied"
-            );
-        }
-    }
-
-    #[test]
-    fn proxy_routes_accept_globally_routable_destinations() {
-        assert!(public(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))));
-        assert!(public("2606:4700:4700::1111".parse::<IpAddr>().unwrap()));
-        assert!(!public(IpAddr::V6(Ipv6Addr::LOCALHOST)));
-    }
 }
