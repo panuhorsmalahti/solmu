@@ -113,6 +113,7 @@ fn schema() -> io::Result<i32> {
             "deny_hosts": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
             "local": {"type": "array", "items": {"type": "string"}},
             "publish": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 65535}},
+            "proxy_port": {"type": "integer", "minimum": 1, "maximum": 65535},
             "read_only": {"type": "boolean"},
             "read": {"type": "array", "items": {"type": "string"}},
             "write": {"type": "array", "items": {"type": "string"}},

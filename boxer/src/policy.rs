@@ -659,6 +659,7 @@ pub struct Policy {
     pub deny_hosts: Vec<String>,
     pub local: Vec<String>,
     pub publish: Vec<u16>,
+    pub proxy_port: Option<u16>,
     pub read_only: bool,
     pub read: Vec<PathBuf>,
     pub write: Vec<PathBuf>,
@@ -913,6 +914,28 @@ impl Policy {
             return Err(io::Error::other(
                 "Published ports must be between 1 and 65535",
             ));
+        }
+        if let Some(port) = self.proxy_port {
+            if port == 0 {
+                return Err(io::Error::other(
+                    "--proxy-port requires a port from 1 to 65535",
+                ));
+            }
+            if self.credentials.is_empty() {
+                return Err(io::Error::other(
+                    "--proxy-port requires at least one brokered credential route",
+                ));
+            }
+            if self.publish.contains(&port)
+                || self.local.iter().any(|route| {
+                    crate::network::Target::parse(route, true)
+                        .is_ok_and(|target| target.port == port)
+                })
+            {
+                return Err(io::Error::other(
+                    "The credential proxy port conflicts with another routed port",
+                ));
+            }
         }
         for local in &self.local {
             if self

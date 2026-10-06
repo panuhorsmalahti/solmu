@@ -60,6 +60,7 @@ impl Broker {
         providers: &[String],
         custom_credentials: &BTreeMap<String, CustomCredential>,
         endpoint_rules: &[EndpointRule],
+        proxy_port: Option<u16>,
         upstream_proxy: Option<&UpstreamProxy>,
         upstream_bypass: &[String],
         denied_hosts: &[String],
@@ -180,16 +181,7 @@ impl Broker {
         let upstream_proxy = upstream_proxy.cloned();
         let upstream_bypass = Arc::new(upstream_bypass.to_vec());
 
-        let mut listener = None;
-        for _ in 0..64 {
-            let candidate = TcpListener::bind("127.0.0.1:0")?;
-            if !reserved_ports.contains(&candidate.local_addr()?.port()) {
-                listener = Some(candidate);
-                break;
-            }
-        }
-        let listener = listener
-            .ok_or_else(|| io::Error::other("Could not allocate a free credential proxy port"))?;
+        let listener = bind_listener(proxy_port, reserved_ports)?;
         listener.set_nonblocking(true)?;
         let port = listener.local_addr()?.port();
         let (shutdown, mut stop) = oneshot::channel();
@@ -253,6 +245,26 @@ impl Broker {
     pub fn port(&self) -> u16 {
         self.port
     }
+}
+
+fn bind_listener(proxy_port: Option<u16>, reserved_ports: &[u16]) -> io::Result<TcpListener> {
+    if let Some(port) = proxy_port {
+        if reserved_ports.contains(&port) {
+            return Err(io::Error::other(
+                "Credential proxy port conflicts with another routed port",
+            ));
+        }
+        return TcpListener::bind(("127.0.0.1", port));
+    }
+    for _ in 0..64 {
+        let candidate = TcpListener::bind("127.0.0.1:0")?;
+        if !reserved_ports.contains(&candidate.local_addr()?.port()) {
+            return Ok(candidate);
+        }
+    }
+    Err(io::Error::other(
+        "Could not allocate a free credential proxy port",
+    ))
 }
 
 impl Drop for Broker {
@@ -856,6 +868,18 @@ async fn response(client: &mut TcpStream, status: u16, message: &str) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fixed_proxy_ports_bind_exactly_and_reject_conflicts() {
+        let occupied = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = occupied.local_addr().unwrap().port();
+        assert!(bind_listener(Some(port), &[]).is_err());
+        drop(occupied);
+
+        let listener = bind_listener(Some(port), &[]).unwrap();
+        assert_eq!(listener.local_addr().unwrap().port(), port);
+        assert!(bind_listener(Some(port), &[port]).is_err());
+    }
 
     fn credentials(provider: CredentialProvider) -> HashMap<String, Arc<Credential>> {
         HashMap::from([(

@@ -125,6 +125,13 @@ fn credential_proxy_requires_isolated_routed_networking() {
 }
 
 #[test]
+fn fixed_credential_proxy_port_requires_a_brokered_route() {
+    let invalid = run(&["--proxy-port", "47891", "--", "must-not-run"]);
+    assert_eq!(invalid.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("requires at least one brokered"));
+}
+
+#[test]
 fn endpoint_allowlists_require_a_brokered_credential() {
     let output = run(&[
         "--allow-endpoint",
@@ -151,6 +158,7 @@ fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
             "version": 1,
             "mode": "isolated",
             "network": "proxy",
+            "proxy_port": 47892,
             "credentials": ["example_api", "telegram", "maps", "private_api", "openai"],
             "custom_credentials": {
                 "example_api": {
@@ -213,6 +221,7 @@ fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["policy"]["credentials"][0], "example_api");
     assert_eq!(result["policy"]["credentials"].as_array().unwrap().len(), 5);
+    assert_eq!(result["policy"]["proxy_port"], 47892);
     assert_eq!(
         result["policy"]["custom_credentials"]["example_api"]["inject_header"],
         "X-API-Key"

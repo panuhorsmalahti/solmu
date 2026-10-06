@@ -150,6 +150,12 @@ boxer --profile solmu --isolated --network proxy --credential openai \
   --cwd /path/to/project -- solmu
 ```
 
+By default, Boxer selects an available loopback port for the credential proxy.
+Use `--proxy-port PORT` to request a fixed port for clients that need a stable
+local endpoint. It is available with Linux isolated proxy networking and
+brokered credentials; Boxer rejects collisions with other routed ports or
+services already using that port.
+
 The matching provider host is allowed automatically. Use
 `--credential anthropic` with a stored `ANTHROPIC_API_KEY` for Anthropic, or
 `--credential gemini` with a stored `GEMINI_API_KEY` for Gemini. Gemini requests
@@ -470,7 +476,7 @@ The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `deny_hosts`,
 `local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`, `env_credential_map`,
-`credentials`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
+`credentials`, `proxy_port`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
 `custom_credentials`, and `cgroup_root`. Custom credential definitions provide
 an HTTPS `upstream` and a `credential_key`; `env_var`, `inject_mode`,
 `inject_header`, `credential_format`, `path_pattern`, `path_replacement`, and

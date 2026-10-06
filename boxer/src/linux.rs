@@ -188,6 +188,7 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
             &policy.credentials,
             &policy.custom_credentials,
             &policy.endpoint_rules,
+            policy.proxy_port,
             policy
                 .upstream_proxy
                 .as_deref()
