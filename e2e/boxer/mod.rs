@@ -11,6 +11,7 @@ mod profiles;
 mod readiness;
 mod rollback;
 mod routes;
+mod trust;
 
 #[cfg(target_os = "linux")]
 mod isolation;

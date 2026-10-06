@@ -33,6 +33,38 @@ or reports `unsupported` when the current platform backend cannot enforce the
 requested filesystem policy. This explains Boxer’s policy rules, not ambient
 OS permissions, ACLs, or whether a later filesystem operation will succeed.
 
+## Verify trusted instruction files
+
+Boxer can verify signed instruction files before starting an agent. Create a
+keypair once and keep the private key private:
+
+```sh
+boxer trust keygen --private-key ~/.boxer/keys/instructions.pk8 --public-key trusted-instructions.pub
+boxer trust sign --key ~/.boxer/keys/instructions.pk8 AGENTS.md
+boxer trust verify --key trusted-instructions.pub AGENTS.md
+```
+
+Signing creates an `AGENTS.md.boxer.sig` sidecar. Share the public key through a
+trusted channel, then require verification on launch. Remove the old signature
+sidecar before signing an updated file again:
+
+```sh
+boxer --trust-key trusted-instructions.pub --verify AGENTS.md \
+  --profile solmu --cwd /path/to/project -- solmu
+```
+
+Repeat `--verify FILE` for each file that must be signed. Relative verification
+paths are resolved from the selected workspace. If a signature is missing,
+invalid, or the file changed, Boxer exits before launching the agent. The
+private key is created with owner-only permissions on Unix. Protect and back it
+up securely; losing it means you cannot sign future updates.
+
+This is explicit Ed25519 file-signature verification. Boxer does not yet provide
+automatic project trust-policy discovery, signer identity or revocation rules,
+or Sigstore/CI provenance verification. The signature is checked before process
+launch; it does not make the file immutable against later changes by other
+processes.
+
 ## Limit access to a project
 
 On Linux and macOS, use the built-in Solmu profile for a lightweight workspace

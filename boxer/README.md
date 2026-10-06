@@ -99,6 +99,10 @@ Use `boxer why --path PATH --op read|write` with the policy options you plan to
 run to see how Boxer resolves that filesystem access. See the
 [path explanation guide](../docs/boxer.md#explain-a-path-decision).
 
+Sign instruction files with `boxer trust keygen` and `boxer trust sign`, then
+require signatures at launch with `--trust-key` and `--verify`. See the
+[instruction trust guide](../docs/boxer.md#verify-trusted-instruction-files).
+
 Add `--rollback` to save a workspace before and after a run. Review or restore
 those snapshots with `boxer rollback list`, `boxer rollback show <session-id>`,
 and `boxer rollback restore <session-id>`. See the

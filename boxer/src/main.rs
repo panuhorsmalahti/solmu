@@ -4,6 +4,7 @@ mod explain;
 mod network;
 mod policy;
 mod rollback;
+mod trust;
 use policy::{AgentProfile, Mode, Network, Policy};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
@@ -111,6 +112,12 @@ fn prepare_agent_home(policy: &mut Policy, agent: AgentProfile) -> io::Result<()
 
 fn run() -> io::Result<i32> {
     let mut raw_arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if raw_arguments
+        .first()
+        .is_some_and(|argument| argument == "trust")
+    {
+        return trust::command(&raw_arguments);
+    }
     let why_command = raw_arguments
         .first()
         .is_some_and(|argument| argument == "why");
@@ -148,6 +155,8 @@ fn run() -> io::Result<i32> {
     let mut rollback_session = false;
     let mut why_path = None;
     let mut why_operation = "read";
+    let mut trust_key = None;
+    let mut verify_files = Vec::new();
     let mut directory = None;
     let mut program: Option<OsString> = None;
     let mut command_arguments = Vec::new();
@@ -164,6 +173,12 @@ fn run() -> io::Result<i32> {
             );
             println!(
                 "boxer why --path PATH [--op read|write] [policy options]: explain the resolved filesystem policy for a path without launching a program."
+            );
+            println!(
+                "--trust-key PUBLIC_KEY --verify FILE: verify signed files before launch; repeat --verify for multiple files."
+            );
+            println!(
+                "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore` to review or restore changes; `boxer rollback audit list|show|verify` reviews the local audit trail."
@@ -245,6 +260,19 @@ fn run() -> io::Result<i32> {
                 Some("write") => "write",
                 _ => return Err(io::Error::other("--op must be read or write")),
             };
+        } else if argument == "--trust-key" {
+            if trust_key.is_some() {
+                return Err(io::Error::other("Specify only one --trust-key"));
+            }
+            trust_key = Some(std::path::PathBuf::from(arguments.next().ok_or_else(
+                || io::Error::other("--trust-key requires a public key file"),
+            )?));
+        } else if argument == "--verify" {
+            verify_files.push(std::path::PathBuf::from(
+                arguments
+                    .next()
+                    .ok_or_else(|| io::Error::other("--verify requires a file"))?,
+            ));
         } else if argument == "--policy" {
             if policy_file.is_some() {
                 return Err(io::Error::other("Specify only one --policy file"));
@@ -347,6 +375,29 @@ fn run() -> io::Result<i32> {
         return Err(io::Error::other("Workspace must be a directory"));
     }
     resolved.resolve(&workspace)?;
+    if !verify_files.is_empty() {
+        if why_command || check_policy || print_policy {
+            return Err(io::Error::other("--verify requires a normal Boxer launch"));
+        }
+        let key = trust_key
+            .as_deref()
+            .ok_or_else(|| io::Error::other("--verify requires --trust-key PUBLIC_KEY"))?;
+        let files: Vec<_> = verify_files
+            .iter()
+            .map(|path| {
+                if path.is_absolute() {
+                    path.clone()
+                } else {
+                    workspace.join(path)
+                }
+            })
+            .collect();
+        trust::verify_files(key, &files)?;
+    } else if trust_key.is_some() {
+        return Err(io::Error::other(
+            "--trust-key requires at least one --verify FILE",
+        ));
+    }
     if why_command {
         if why_path.is_none()
             || program.is_some()
