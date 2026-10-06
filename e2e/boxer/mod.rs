@@ -7,6 +7,8 @@ mod cleanup;
 mod credentials;
 mod environment;
 mod explain;
+#[cfg(target_os = "linux")]
+mod learn;
 mod network;
 mod network_profiles;
 mod permissions;

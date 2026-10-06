@@ -5,6 +5,18 @@ use std::{
 
 fn main() {
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    if arguments
+        .first()
+        .is_some_and(|value| value == "--learn-fixture")
+    {
+        let input = std::path::PathBuf::from(&arguments[1]);
+        let output = std::path::PathBuf::from(&arguments[2]);
+        let _ = std::fs::read(input).unwrap();
+        std::fs::write(output, b"learned write").unwrap();
+        println!("learn fixture stdout");
+        eprintln!("learn fixture stderr");
+        return;
+    }
     if arguments.first().is_some_and(|value| {
         value == "--write-only-check" || value == "--write-only-directory-check"
     }) {

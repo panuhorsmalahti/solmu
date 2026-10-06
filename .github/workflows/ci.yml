@@ -138,7 +138,7 @@ jobs:
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev bubblewrap libdbus-1-dev
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev bubblewrap libdbus-1-dev strace
           # GitHub's disposable runner needs unprivileged namespaces for isolation tests.
           if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

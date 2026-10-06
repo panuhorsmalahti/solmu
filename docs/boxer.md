@@ -111,6 +111,27 @@ checks resolved destination addresses at connection time, so DNS results,
 private-address protections, and later connection errors cannot be predicted by
 this dry run.
 
+## Discover access for a policy
+
+On Linux, `boxer learn` traces a real command with `strace` and reports paths
+opened for reading or writing, plus outbound and listening network endpoints.
+Install `strace` with your Linux package manager first. The command runs normally
+without applying a sandbox; use the report as a starting point for a policy.
+Trace output is temporary and removed when the command finishes.
+
+```sh
+boxer learn --timeout 60 -- solmu
+boxer learn --json -- ./your-agent --arg value
+```
+
+JSON output separates read, write, and read/write paths and includes numeric
+network addresses and ports. DNS names are not resolved, and the report only
+includes successful traced operations. `--timeout` stops the traced process
+group and returns status 124 when the limit is reached. This feature currently
+requires Linux; other platforms report that it is unavailable. With `--json`,
+the report is written to stdout and the command's captured output is replayed
+to stderr so the JSON remains parseable.
+
 ## Verify trusted instruction files
 
 Boxer can verify signed instruction files before starting an agent. Create a

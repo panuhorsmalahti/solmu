@@ -4,6 +4,8 @@ use std::{ffi::OsString, io, process::Command};
 mod check;
 mod credential;
 mod explain;
+#[cfg(target_os = "linux")]
+mod learn;
 mod network;
 mod policy;
 mod policy_cli;
@@ -146,6 +148,14 @@ fn run() -> io::Result<i32> {
     if raw_arguments.first().is_some_and(|arg| arg == "run") {
         raw_arguments.remove(0);
     }
+    if raw_arguments.first().is_some_and(|arg| arg == "learn") {
+        #[cfg(target_os = "linux")]
+        return learn::command(&raw_arguments);
+        #[cfg(not(target_os = "linux"))]
+        return Err(io::Error::other(
+            "Boxer learn is currently supported on Linux and requires strace",
+        ));
+    }
     if raw_arguments
         .first()
         .is_some_and(|argument| argument == "credential")
@@ -232,6 +242,9 @@ fn run() -> io::Result<i32> {
             );
             println!(
                 "boxer why --path PATH [--op read|write] or --host HOST[:PORT] [--op connect] [policy options]: explain resolved filesystem or network policy without launching a program."
+            );
+            println!(
+                "boxer learn [--json] [--timeout SECONDS] -- PROGRAM [ARGS...]: trace a Linux run and summarize filesystem and network access (requires strace)."
             );
             println!(
                 "--trust-key PUBLIC_KEY --verify FILE: verify signed files before launch; repeat --verify for multiple files."
