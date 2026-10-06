@@ -9,6 +9,9 @@ use std::{
 };
 use zeroize::{Zeroize, Zeroizing};
 
+#[cfg(test)]
+pub(crate) static KEYRING_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 const SERVICE: &str = "solmu-boxer";
 const TARGET: &str = "default";
 const MAX_FILE_SECRET_BYTES: u64 = 1024 * 1024;
@@ -663,6 +666,7 @@ mod tests {
 
     #[test]
     fn credentials_are_loaded_from_the_mockable_platform_store() {
+        let _guard = KEYRING_TEST_LOCK.lock().unwrap();
         keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
         let name = "BOXER_TEST_API_KEY";
         let mut loaded = load_with(&[name.to_owned()], |name| {
@@ -764,6 +768,7 @@ mod tests {
 
     #[test]
     fn custom_keyring_references_load_from_the_selected_service() {
+        let _guard = KEYRING_TEST_LOCK.lock().unwrap();
         keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
         let (service, account) = keyring_reference("keyring://my-service/openai_api_key").unwrap();
         keyring_entry(&service, &account)

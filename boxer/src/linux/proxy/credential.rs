@@ -932,6 +932,7 @@ mod tests {
 
     #[test]
     fn broker_rejects_requests_without_a_session_token() {
+        let _guard = crate::credential::KEYRING_TEST_LOCK.lock().unwrap();
         keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
         keyring::Entry::new("solmu-boxer", "OPENAI_API_KEY")
             .unwrap()
