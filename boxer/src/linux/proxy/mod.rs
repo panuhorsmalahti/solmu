@@ -2,6 +2,7 @@ pub mod credential;
 mod guest;
 mod host;
 mod ipc;
+pub mod supervisor;
 
 pub use guest::worker;
 pub use host::Host;

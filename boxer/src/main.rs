@@ -197,6 +197,13 @@ fn run() -> io::Result<i32> {
     {
         return network::command(&raw_arguments);
     }
+    #[cfg(target_os = "linux")]
+    if raw_arguments
+        .first()
+        .is_some_and(|argument| argument == "supervisor")
+    {
+        return linux::proxy::supervisor::command(&raw_arguments);
+    }
     let why_command = raw_arguments
         .first()
         .is_some_and(|argument| argument == "why");
@@ -250,7 +257,7 @@ fn run() -> io::Result<i32> {
     while let Some(argument) = arguments.next() {
         if argument == "--help" || argument == "-h" {
             println!(
-                "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace, --allow-cwd: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--write-only PATH: additional existing write-only file or directory (repeatable; Linux/macOS workspace mode).\n--profile solmu|codex|claude-code|opencode|pi|NAME: built-ins or a custom JSON profile from ~/.config/boxer/profiles (BOXER_PROFILE_DIR overrides it). Agent profiles use separate login homes.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
+                "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace, --allow-cwd: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--write-only PATH: additional existing write-only file or directory (repeatable; Linux/macOS workspace mode).\n--profile solmu|codex|claude-code|opencode|pi|NAME: built-ins or a custom JSON profile from ~/.config/boxer/profiles (BOXER_PROFILE_DIR overrides it). Agent profiles use separate login homes.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--supervised: pause unapproved routed network connections until approved with `boxer supervisor` (Linux isolated proxy mode only).\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
             );
             println!(
                 "--deny PATH: block an existing file or directory (repeatable; Linux requires --isolated; Windows unsupported)."
@@ -318,6 +325,8 @@ fn run() -> io::Result<i32> {
             policy.linux_signal_scope = true;
         } else if argument == "--scope-abstract-unix-socket" {
             policy.linux_abstract_unix_socket_scope = true;
+        } else if argument == "--supervised" {
+            policy.supervised = true;
         } else if argument == "--workspace" || argument == "--allow-cwd" {
             mode = Some(Mode::Workspace);
         } else if argument == "--network" {
@@ -669,6 +678,7 @@ fn run() -> io::Result<i32> {
     resolved
         .credential_capture
         .extend(policy.credential_capture);
+    resolved.supervised |= policy.supervised;
     resolved.endpoint_rules.extend(policy.endpoint_rules);
     resolved.cpus = policy.cpus.or(resolved.cpus);
     resolved.memory_mib = policy.memory_mib.or(resolved.memory_mib);
@@ -828,6 +838,7 @@ fn run() -> io::Result<i32> {
             "enforcement": "not-applied",
             "workspace": workspace, "policy": resolved,
             "network": match resolved.network { Network::Allow => "allowed", Network::Deny => "denied", Network::Proxy => "routed" },
+            "supervised": resolved.supervised,
             "runtime_read": match resolved.mode {
                 Mode::Unrestricted => Vec::new(),
                 Mode::Workspace => policy::runtime_paths(),

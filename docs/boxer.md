@@ -945,6 +945,33 @@ complete `*` label such as `build.*.ci.example.com` for exactly one label.
 Metadata service hostnames are always denied. Routed connections also reject
 private, loopback, link-local, and other special-use IP destinations.
 
+### Approve routed network requests while Boxer runs
+
+Add `--supervised` to pause on remote destinations that are not already
+allowed. This is available on Linux with `--isolated --network proxy`; grant
+rules, local routes, and network profiles continue to work as configured.
+Start Boxer from a delegated cgroup, then use the session ID it prints from a
+second terminal:
+
+```sh
+systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervisor \
+  boxer --supervised --isolated --network proxy \
+  --cwd /path/to/project -- solmu
+
+boxer supervisor <session-id> list
+boxer supervisor <session-id> approve <request-id> --once
+boxer supervisor <session-id> approve <request-id> --session
+boxer supervisor <session-id> deny <request-id>
+```
+
+`--once` approves only the pending host and port. `--session` remembers that
+exact destination until this Boxer process exits. Requests expire after five
+minutes and are denied when Boxer stops. `boxer supervisor <session-id> list
+--json` returns machine-readable requests. Explicit `--deny-host` rules and
+metadata service blocks cannot be approved around. Approval currently covers
+routed network connections; filesystem and command approvals are not yet
+supervised.
+
 To send routed connections through a corporate HTTP CONNECT proxy, pass
 `--upstream-proxy` or set `BOXER_UPSTREAM_PROXY`:
 

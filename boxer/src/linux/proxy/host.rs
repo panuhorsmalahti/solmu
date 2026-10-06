@@ -23,6 +23,7 @@ pub struct Host {
     pub children: Vec<UnixStream>,
     alive: Arc<AtomicBool>,
     threads: Vec<JoinHandle<()>>,
+    supervisor: Option<Arc<super::supervisor::Supervisor>>,
 }
 
 impl Host {
@@ -59,27 +60,52 @@ impl Host {
         let publications = inbound.try_clone()?;
         publications.set_write_timeout(Some(Duration::from_secs(3)))?;
         let alive = Arc::new(AtomicBool::new(true));
+        let supervisor = policy
+            .supervised
+            .then(super::supervisor::Supervisor::new)
+            .transpose()?
+            .map(Arc::new);
         let mut host = Self {
             outbound,
             inbound,
             children: vec![child_outbound, child_inbound],
             alive,
             threads: Vec::new(),
+            supervisor: supervisor.clone(),
         };
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
+        let mut session_grants = Vec::<Target>::new();
         host.threads.push(
             thread::Builder::new()
                 .name("boxer-routes".into())
                 .spawn(move || {
                     while let Ok(target) = ipc::read::<Target>(&mut connection) {
-                        let is_denied = crate::network::is_denied_domain(&target.host, &denied);
-                        let is_allowed = local.contains(&target)
+                        let hard_denied = crate::network::is_always_denied_domain(&target.host);
+                        let explicitly_denied = denied.iter().any(|pattern| {
+                            crate::network::matches_domain_pattern(&target.host, pattern)
+                        });
+                        let mut is_allowed = local.contains(&target)
+                            || session_grants.contains(&target)
                             || allowed
                                 .iter()
                                 .any(|pattern| pattern.matches(&target.host, target.port));
-                        let socket = if is_allowed && !is_denied {
+                        if !hard_denied
+                            && !explicitly_denied
+                            && !is_allowed
+                            && let Some(supervisor) = &supervisor
+                        {
+                            match supervisor.request(&target) {
+                                super::supervisor::Decision::Once => is_allowed = true,
+                                super::supervisor::Decision::Session => {
+                                    session_grants.push(target.clone());
+                                    is_allowed = true;
+                                }
+                                super::supervisor::Decision::Deny => {}
+                            }
+                        }
+                        let socket = if is_allowed && !hard_denied && !explicitly_denied {
                             runtime
                                 .block_on(connect_route(
                                     &target,
@@ -133,6 +159,9 @@ impl Host {
 impl Drop for Host {
     fn drop(&mut self) {
         self.alive.store(false, Ordering::Relaxed);
+        if let Some(supervisor) = &self.supervisor {
+            supervisor.stop();
+        }
         self.children.clear();
         let _ = self.outbound.shutdown(Shutdown::Both);
         let _ = self.inbound.shutdown(Shutdown::Both);

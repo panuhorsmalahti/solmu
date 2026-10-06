@@ -239,6 +239,7 @@ fn schema_value() -> Value {
             ]},
             "mode": {"enum": ["unrestricted", "workspace", "isolated"]},
             "network": {"enum": ["allow", "deny", "proxy"]},
+            "supervised": {"type": "boolean"},
             "network_profile": {"enum": ["minimal", "developer", "claude-code", "codex", "opencode", "enterprise"]},
             "upstream_proxy": {"type": "string", "format": "uri"},
             "upstream_bypass": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},

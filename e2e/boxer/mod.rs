@@ -26,6 +26,8 @@ mod trust;
 
 #[cfg(target_os = "linux")]
 mod isolation;
+#[cfg(target_os = "linux")]
+mod supervisor;
 
 #[cfg(windows)]
 mod windows;

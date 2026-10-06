@@ -700,6 +700,7 @@ impl AgentProfile {
 pub struct Policy {
     pub mode: Mode,
     pub network: Network,
+    pub supervised: bool,
     pub network_profile: Option<String>,
     #[serde(
         serialize_with = "serialize_upstream_proxy",
@@ -900,6 +901,13 @@ impl Policy {
     }
 
     fn resolve_rest(&mut self, workspace: &Path) -> io::Result<()> {
+        if self.supervised
+            && (!cfg!(target_os = "linux") || !self.isolated || self.network != Network::Proxy)
+        {
+            return Err(io::Error::other(
+                "Supervised network approvals require Linux --isolated --network proxy",
+            ));
+        }
         self.upstream_bypass.sort();
         self.upstream_bypass.dedup();
         if let Some(profile) = &self.network_profile {
