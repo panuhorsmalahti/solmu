@@ -19,6 +19,14 @@ const DOMAIN: &[u8] = b"solmu-boxer-trust-v1\0";
 struct TrustPolicy {
     version: u32,
     files: Vec<PathBuf>,
+    blocklist: Option<TrustBlocklist>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrustBlocklist {
+    #[serde(default)]
+    digests: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -125,6 +133,35 @@ pub fn verify_policy(
             "Trust policy must list between 1 and 256 files",
         ));
     }
+    let mut blocked_digests = std::collections::HashSet::new();
+    if let Some(blocklist) = policy.blocklist {
+        if blocklist.digests.len() > 512 {
+            return Err(io::Error::other(
+                "Trust policy blocklist exceeds 512 digests",
+            ));
+        }
+        for digest in blocklist.digests {
+            let Some(hex) = digest.strip_prefix("sha256:") else {
+                return Err(io::Error::other(
+                    "Trust policy blocklist entries must use sha256:<lowercase hex>",
+                ));
+            };
+            if hex.len() != 64
+                || !hex
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                return Err(io::Error::other(
+                    "Trust policy blocklist entries must use sha256:<lowercase hex>",
+                ));
+            }
+            if !blocked_digests.insert(digest) {
+                return Err(io::Error::other(
+                    "Trust policy contains a duplicate blocked digest",
+                ));
+            }
+        }
+    }
     let mut unique = std::collections::HashSet::new();
     let mut files = Vec::with_capacity(policy.files.len());
     for file in policy.files {
@@ -134,7 +171,16 @@ pub fn verify_policy(
         }
         files.push(canonical);
     }
-    verify_files(public_key_path, &files)
+    for file in files {
+        let digest = verify(public_key_path, &file)?;
+        if blocked_digests.contains(&digest) {
+            return Err(io::Error::other(format!(
+                "Trust verification failed: {} matches a blocked digest",
+                file.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn workspace_path(workspace: &Path, requested: &Path) -> io::Result<PathBuf> {
@@ -240,7 +286,7 @@ fn sign(private_path: &Path, file_path: &Path) -> io::Result<i32> {
     Ok(0)
 }
 
-fn verify(public_path: &Path, file_path: &Path) -> io::Result<()> {
+fn verify(public_path: &Path, file_path: &Path) -> io::Result<String> {
     let public = hex::decode(fs::read_to_string(public_path)?.trim()).map_err(io::Error::other)?;
     let signature_file = sidecar(file_path);
     let metadata = fs::metadata(&signature_file)?;
@@ -254,7 +300,8 @@ fn verify(public_path: &Path, file_path: &Path) -> io::Result<()> {
     }
     let contents = read_limited(file_path)?;
     let digest = Sha256::digest(&contents);
-    if hex::encode(digest) != record.digest_sha256 {
+    let digest_hex = hex::encode(&digest);
+    if digest_hex != record.digest_sha256 {
         return Err(io::Error::other(format!(
             "Trust verification failed: {} was changed after signing",
             file_path.display()
@@ -271,7 +318,7 @@ fn verify(public_path: &Path, file_path: &Path) -> io::Result<()> {
             ))
         })?;
     println!("Verified {}", file_path.display());
-    Ok(())
+    Ok(format!("sha256:{digest_hex}"))
 }
 
 fn read_limited(path: &Path) -> io::Result<Vec<u8>> {

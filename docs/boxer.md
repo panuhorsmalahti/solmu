@@ -199,7 +199,7 @@ For repeatable checks, create a trust policy listing workspace-relative files
 and sign the policy itself as well as each listed file:
 
 ```json
-{"version":1,"files":["AGENTS.md",".claude/CLAUDE.md"]}
+{"version":1,"files":["AGENTS.md",".claude/CLAUDE.md"],"blocklist":{"digests":["sha256:<64-lowercase-hex>"]}}
 ```
 
 Save this signed policy as `boxer-trust.json` in the workspace. Boxer discovers
@@ -221,7 +221,9 @@ Boxer verifies the policy signature first, then requires valid signatures for
 every listed file before launching the agent. The policy and listed files must
 be regular files inside the selected workspace. Relative paths are resolved
 from the workspace. Alternatively, repeat `--verify FILE` for explicit per-run
-file checks. The private key is created with owner-only permissions on Unix.
+file checks. The optional `blocklist.digests` rejects listed SHA-256 content
+digests even when their signatures are valid. The private key is created with
+owner-only permissions on Unix.
 Protect and back it up securely; losing it means you cannot sign future updates.
 
 Signatures use Ed25519 and are checked before process launch. Boxer does not

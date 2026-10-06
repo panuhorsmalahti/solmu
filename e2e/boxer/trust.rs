@@ -199,3 +199,60 @@ fn signed_workspace_trust_policy_is_discovered_and_verified_automatically() {
     assert!(!workspace.join("must-not-run.txt").exists());
     assert!(String::from_utf8_lossy(&rejected.stderr).contains("changed after signing"));
 }
+
+#[test]
+fn signed_trust_policy_blocks_listed_file_digests_before_startup() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = root.path().join("workspace");
+    let trust_dir = root.path().join("trust");
+    std::fs::create_dir(&workspace).unwrap();
+    let instructions = workspace.join("AGENTS.md");
+    let policy = workspace.join("boxer-trust.json");
+    let contents = b"known unsafe instructions\n";
+    std::fs::write(&instructions, contents).unwrap();
+    let digest = hex::encode(ring::digest::digest(&ring::digest::SHA256, contents).as_ref());
+    std::fs::write(
+        &policy,
+        format!(
+            r#"{{"version":1,"files":["AGENTS.md"],"blocklist":{{"digests":["sha256:{digest}"]}}}}"#
+        ),
+    )
+    .unwrap();
+
+    let generated = Command::new(binary("boxer"))
+        .args(["trust", "keygen"])
+        .env("BOXER_TRUST_DIR", &trust_dir)
+        .output()
+        .unwrap();
+    assert!(
+        generated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    for file in [&instructions, &policy] {
+        let signed = Command::new(binary("boxer"))
+            .args(["trust", "sign"])
+            .arg(file)
+            .env("BOXER_TRUST_DIR", &trust_dir)
+            .output()
+            .unwrap();
+        assert!(
+            signed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&signed.stderr)
+        );
+    }
+    let marker = workspace.join("must-not-start.txt");
+    let rejected = Command::new(binary("boxer"))
+        .args(["--workspace", "--cwd"])
+        .arg(&workspace)
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("must-not-start.txt")
+        .env("BOXER_TRUST_DIR", &trust_dir)
+        .output()
+        .unwrap();
+    assert_eq!(rejected.status.code(), Some(125));
+    assert!(!marker.exists());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("matches a blocked digest"));
+}
