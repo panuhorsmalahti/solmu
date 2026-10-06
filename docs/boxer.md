@@ -329,11 +329,17 @@ rejected before launch. Resource controls require `isolated` mode.
 Inspect saved policy files without launching the agent:
 
 ```sh
+boxer policy init
+boxer policy init --output ./agent-policy.json
 boxer policy profiles
 boxer policy validate ./boxer-policy.json --cwd /path/to/project
 boxer policy show ./boxer-policy.json --cwd /path/to/project
 boxer policy diff ./before.json ./after.json --cwd /path/to/project
 ```
+
+`policy init` creates a workspace policy that allows network access and starts
+with no additional path grants. It refuses to overwrite an existing file. Edit
+the generated JSON, then validate it before using `--policy` to launch a program.
 
 `validate` parses and resolves the policy and reports whether Boxer has a
 backend for it on the current platform. `show` prints its resolved values, and

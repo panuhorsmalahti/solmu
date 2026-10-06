@@ -25,6 +25,7 @@ const PROFILES: &[(&str, &str)] = &[
 
 pub fn command(args: &[OsString]) -> io::Result<i32> {
     match args.get(1).and_then(|arg| arg.to_str()) {
+        Some("init") => init(&args[2..]),
         Some("profiles") if args.len() == 2 => {
             println!(
                 "{}",
@@ -92,6 +93,46 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
     }
 }
 
+fn init(args: &[OsString]) -> io::Result<i32> {
+    let mut output = PathBuf::from("boxer-policy.json");
+    let mut index = 0;
+    while index < args.len() {
+        if args[index] == "--output" && index + 1 < args.len() {
+            output = PathBuf::from(&args[index + 1]);
+            index += 2;
+        } else {
+            return Err(usage());
+        }
+    }
+    let policy = json!({
+        "version": 1,
+        "mode": "workspace",
+        "network": "allow",
+        "read": [],
+        "write": []
+    });
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&output)
+        .map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                io::Error::other(format!(
+                    "Refusing to overwrite existing policy {}; choose another --output path",
+                    output.display()
+                ))
+            } else {
+                error
+            }
+        })?;
+    serde_json::to_writer_pretty(&mut file, &policy).map_err(io::Error::other)?;
+    use std::io::Write;
+    file.write_all(b"\n")?;
+    file.sync_all()?;
+    println!("Created policy: {}", output.display());
+    Ok(0)
+}
+
 fn parse_file_and_cwd(args: &[OsString], file_index: usize) -> io::Result<(PathBuf, PathBuf)> {
     let file = PathBuf::from(&args[file_index]);
     let mut workspace = std::env::current_dir()?;
@@ -129,6 +170,6 @@ fn supported(policy: &Policy) -> bool {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer policy profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
+        "Usage: boxer policy init [--output FILE] | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
     )
 }

@@ -6,6 +6,48 @@ fn run(args: &[&str]) -> std::process::Output {
 }
 
 #[test]
+fn policy_init_creates_a_valid_scaffold_without_overwriting_existing_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["policy", "init"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let policy_path = temp.path().join("boxer-policy.json");
+    let policy: Value = serde_json::from_slice(&std::fs::read(&policy_path).unwrap()).unwrap();
+    assert_eq!(policy["version"], 1);
+    assert_eq!(policy["mode"], "workspace");
+    assert_eq!(policy["network"], "allow");
+
+    let validated = Command::new(binary("boxer"))
+        .args(["policy", "validate", "boxer-policy.json", "--cwd"])
+        .arg(temp.path())
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        validated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validated.stderr)
+    );
+
+    let original = std::fs::read(&policy_path).unwrap();
+    let repeated = Command::new(binary("boxer"))
+        .args(["policy", "init"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert_eq!(repeated.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&repeated.stderr).contains("Refusing to overwrite"));
+    assert_eq!(std::fs::read(policy_path).unwrap(), original);
+}
+
+#[test]
 fn policy_commands_validate_resolve_diff_and_list_builtin_profiles() {
     let temp = tempfile::tempdir().unwrap();
     let workspace = temp.path().join("workspace");
