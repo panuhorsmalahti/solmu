@@ -196,6 +196,8 @@ On Linux, `--isolated --network proxy` permits only explicit remote and local
 routes; built-in `minimal` and `developer` host profiles reduce setup. Publish
 the boxed backend on port 3000 to use normal client settings.
 Launch the backend inside Boxer to protect its tool calls.
+Use `--rollback` to snapshot workspace changes, review them, restore them, and
+prune old sessions.
 On Linux, `--isolated --cwd /path/to/project` also gives it
 private processes and a filesystem view with only the workspace writable,
 filtered system calls, dropped capabilities, and CPU/memory/task limits.

@@ -97,6 +97,7 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
             }
             restore(required_text(arguments, 2)?, dry_run)
         }
+        Some("cleanup") if arguments.len() >= 3 => cleanup(&arguments[2..]),
         Some("audit") if arguments.len() == 3 => match required_text(arguments, 2)? {
             "list" => audit_list(),
             _ => Err(audit_usage()),
@@ -231,8 +232,128 @@ pub fn run(arguments: &[OsString], workspace: &Path, program: &OsStr) -> io::Res
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer rollback list | show <session-id> [--diff] | restore <session-id> [--dry-run]",
+        "Usage: boxer rollback list | show <session-id> [--diff] | restore <session-id> [--dry-run] | cleanup [--older-than DAYS] [--keep COUNT] [--dry-run]",
     )
+}
+
+fn cleanup(arguments: &[OsString]) -> io::Result<i32> {
+    let mut older_than_days = None;
+    let mut keep = None;
+    let mut dry_run = false;
+    let mut index = 0;
+    while index < arguments.len() {
+        match arguments[index].to_str() {
+            Some("--dry-run") if !dry_run => {
+                dry_run = true;
+                index += 1;
+            }
+            Some("--older-than") if older_than_days.is_none() && index + 1 < arguments.len() => {
+                older_than_days = Some(
+                    arguments[index + 1]
+                        .to_str()
+                        .and_then(|value| value.parse::<u64>().ok())
+                        .filter(|days| *days > 0)
+                        .ok_or_else(usage)?,
+                );
+                index += 2;
+            }
+            Some("--keep") if keep.is_none() && index + 1 < arguments.len() => {
+                keep = Some(
+                    arguments[index + 1]
+                        .to_str()
+                        .and_then(|value| value.parse::<usize>().ok())
+                        .ok_or_else(usage)?,
+                );
+                index += 2;
+            }
+            _ => return Err(usage()),
+        }
+    }
+    if older_than_days.is_none() && keep.is_none() {
+        return Err(usage());
+    }
+    let store = store_root_for_commands()?;
+    let mut sessions = load_sessions(&store)?;
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.created_unix_ms));
+    let now = now_ms()?;
+    let cutoff =
+        older_than_days.map(|days| now.saturating_sub(u128::from(days).saturating_mul(86_400_000)));
+    let mut removed = Vec::new();
+    let mut retained = Vec::new();
+    for (position, session) in sessions.into_iter().enumerate() {
+        let expired = cutoff.is_some_and(|cutoff| session.created_unix_ms < cutoff);
+        let beyond_limit = keep.is_some_and(|limit| position >= limit);
+        if expired || beyond_limit {
+            removed.push(session);
+        } else {
+            retained.push(session);
+        }
+    }
+    let referenced = session_blobs(&retained)?;
+    let blob_dir = store.join("blobs");
+    let mut unreferenced = Vec::new();
+    for entry in fs::read_dir(&blob_dir)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !valid_hash(&name) || referenced.contains(&name) {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(entry.path())?;
+        if !metadata.file_type().is_file() {
+            return Err(io::Error::other(
+                "Rollback blob store contains a non-file object",
+            ));
+        }
+        unreferenced.push((entry.path(), metadata.len()));
+    }
+    let reclaimed = unreferenced.iter().map(|(_, size)| *size).sum::<u64>();
+    println!("Sessions to remove: {}", removed.len());
+    for session in &removed {
+        println!("{}\t{}\t{}", session.id, session.program, session.workspace);
+    }
+    println!(
+        "Unreferenced snapshot objects: {} ({} bytes)",
+        unreferenced.len(),
+        reclaimed
+    );
+    if dry_run {
+        println!("Dry run: no rollback data removed");
+        return Ok(0);
+    }
+    for session in &removed {
+        fs::remove_file(store.join("sessions").join(format!("{}.json", session.id)))?;
+    }
+    for (path, _) in unreferenced {
+        fs::remove_file(path)?;
+    }
+    println!("Cleanup complete");
+    Ok(0)
+}
+
+fn session_blobs(sessions: &[Session]) -> io::Result<HashSet<String>> {
+    let mut hashes = HashSet::new();
+    for session in sessions {
+        for snapshot in std::iter::once(&session.before).chain(session.after.iter()) {
+            for entry in snapshot.entries.values() {
+                if let Entry::File { hash, .. } = entry {
+                    if !valid_hash(hash) {
+                        return Err(io::Error::other(
+                            "Rollback session contains an invalid content hash",
+                        ));
+                    }
+                    hashes.insert(hash.clone());
+                }
+            }
+        }
+    }
+    Ok(hashes)
+}
+
+fn valid_hash(hash: &str) -> bool {
+    hash.len() == 64
+        && hash
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn audit_usage() -> io::Error {

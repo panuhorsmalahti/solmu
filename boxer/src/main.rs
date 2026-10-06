@@ -202,7 +202,7 @@ fn run() -> io::Result<i32> {
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
-                "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore` to review or restore changes; `boxer rollback audit list|show|verify` reviews the local audit trail."
+                "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|verify` reviews the local audit trail."
             );
             return Ok(0);
         } else if argument == "--version" {

@@ -154,6 +154,19 @@ Rollback covers files inside the workspace. It does not undo network requests or
 changes made elsewhere on the machine. Snapshots are local and can use substantial
 disk space for large workspaces.
 
+Prune old session records and unreferenced snapshot data. Preview first:
+
+```sh
+boxer rollback cleanup --older-than 30 --dry-run
+boxer rollback cleanup --keep 10 --dry-run
+boxer rollback cleanup --older-than 30 --keep 10
+```
+
+When both limits are set, sessions older than the age limit or beyond the
+newest-session limit are removed. Shared content objects remain while any
+retained session references them. Cleanup permanently removes selected session
+records, including their audit records.
+
 ### Audit a session
 
 Each rollback session records a start and completion event and a SHA-256 digest

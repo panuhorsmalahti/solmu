@@ -114,6 +114,8 @@ Add `--rollback` to save a workspace before and after a run. Review or restore
 those snapshots with `boxer rollback list`, `boxer rollback show <session-id>`,
 and `boxer rollback restore <session-id>`. See the
 [rollback guide](../docs/boxer.md#review-and-restore-a-session).
+Preview or prune old snapshots with `boxer rollback cleanup --older-than DAYS`
+or `--keep COUNT`; shared content remains for retained sessions.
 Use `boxer rollback audit list|show|verify` to inspect and validate the local
 session event chain. It covers recorded lifecycle and snapshot changes, not all
 kernel or network activity. See the [audit guide](../docs/boxer.md#audit-a-session).
