@@ -215,6 +215,9 @@ fn run() -> io::Result<i32> {
                 "--allow-endpoint PROVIDER:METHOD:PATH: allow a brokered API endpoint (repeatable; * matches one path segment and ** matches multiple)."
             );
             println!(
+                "--upstream-proxy http://HOST[:PORT]: route remote connections through an HTTP CONNECT proxy. --upstream-bypass DOMAIN skips it for an exact domain or *.DOMAIN pattern."
+            );
+            println!(
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
@@ -247,6 +250,27 @@ fn run() -> io::Result<i32> {
                     .next()
                     .and_then(|value| value.into_string().ok())
                     .ok_or_else(|| io::Error::other("--network-profile requires a profile name"))?,
+            );
+        } else if argument == "--upstream-proxy" {
+            if policy.upstream_proxy.is_some() {
+                return Err(io::Error::other("Specify only one --upstream-proxy"));
+            }
+            policy.upstream_proxy = Some(zeroize::Zeroizing::new(
+                arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| {
+                        io::Error::other("--upstream-proxy requires an HTTP proxy URL")
+                    })?,
+            ));
+        } else if argument == "--upstream-bypass" {
+            policy.upstream_bypass.push(
+                arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| {
+                        io::Error::other("--upstream-bypass requires a domain pattern")
+                    })?,
             );
         } else if argument == "--allow-host" || argument == "--allow-local" {
             let value = arguments
@@ -441,6 +465,8 @@ fn run() -> io::Result<i32> {
     resolved.mode = mode.unwrap_or(resolved.mode);
     resolved.network = network.unwrap_or(resolved.network);
     resolved.network_profile = network_profile.or(resolved.network_profile);
+    resolved.upstream_proxy = policy.upstream_proxy.or(resolved.upstream_proxy);
+    resolved.upstream_bypass.extend(policy.upstream_bypass);
     resolved.hosts.extend(policy.hosts);
     resolved.local.extend(policy.local);
     resolved.publish.extend(policy.publish);

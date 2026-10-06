@@ -4,6 +4,37 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use zeroize::Zeroizing;
+
+fn serialize_upstream_proxy<S>(
+    value: &Option<Zeroizing<String>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let sanitized = value
+        .as_ref()
+        .map(|value| {
+            let mut url = url::Url::parse(value).map_err(serde::ser::Error::custom)?;
+            url.set_username("")
+                .map_err(|()| serde::ser::Error::custom("Invalid upstream proxy URL"))?;
+            url.set_password(None)
+                .map_err(|()| serde::ser::Error::custom("Invalid upstream proxy URL"))?;
+            Ok::<_, S::Error>(url.to_string())
+        })
+        .transpose()?;
+    sanitized.serialize(serializer)
+}
+
+fn deserialize_upstream_proxy<'de, D>(
+    deserializer: D,
+) -> Result<Option<Zeroizing<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(|value| value.map(Zeroizing::new))
+}
 
 // Security policies must not accept ambiguous duplicate keys. Parsing into a
 // Value directly would silently keep the last occurrence.
@@ -340,6 +371,12 @@ pub struct Policy {
     pub mode: Mode,
     pub network: Network,
     pub network_profile: Option<String>,
+    #[serde(
+        serialize_with = "serialize_upstream_proxy",
+        deserialize_with = "deserialize_upstream_proxy"
+    )]
+    pub upstream_proxy: Option<Zeroizing<String>>,
+    pub upstream_bypass: Vec<String>,
     pub hosts: Vec<String>,
     pub local: Vec<String>,
     pub publish: Vec<u16>,
@@ -410,6 +447,38 @@ impl Policy {
 
     pub fn resolve(&mut self, workspace: &Path) -> io::Result<()> {
         self.isolated = self.mode == Mode::Isolated;
+        if self.upstream_proxy.is_none() {
+            self.upstream_proxy = std::env::var("BOXER_UPSTREAM_PROXY")
+                .ok()
+                .map(Zeroizing::new);
+        }
+        if self.upstream_bypass.is_empty()
+            && let Ok(value) = std::env::var("BOXER_UPSTREAM_BYPASS")
+        {
+            self.upstream_bypass = value
+                .split(',')
+                .map(str::trim)
+                .filter(|pattern| !pattern.is_empty())
+                .map(str::to_owned)
+                .collect();
+        }
+        if let Some(proxy) = &self.upstream_proxy {
+            crate::network::UpstreamProxy::parse(proxy)?;
+            if self.network != Network::Proxy || !self.isolated {
+                return Err(io::Error::other(
+                    "An upstream proxy requires Linux --isolated --network proxy",
+                ));
+            }
+        } else if !self.upstream_bypass.is_empty() {
+            return Err(io::Error::other(
+                "Upstream bypass rules require an upstream proxy",
+            ));
+        }
+        for pattern in &mut self.upstream_bypass {
+            *pattern = crate::network::normalize_bypass_pattern(pattern)?;
+        }
+        self.upstream_bypass.sort();
+        self.upstream_bypass.dedup();
         if let Some(profile) = &self.network_profile {
             if self.network != Network::Proxy {
                 return Err(io::Error::other("Network profiles require --network proxy"));

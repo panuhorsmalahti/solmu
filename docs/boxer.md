@@ -399,8 +399,9 @@ mode and resource options override file values, and `--read-only` and
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `local`, `publish`, `clean_env`,
-`pass_env`, `env_credentials`, `credentials`, `runtime_groups`, `cpus`,
-`endpoint_rules`, `memory_mib`, `pids`, and `cgroup_root`. Endpoint rules have
+`upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`,
+`credentials`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
+and `cgroup_root`. Endpoint rules have
 `provider`, `method`, and `path` fields and require a matching entry in
 `credentials`. Proxy credentials are `openai` and `anthropic`; runtime groups
 are `node`, `python`, `rust`, and `go`.
@@ -492,6 +493,28 @@ filters. Package registries may use additional CDN hosts, which you can add
 explicitly. These profiles configure allowed hostnames, not credentials; use
 `--credential` separately when the agent should receive a proxy session token
 instead of the real provider key.
+
+To send routed connections through a corporate HTTP CONNECT proxy, pass
+`--upstream-proxy` or set `BOXER_UPSTREAM_PROXY`:
+
+```sh
+boxer --isolated --network proxy --network-profile developer \
+  --upstream-proxy http://proxy.corp.example:3128 \
+  --cwd /path/to/project -- solmu
+```
+
+Proxy credentials can be included in the URL using HTTP Basic authentication;
+use the environment variable rather than a command-line argument for a URL
+that contains a password. Boxer redacts proxy credentials from resolved policy
+output. Policy files can set `upstream_proxy` too.
+
+Use `--upstream-bypass DOMAIN` to connect directly for an exact domain or
+`*.DOMAIN` pattern. `BOXER_UPSTREAM_BYPASS` accepts a comma-separated list of
+the same patterns. A bypass does not add a network route: the target must also
+match `--allow-host`, a network profile, or policy `hosts`. Explicit bypasses
+may reach public or private network addresses, but loopback, link-local, and
+other special-use addresses remain blocked. These settings also apply to
+brokered credential traffic.
 
 For a backend that calls OpenAI, stop the regular backend, then run:
 

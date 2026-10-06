@@ -107,6 +107,8 @@ fn schema() -> io::Result<i32> {
             "mode": {"enum": ["unrestricted", "workspace", "isolated"]},
             "network": {"enum": ["allow", "deny", "proxy"]},
             "network_profile": {"enum": ["minimal", "developer"]},
+            "upstream_proxy": {"type": "string", "format": "uri"},
+            "upstream_bypass": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
             "hosts": {"type": "array", "items": {"type": "string"}},
             "local": {"type": "array", "items": {"type": "string"}},
             "publish": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 65535}},

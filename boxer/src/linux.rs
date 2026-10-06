@@ -187,6 +187,13 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
         let (broker, session_tokens) = proxy::credential::Broker::start(
             &policy.credentials,
             &policy.endpoint_rules,
+            policy
+                .upstream_proxy
+                .as_deref()
+                .map(crate::network::UpstreamProxy::parse)
+                .transpose()?
+                .as_ref(),
+            &policy.upstream_bypass,
             &reserved_ports,
         )?;
         let port = broker.port();

@@ -169,6 +169,8 @@ fn policy_schema_describes_the_supported_policy_fields() {
     for field in [
         "network",
         "network_profile",
+        "upstream_proxy",
+        "upstream_bypass",
         "hosts",
         "local",
         "publish",

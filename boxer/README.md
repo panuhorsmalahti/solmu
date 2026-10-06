@@ -92,6 +92,9 @@ hosts with `--allow-host api.openai.com`. Forward an existing backend with
 See [network routes and Solmu examples](../docs/boxer.md#choose-allowed-network-destinations-on-linux).
 This routes traffic through a private network and preserves streaming and
 WebSocket support. Provider keys remain visible to the agent.
+An HTTP CONNECT proxy can be configured with `--upstream-proxy` or
+`BOXER_UPSTREAM_PROXY`; exact and wildcard bypasses are available with
+`--upstream-bypass`. See the network route guide above.
 
 Running `boxer` by itself starts the Solmu terminal client (`solmu`).
 It is equivalent to `boxer -- solmu`. To launch the backend or another

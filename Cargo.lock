@@ -5490,10 +5490,12 @@ dependencies = [
 name = "solmu-boxer"
 version = "0.1.3"
 dependencies = [
+ "base64 0.22.1",
  "hex",
  "keyring",
  "landlock",
  "libc",
+ "percent-encoding",
  "ring",
  "rpassword",
  "rustls",

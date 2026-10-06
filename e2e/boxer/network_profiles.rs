@@ -64,3 +64,80 @@ fn network_profiles_expand_to_exact_hosts_and_require_the_proxy() {
     let profiles: Value = serde_json::from_slice(&profiles.stdout).unwrap();
     assert_eq!(profiles.as_array().unwrap().len(), 2);
 }
+
+#[test]
+fn upstream_proxy_requires_routed_networking_and_valid_http_url() {
+    let unsupported = Command::new(binary("boxer"))
+        .args([
+            "--upstream-proxy",
+            "http://127.0.0.1:3128",
+            "--print-policy",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(unsupported.status.code(), Some(125));
+    assert!(
+        String::from_utf8_lossy(&unsupported.stderr)
+            .contains("requires Linux --isolated --network proxy")
+    );
+
+    let invalid = Command::new(binary("boxer"))
+        .args([
+            "--upstream-proxy",
+            "https://proxy.example.com:3128",
+            "--isolated",
+            "--network",
+            "proxy",
+            "--print-policy",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(invalid.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("must use http://"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn upstream_proxy_configuration_is_redacted_and_not_forwarded_to_the_agent() {
+    let workspace = tempfile::tempdir().unwrap();
+    let output = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--network-profile",
+            "minimal",
+            "--cwd",
+        ])
+        .arg(workspace.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .env(
+            "BOXER_UPSTREAM_PROXY",
+            "http://agent:secret@proxy.example.com:3128",
+        )
+        .env("BOXER_UPSTREAM_BYPASS", "git.internal.example,*.dev.local")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        result["policy"]["upstream_proxy"],
+        "http://proxy.example.com:3128/"
+    );
+    assert_eq!(
+        result["policy"]["upstream_bypass"],
+        serde_json::json!(["*.dev.local", "git.internal.example"])
+    );
+    assert!(
+        !result["environment"]["forwarded_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|name| name == "BOXER_UPSTREAM_PROXY" || name == "BOXER_UPSTREAM_BYPASS")
+    );
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("secret"));
+}

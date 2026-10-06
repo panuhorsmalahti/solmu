@@ -1,6 +1,6 @@
 use crate::{
     credential,
-    network::Target,
+    network::{Target, UpstreamProxy},
     policy::{CredentialProvider, EndpointRule},
 };
 use ring::rand::{SecureRandom, SystemRandom};
@@ -42,6 +42,8 @@ impl Broker {
     pub fn start(
         providers: &[CredentialProvider],
         endpoint_rules: &[EndpointRule],
+        upstream_proxy: Option<&UpstreamProxy>,
+        upstream_bypass: &[String],
         reserved_ports: &[u16],
     ) -> io::Result<(Self, Vec<(CredentialProvider, String)>)> {
         let names: Vec<_> = providers
@@ -62,6 +64,8 @@ impl Broker {
             session_tokens.push((*provider, token));
         }
         let endpoint_rules = Arc::new(endpoint_rules.to_vec());
+        let upstream_proxy = upstream_proxy.cloned();
+        let upstream_bypass = Arc::new(upstream_bypass.to_vec());
 
         let mut listener = None;
         for _ in 0..64 {
@@ -102,8 +106,17 @@ impl Broker {
                                 let (stream, _) = accepted?;
                                 let credentials = credentials.clone();
                                 let endpoint_rules = endpoint_rules.clone();
+                                let upstream_proxy = upstream_proxy.clone();
+                                let upstream_bypass = upstream_bypass.clone();
                                 tokio::spawn(async move {
-                                    let _ = serve(stream, credentials, endpoint_rules).await;
+                                    let _ = serve(
+                                        stream,
+                                        credentials,
+                                        endpoint_rules,
+                                        upstream_proxy,
+                                        upstream_bypass,
+                                    )
+                                    .await;
                                 });
                             }
                         }
@@ -152,6 +165,8 @@ async fn serve(
     mut client: TcpStream,
     credentials: HashMap<String, Arc<Credential>>,
     endpoint_rules: Arc<Vec<EndpointRule>>,
+    upstream_proxy: Option<UpstreamProxy>,
+    upstream_bypass: Arc<Vec<String>>,
 ) -> io::Result<()> {
     client.set_nodelay(true)?;
     let header =
@@ -174,10 +189,13 @@ async fn serve(
         client.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").await?;
     }
     let target = Target::parse(request.credential.provider.host(), false)?;
-    let socket = match super::host::connect(&target, false).await {
-        Ok(socket) => socket,
-        Err(_) => return response(&mut client, 502, "Provider connection failed").await,
-    };
+    let socket =
+        match super::host::connect_route(&target, false, upstream_proxy.as_ref(), &upstream_bypass)
+            .await
+        {
+            Ok(socket) => socket,
+            Err(_) => return response(&mut client, 502, "Provider connection failed").await,
+        };
     socket.set_nonblocking(true)?;
     let socket = TcpStream::from_std(socket)?;
     let connector = match tls_connector() {
