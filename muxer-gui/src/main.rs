@@ -586,58 +586,35 @@ impl MuxerGui {
                     .width(Length::Fill),
                 );
             }
-            if Some(id) == active_space {
-                for tab in tabs.iter().filter(|tab| tab["space"].as_u64() == Some(id)) {
-                    let tab_id = tab["id"].as_u64().unwrap_or_default();
-                    let tab_selected = Some(tab_id) == active_tab;
-                    let tab_name = tab["name"].as_str().unwrap_or("Tab").to_string();
-                    spaces_section = spaces_section.push(
-                        button(
-                            row![
-                                text("▸").size(11).color(appearance::MUTED),
-                                text(tab_name).size(12)
-                            ]
-                            .spacing(8)
-                            .align_y(Alignment::Center),
-                        )
-                        .on_press(Message::FocusTab(tab_id))
-                        .style(move |theme, state| {
-                            appearance::navigation(theme, state, tab_selected)
-                        })
-                        .padding([7, 10])
-                        .width(Length::Fill),
-                    );
-                    if Some(tab_id) == active_tab {
-                        for pane in panes
-                            .iter()
-                            .filter(|pane| pane["tab"].as_u64() == Some(tab_id))
-                        {
-                            let pane_id = pane["id"].as_u64().unwrap_or_default();
-                            let name = pane["name"]
-                                .as_str()
-                                .or_else(|| pane["launch"].as_str())
-                                .unwrap_or("Pane")
-                                .to_string();
-                            let pane_selected = self.selected_pane == Some(pane_id);
-                            let pane_state = pane["state"].as_str().unwrap_or("idle").to_string();
-                            let item = button(
-                                row![
-                                    text("›").size(15).color(appearance::MUTED),
-                                    text(name).size(12),
-                                    iced::widget::Space::new().width(Length::Fill),
-                                    text(pane_state).size(9).color(appearance::MUTED),
-                                ]
-                                .align_y(Alignment::Center),
-                            )
-                            .on_press(Message::SelectPane(pane_id))
-                            .style(move |theme, state| {
-                                appearance::navigation(theme, state, pane_selected)
-                            })
-                            .padding([7, 10])
-                            .width(Length::Fill);
-                            spaces_section = spaces_section.push(item);
-                        }
-                    }
+            if Some(id) == active_space
+                && let Some(tab_id) = active_tab
+            {
+                for pane in panes
+                    .iter()
+                    .filter(|pane| pane["tab"].as_u64() == Some(tab_id))
+                {
+                    let pane_id = pane["id"].as_u64().unwrap_or_default();
+                    let name = pane["name"]
+                        .as_str()
+                        .or_else(|| pane["launch"].as_str())
+                        .unwrap_or("Pane")
+                        .to_string();
+                    let pane_selected = self.selected_pane == Some(pane_id);
+                    let pane_state = pane["state"].as_str().unwrap_or("idle").to_string();
+                    let item = button(
+                        row![
+                            text("> ").size(13).color(appearance::MUTED),
+                            text(name).size(12),
+                            iced::widget::Space::new().width(Length::Fill),
+                            text(pane_state).size(9).color(appearance::MUTED),
+                        ]
+                        .align_y(Alignment::Center),
+                    )
+                    .on_press(Message::SelectPane(pane_id))
+                    .style(move |theme, state| appearance::navigation(theme, state, pane_selected))
+                    .padding([7, 10])
+                    .width(Length::Fill);
+                    spaces_section = spaces_section.push(item);
                 }
             }
         }
@@ -682,6 +659,62 @@ impl MuxerGui {
             .to_string();
         let active_space_type = self.active_space_type();
         let active_solmu = active_space_type == SpaceType::Solmu;
+        let mut tab_panel = row![].spacing(5).align_y(Alignment::Center);
+        for tab in tabs
+            .iter()
+            .filter(|tab| tab["space"].as_u64() == active_space)
+        {
+            let tab_id = tab["id"].as_u64().unwrap_or_default();
+            let tab_selected = Some(tab_id) == active_tab;
+            let tab_name = tab["name"].as_str().unwrap_or("Tab").to_string();
+            tab_panel = tab_panel.push(
+                container(
+                    row![
+                        button(text(tab_name).size(12))
+                            .on_press(Message::FocusTab(tab_id))
+                            .style(move |theme, state| {
+                                appearance::navigation(theme, state, tab_selected)
+                            })
+                            .padding([9, 12]),
+                        button(text("x").size(11))
+                            .on_press(Message::CloseTab(tab_id))
+                            .style(appearance::ghost)
+                            .padding([7, 9]),
+                    ]
+                    .align_y(Alignment::Center)
+                    .spacing(1),
+                )
+                .style(move |_| container::Style {
+                    background: Some(if tab_selected {
+                        appearance::SURFACE.into()
+                    } else {
+                        appearance::SIDEBAR.into()
+                    }),
+                    border: iced::Border {
+                        radius: iced::border::Radius {
+                            top_left: 9.0,
+                            top_right: 9.0,
+                            bottom_left: 3.0,
+                            bottom_right: 3.0,
+                        },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }),
+            );
+        }
+        tab_panel = tab_panel
+            .push(
+                button(text("+").size(16))
+                    .on_press(Message::NewTab)
+                    .style(appearance::ghost)
+                    .padding([7, 10]),
+            )
+            .push(iced::widget::Space::new().width(Length::Fill));
+        let tab_panel = container(tab_panel)
+            .padding([5, 8])
+            .width(Length::Fill)
+            .style(appearance::sidebar);
         let toolbar = row![
             column![
                 row![
@@ -699,10 +732,6 @@ impl MuxerGui {
             ]
             .spacing(5),
             iced::widget::Space::new().width(Length::Fill),
-            button(text("＋  Tab").size(11))
-                .on_press(Message::NewTab)
-                .style(appearance::ghost)
-                .padding([8, 10]),
             button(text("Split pane").size(11))
                 .on_press(Message::Split)
                 .style(appearance::ghost)
@@ -789,12 +818,11 @@ impl MuxerGui {
         .width(Length::Fill)
         .height(Length::Fill)
         .style(appearance::panel);
-        let content = column![toolbar, terminal_panel]
+        let terminal_content = column![toolbar, terminal_panel]
             .spacing(16)
             .padding([22, 24])
             .width(Length::Fill)
             .height(Length::Fill);
-        let terminal_content = content;
         let content: Element<'_, Message> = if active_solmu {
             if let Some(pane) = self.snapshot["active_pane"].as_u64()
                 && let Some(desktop) = self.desktops.get(&pane)
@@ -803,16 +831,6 @@ impl MuxerGui {
                     row![
                         text(format!("{} · Solmu", active_space_name)).size(12),
                         iced::widget::Space::new().width(Length::Fill),
-                        button(text("New tab").size(11))
-                            .on_press(Message::NewTab)
-                            .style(appearance::ghost)
-                            .padding([8, 10]),
-                        button(text("Close tab").size(11))
-                            .on_press_maybe(
-                                self.snapshot["active_tab"].as_u64().map(Message::CloseTab)
-                            )
-                            .style(appearance::ghost)
-                            .padding([8, 10]),
                     ]
                     .align_y(Alignment::Center)
                     .spacing(8),
@@ -836,6 +854,11 @@ impl MuxerGui {
         } else {
             terminal_content.into()
         };
+        let content = column![tab_panel, content]
+            .spacing(0)
+            .padding([16, 24])
+            .width(Length::Fill)
+            .height(Length::Fill);
         row![
             container(scrollable(sidebar).height(Length::Fill))
                 .height(Length::Fill)

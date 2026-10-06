@@ -16,8 +16,10 @@ binary, daemon, or local control server is needed. The GUI installer includes
 the `solmu` runtime for Solmu spaces; start the Solmu backend before using
 those spaces. Terminal spaces launch local shells and command-line clients.
 
-The sidebar shows the session, its spaces, tabs, and panes. Create spaces and
-tabs, split panes, send terminal input, and switch spaces. Click **+** beside
+The sidebar shows the session, its spaces, and panes. Tabs appear in a browser-
+style strip along the top of the workspace. Select a tab to switch to it, use
+**+** to add one, or click its **x** to close it. Split panes and send terminal
+input from the workspace. Click **+** beside
 **Spaces** to choose a new **Terminal** or **Solmu** space. Right-click a space
 and choose **Delete space** to remove it. Solmu opens the shared native desktop
 interface, including its conversation list and Profile, Audit, Tasks, and
