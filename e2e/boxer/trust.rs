@@ -260,7 +260,7 @@ fn signed_trust_policy_blocks_listed_file_digests_before_startup() {
 #[test]
 fn signed_trust_policy_verifies_every_file_matching_instruction_patterns() {
     let root = tempfile::tempdir().unwrap();
-    let workspace = root.path().join("workspace");
+    let workspace = root.path().join("workspace[1]");
     let trust_dir = root.path().join("trust");
     std::fs::create_dir(&workspace).unwrap();
     let instructions = workspace.join("AGENTS.md");
