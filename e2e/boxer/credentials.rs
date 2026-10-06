@@ -154,6 +154,24 @@ fn fixed_network_proxy_port_requires_isolated_proxy_networking() {
     );
     let policy: serde_json::Value = serde_json::from_slice(&valid.stdout).unwrap();
     assert_eq!(policy["policy"]["proxy_port"], 47891);
+
+    let collision = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--proxy-port",
+            "47891",
+            "--publish",
+            "47891",
+            "--cwd",
+        ])
+        .arg(workspace.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .output()
+        .unwrap();
+    assert_eq!(collision.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&collision.stderr).contains("proxy port conflicts"));
 }
 
 #[test]
