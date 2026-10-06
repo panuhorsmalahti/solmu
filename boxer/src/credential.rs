@@ -1,9 +1,15 @@
 use keyring::Entry;
-use std::{ffi::OsString, io, process::Command};
+use std::{
+    ffi::OsString,
+    fs::File,
+    io::{self, Read},
+    process::Command,
+};
 use zeroize::{Zeroize, Zeroizing};
 
 const SERVICE: &str = "solmu-boxer";
 const TARGET: &str = "default";
+const MAX_FILE_SECRET_BYTES: u64 = 1024 * 1024;
 
 pub fn command(args: &[OsString]) -> io::Result<i32> {
     match args.get(1).and_then(|arg| arg.to_str()) {
@@ -52,6 +58,16 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
 
 pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
     load_with(names, |name| {
+        if let Some(variable) = environment_reference(name) {
+            return std::env::var(variable).map_err(|_| {
+                io::Error::other(format!(
+                    "Credential environment variable {variable} is not set"
+                ))
+            });
+        }
+        if is_file_reference(name) {
+            return read_file_secret(name);
+        }
         if name.starts_with("op://") {
             return read_onepassword(name);
         }
@@ -89,7 +105,79 @@ pub fn is_onepassword_reference(value: &str) -> bool {
 }
 
 pub fn valid_source_key(value: &str) -> bool {
-    valid_name(value) || is_onepassword_reference(value) || is_apple_password_reference(value)
+    valid_name(value)
+        || environment_reference(value).is_some()
+        || is_file_reference(value)
+        || is_onepassword_reference(value)
+        || is_apple_password_reference(value)
+}
+
+pub fn environment_reference(value: &str) -> Option<&str> {
+    let variable = value.strip_prefix("env://")?;
+    valid_name(variable).then_some(variable)
+}
+
+pub fn is_file_reference(value: &str) -> bool {
+    if value.chars().any(char::is_control) {
+        return false;
+    }
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    url.scheme() == "file"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && url
+            .host_str()
+            .is_none_or(|host| host.eq_ignore_ascii_case("localhost"))
+        && url.to_file_path().is_ok()
+}
+
+fn read_file_secret(reference: &str) -> io::Result<String> {
+    if !is_file_reference(reference) {
+        return Err(io::Error::other("Invalid file credential reference"));
+    }
+    let url = url::Url::parse(reference)
+        .map_err(|_| io::Error::other("Invalid file credential reference"))?;
+    let path = url
+        .to_file_path()
+        .map_err(|_| io::Error::other("Invalid file credential reference"))?;
+    let file = File::open(path)
+        .map_err(|_| io::Error::other("Could not read the file credential source"))?;
+    let mut bytes = Vec::new();
+    if file
+        .take(MAX_FILE_SECRET_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .is_err()
+    {
+        bytes.zeroize();
+        return Err(io::Error::other(
+            "Could not read the file credential source",
+        ));
+    }
+    if bytes.len() as u64 > MAX_FILE_SECRET_BYTES {
+        bytes.zeroize();
+        return Err(io::Error::other("File credential source exceeds 1 MiB"));
+    }
+    if bytes.ends_with(b"\n") {
+        bytes.pop();
+        if bytes.ends_with(b"\r") {
+            bytes.pop();
+        }
+    }
+    match String::from_utf8(std::mem::take(&mut bytes)) {
+        Ok(secret) => Ok(secret),
+        Err(error) => {
+            let mut bytes = error.into_bytes();
+            bytes.zeroize();
+            Err(io::Error::other(
+                "File credential source is not valid UTF-8",
+            ))
+        }
+    }
 }
 
 pub fn is_apple_password_reference(value: &str) -> bool {
@@ -358,5 +446,36 @@ mod tests {
         ] {
             assert!(!is_apple_password_reference(invalid), "accepted {invalid}");
         }
+    }
+
+    #[test]
+    fn environment_secret_references_preserve_variable_case_and_validate_names() {
+        assert_eq!(
+            environment_reference("env://Mixed_Case1"),
+            Some("Mixed_Case1")
+        );
+        for invalid in [
+            "env://",
+            "env://PATH",
+            "env://SOLMU_WORKSPACE",
+            "env://BAD-NAME",
+        ] {
+            assert!(
+                environment_reference(invalid).is_none(),
+                "accepted {invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn file_secret_references_are_local_and_read_one_trailing_newline() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("secret.txt");
+        std::fs::write(&path, b"file-secret\r\n").unwrap();
+        let reference = url::Url::from_file_path(path).unwrap().to_string();
+        assert!(is_file_reference(&reference));
+        assert_eq!(read_file_secret(&reference).unwrap(), "file-secret");
+        assert!(!is_file_reference("file://remote.example/secrets/key"));
+        assert!(!is_file_reference("file:///etc/passwd?copy=1"));
     }
 }

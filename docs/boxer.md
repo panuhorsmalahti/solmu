@@ -255,17 +255,29 @@ is also the environment variable provided to the launched program. Multiple
 macOS, Credential Manager on Windows, and Secret Service on Linux). On Linux,
 a Secret Service provider must be available to the user session.
 
-Use `--env-credential-map SOURCE TARGET` when the credential store key differs
-from the child environment variable, or when using a 1Password reference:
+Use `--env-credential-map SOURCE TARGET` when the credential source differs
+from the child environment variable. Sources can be a Boxer credential name,
+an `env://` host variable, a local `file://` URI, a 1Password reference, or on
+macOS an Apple Passwords reference:
 
 ```sh
 boxer --env-credential-map 'op://Development/OpenAI API Key/credential' OPENAI_API_KEY \
   --cwd /path/to/project -- solmu
+
+boxer --env-credential-map 'env://OPENAI_API_KEY' OPENAI_API_KEY \
+  --cwd /path/to/project -- solmu
+
+boxer --env-credential-map 'file:///home/me/.secrets/openai' OPENAI_API_KEY \
+  --cwd /path/to/project -- solmu
 ```
 
 Policies can store the same mapping in `env_credential_map`, with source keys
-and target environment variable names as values. Boxer resolves 1Password
-references with the installed, signed-in `op` CLI before starting the child.
+and target environment variable names as values. Boxer reads `env://` values
+from its own environment and removes the source variable from the child. File
+sources must be local, readable files; Boxer removes one trailing line ending
+before injecting the value. Keep secret files private. Boxer resolves
+1Password references with the installed, signed-in `op` CLI before starting
+the child.
 On macOS, mappings can also use an Apple Passwords reference such as
 `apple-password://github.com/alice%40example.com`; Boxer looks up the matching
 server and account using the macOS `security` command.

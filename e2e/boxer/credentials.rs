@@ -17,6 +17,55 @@ fn credential_commands_validate_names_without_exposing_values() {
 }
 
 #[test]
+fn env_reference_maps_a_host_variable_without_forwarding_its_source_name() {
+    let output = Command::new(binary("boxer"))
+        .args([
+            "--env-credential-map",
+            "env://CUSTOM_API_KEY",
+            "CUSTOM_TARGET_KEY",
+            "--",
+        ])
+        .arg(binary("sandbox-probe"))
+        .args([
+            "--env-check-value",
+            "CUSTOM_TARGET_KEY=env-secret-fixture",
+            "CUSTOM_API_KEY=absent",
+        ])
+        .env("CUSTOM_API_KEY", "env-secret-fixture")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn file_reference_maps_a_secret_file_into_the_child_environment() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("secret.txt");
+    std::fs::write(&path, "file-secret-fixture\n").unwrap();
+    let reference = url::Url::from_file_path(path).unwrap().to_string();
+    let output = Command::new(binary("boxer"))
+        .args([
+            "--env-credential-map",
+            &reference,
+            "CUSTOM_TARGET_KEY",
+            "--",
+        ])
+        .arg(binary("sandbox-probe"))
+        .args(["--env-check-value", "CUSTOM_TARGET_KEY=file-secret-fixture"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn environment_credentials_reject_reserved_names_before_store_access() {
     let output = run(&[
         "--env-credential",

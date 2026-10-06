@@ -1312,6 +1312,15 @@ impl Policy {
                 command.env_remove(provider.key_env());
             }
         }
+        for source in self.env_credential_map.keys().chain(
+            self.custom_credentials
+                .values()
+                .map(|custom| &custom.credential_key),
+        ) {
+            if let Some(variable) = crate::credential::environment_reference(source) {
+                command.env_remove(variable);
+            }
+        }
         if self.solmu {
             let workspace = command
                 .get_current_dir()
