@@ -111,11 +111,13 @@ PY
 done
 [ "$count" = "1:$first_tab:$first_space" ] || { echo "Closing a tab did not select the previous tab in the same space (state=$count)" >&2; exit 1; }
 
-# Send a shell command through the GUI and verify its file side effect.
+# Focus the terminal surface, type like a normal terminal, and verify the shell
+# command's file side effect.
 marker="$state/gui-command.txt"
 xdotool windowfocus --sync "$window"
 eval "$(xdotool getwindowgeometry --shell "$window")"
-xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT - 80))" click 1
+xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT / 2))" click 1
+sleep 0.2
 xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
@@ -153,6 +155,24 @@ PY
   sleep 0.5
 done
 [ "$created" = "$((before + 1)):terminal:shell" ] || { echo "Terminal choice did not open a shell (active=$created)" >&2; exit 1; }
+
+# Ctrl+C closes the focused Terminal pane.
+eval "$(xdotool getwindowgeometry --shell "$window")"
+xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT / 2))" click 1
+sleep 0.2
+xdotool key ctrl+c
+remaining_spaces=''
+for _ in $(seq 1 30); do
+  remaining_spaces=$(python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+print(len(data["spaces"]))
+PY
+)
+  [ "$remaining_spaces" = "$before" ] && break
+  sleep 0.3
+done
+[ "$remaining_spaces" = "$before" ] || { echo 'Ctrl+C did not close the focused Terminal pane' >&2; exit 1; }
 
 # The embedded GUI can create Solmu spaces too, without a Muxer server.
 xdotool mousemove --window "$window" 240 131 click 1

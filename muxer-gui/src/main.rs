@@ -1,6 +1,10 @@
 use iced::{
     Alignment, Element, Length, Subscription, Task, Theme,
-    widget::{button, column, container, mouse_area, row, scrollable, text, text_input},
+    keyboard::{
+        self, Event as KeyboardEvent,
+        key::{Key, Named},
+    },
+    widget::{button, column, container, mouse_area, row, scrollable, text},
 };
 use serde_json::{Value, json};
 use solmu_client::{Action, Api};
@@ -29,7 +33,7 @@ struct MuxerGui {
     snapshot: Value,
     selected_pane: Option<u64>,
     screen: String,
-    input: String,
+    terminal_focused: bool,
     notice: String,
     show_space_types: bool,
     context_space: Option<u64>,
@@ -63,7 +67,8 @@ impl fmt::Display for SpaceType {
 #[derive(Debug, Clone)]
 enum Message {
     Tick,
-    InputChanged(String),
+    TerminalFocus,
+    TerminalKey(KeyboardEvent),
     ToggleSpaceMenu,
     SpaceContextMenu(u64),
     DeleteSpace(u64),
@@ -74,7 +79,6 @@ enum Message {
     FocusSpace(u64),
     FocusTab(u64),
     CloseTab(u64),
-    Send,
     ClosePane(u64),
     Desktop(u64, DesktopEvent),
     SnapshotLoaded(Result<Value, String>),
@@ -93,7 +97,7 @@ impl MuxerGui {
             snapshot: Value::Null,
             selected_pane: None,
             screen: String::new(),
-            input: String::new(),
+            terminal_focused: false,
             notice: "Starting the embedded workspace engine…".into(),
             show_space_types: false,
             context_space: None,
@@ -128,11 +132,73 @@ impl MuxerGui {
                     "Space deleted".into(),
                 )
             }
-            Message::InputChanged(value) => {
-                self.input = value;
+            Message::TerminalFocus => {
+                self.terminal_focused = true;
                 Task::none()
             }
+            Message::TerminalKey(KeyboardEvent::KeyPressed {
+                key,
+                text,
+                modifiers,
+                ..
+            }) => {
+                if !self.terminal_focused || self.active_space_type() != SpaceType::Terminal {
+                    return Task::none();
+                }
+                let Some(pane) = self
+                    .selected_pane
+                    .or_else(|| self.snapshot["active_pane"].as_u64())
+                else {
+                    return Task::none();
+                };
+                let close_shortcut =
+                    modifiers.command() && matches!(key.as_ref(), Key::Character("c" | "C"));
+                if close_shortcut {
+                    return self.update(Message::ClosePane(pane));
+                }
+                let chord = match key {
+                    Key::Named(named) => terminal_named_key(named).map(str::to_owned),
+                    Key::Character(character)
+                        if modifiers.control() || modifiers.alt() || modifiers.logo() =>
+                    {
+                        let modifier = if modifiers.control() {
+                            "ctrl"
+                        } else if modifiers.alt() {
+                            "alt"
+                        } else {
+                            "super"
+                        };
+                        Some(format!("{modifier}-{character}"))
+                    }
+                    _ => None,
+                };
+                let session = self.session.clone();
+                if let Some(chord) = chord {
+                    if let Err(error) = request(
+                        &session,
+                        json!({"method":"send_keys","params":{"pane":pane,"keys":[chord]}}),
+                    ) {
+                        self.notice = error;
+                    }
+                    Task::none()
+                } else if let Some(text) = text
+                    .filter(|text| !text.is_empty())
+                    .map(|text| text.to_string())
+                {
+                    if let Err(error) = request(
+                        &session,
+                        json!({"method":"send_text","params":{"pane":pane,"text":text}}),
+                    ) {
+                        self.notice = error;
+                    }
+                    Task::none()
+                } else {
+                    Task::none()
+                }
+            }
+            Message::TerminalKey(_) => Task::none(),
             Message::CreateSpace(space_type) => {
+                self.terminal_focused = false;
                 self.show_space_types = false;
                 let (session, cwd, launch) = (
                     self.session.clone(),
@@ -151,6 +217,7 @@ impl MuxerGui {
                 )
             }
             Message::NewTab => {
+                self.terminal_focused = false;
                 let (session, space, launch) = (
                     self.session.clone(),
                     self.snapshot["active_space"].as_u64(),
@@ -185,6 +252,7 @@ impl MuxerGui {
                 }
             }
             Message::FocusSpace(id) => {
+                self.terminal_focused = false;
                 self.context_space = None;
                 self.show_space_types = false;
                 let session = self.session.clone();
@@ -200,6 +268,7 @@ impl MuxerGui {
                 )
             }
             Message::FocusTab(id) => {
+                self.terminal_focused = false;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -213,6 +282,7 @@ impl MuxerGui {
                 )
             }
             Message::CloseTab(id) => {
+                self.terminal_focused = false;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -226,6 +296,7 @@ impl MuxerGui {
                 )
             }
             Message::SelectPane(id) => {
+                self.terminal_focused = false;
                 self.selected_pane = Some(id);
                 self.screen.clear();
                 let session = self.session.clone();
@@ -240,31 +311,8 @@ impl MuxerGui {
                     "Pane selected".into(),
                 )
             }
-            Message::Send => {
-                let Some(pane) = self
-                    .selected_pane
-                    .or_else(|| self.snapshot["active_pane"].as_u64())
-                else {
-                    return Task::none();
-                };
-                let text = std::mem::take(&mut self.input);
-                let session = self.session.clone();
-                perform(
-                    move || {
-                        request(
-                            &session,
-                            json!({"method":"send_text","params":{"pane":pane,"text":text}}),
-                        )?;
-                        request(
-                            &session,
-                            json!({"method":"send_keys","params":{"pane":pane,"keys":["enter"]}}),
-                        )?;
-                        Ok(())
-                    },
-                    "Sent to pane".into(),
-                )
-            }
             Message::ClosePane(id) => {
+                self.terminal_focused = false;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -416,7 +464,10 @@ impl MuxerGui {
         Task::perform(
             async move {
                 tokio::task::spawn_blocking(move || {
-                    let output = request(&session, json!({"method":"read","params":{"pane":id}}))?;
+                    let output = request(
+                        &session,
+                        json!({"method":"read","params":{"pane":id,"ansi":true}}),
+                    )?;
                     Ok(output["text"].as_str().unwrap_or_default().to_string())
                 })
                 .await
@@ -737,36 +788,34 @@ impl MuxerGui {
         } else {
             &self.screen
         };
-        let screen = container(
-            scrollable(
-                text(terminal_text)
-                    .font(iced::Font::MONOSPACE)
-                    .size(13)
-                    .color(iced::color!(0xd5e0dc)),
+        let screen_dimensions = panes
+            .iter()
+            .find(|pane| pane["id"].as_u64() == self.selected_pane)
+            .map(|pane| {
+                (
+                    pane["rows"].as_u64().unwrap_or(24) as u16,
+                    pane["cols"].as_u64().unwrap_or(80) as u16,
+                )
+            })
+            .unwrap_or((24, 80));
+        let screen = mouse_area(
+            container(
+                scrollable(terminal_view(
+                    terminal_text,
+                    screen_dimensions.0,
+                    screen_dimensions.1,
+                ))
+                .height(Length::Fill),
             )
-            .height(Length::Fill),
+            .padding(18)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(appearance::terminal),
         )
-        .padding(18)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(appearance::terminal);
-        let input = row![
-            text("›").size(20).color(appearance::PRIMARY),
-            text_input("Send a command to the selected pane…", &self.input)
-                .on_input(Message::InputChanged)
-                .on_submit(Message::Send)
-                .style(appearance::input)
-                .width(Length::Fill),
-            button(text("Send  ↵").size(11))
-                .on_press(Message::Send)
-                .style(appearance::primary_button)
-                .padding([9, 13])
-        ]
-        .spacing(10)
-        .align_y(Alignment::Center);
+        .on_press(Message::TerminalFocus);
         let terminal_panel = container(
-            column![pane_header, screen, input]
-                .spacing(14)
+            column![pane_header, screen]
+                .spacing(10)
                 .padding(16)
                 .height(Length::Fill),
         )
@@ -843,7 +892,158 @@ fn subscription(state: &MuxerGui) -> Subscription<Message> {
                 .map(|(pane, event)| Message::Desktop(pane, event)),
         );
     }
+    if state.active_space_type() == SpaceType::Terminal && state.terminal_focused {
+        subscriptions.push(keyboard::listen().map(Message::TerminalKey));
+    }
     Subscription::batch(subscriptions)
+}
+
+fn terminal_named_key(key: Named) -> Option<&'static str> {
+    Some(match key {
+        Named::Enter => "enter",
+        Named::Tab => "tab",
+        Named::Escape => "esc",
+        Named::Backspace => "backspace",
+        Named::Delete => "delete",
+        Named::Insert => "insert",
+        Named::ArrowUp => "up",
+        Named::ArrowDown => "down",
+        Named::ArrowLeft => "left",
+        Named::ArrowRight => "right",
+        Named::Home => "home",
+        Named::End => "end",
+        Named::PageUp => "pageup",
+        Named::PageDown => "pagedown",
+        _ => return None,
+    })
+}
+
+fn terminal_view(screen: &str, rows: u16, cols: u16) -> Element<'static, Message> {
+    use iced::widget::text::{Rich, Span};
+
+    let mut parser = vt100::Parser::new(rows.max(1), cols.max(1), 0);
+    parser.process(screen.as_bytes());
+    let screen = parser.screen();
+    let (rows, cols) = screen.size();
+    let cursor = screen.cursor_position();
+    let mut output = column![].spacing(0);
+    for row in 0..rows {
+        let mut spans: Vec<Span<'static, (), iced::Font>> = Vec::new();
+        let mut run = String::new();
+        let mut run_style: Option<(iced::Color, iced::Color, bool, bool)> = None;
+        for col in 0..cols {
+            let Some(cell) = screen.cell(row, col) else {
+                continue;
+            };
+            if cell.is_wide_continuation() {
+                continue;
+            }
+            let is_cursor = cursor == (row, col);
+            let (fg, bg) = if cell.inverse() || is_cursor {
+                (
+                    terminal_color(cell.bgcolor(), true),
+                    terminal_color(cell.fgcolor(), false),
+                )
+            } else {
+                (
+                    terminal_color(cell.fgcolor(), true),
+                    terminal_color(cell.bgcolor(), false),
+                )
+            };
+            let style = (fg, bg, cell.bold(), cell.underline());
+            if run_style.is_some_and(|current| current != style) {
+                let (fg, bg, bold, underline) = run_style.unwrap();
+                spans.push(
+                    Span::new(std::mem::take(&mut run))
+                        .font(iced::Font {
+                            weight: if bold {
+                                iced::font::Weight::Bold
+                            } else {
+                                iced::font::Weight::Normal
+                            },
+                            ..iced::Font::MONOSPACE
+                        })
+                        .size(13)
+                        .color(fg)
+                        .background(bg)
+                        .underline(underline),
+                );
+            }
+            run_style = Some(style);
+            let contents = cell.contents();
+            run.push_str(if contents.is_empty() { " " } else { contents });
+        }
+        if let Some((fg, bg, bold, underline)) = run_style {
+            spans.push(
+                Span::new(run)
+                    .font(iced::Font {
+                        weight: if bold {
+                            iced::font::Weight::Bold
+                        } else {
+                            iced::font::Weight::Normal
+                        },
+                        ..iced::Font::MONOSPACE
+                    })
+                    .size(13)
+                    .color(fg)
+                    .background(bg)
+                    .underline(underline),
+            );
+        }
+        output = output.push(
+            Rich::<(), Message>::with_spans(spans)
+                .font(iced::Font::MONOSPACE)
+                .size(13)
+                .width(Length::Fill),
+        );
+    }
+    output.width(Length::Fill).into()
+}
+
+fn terminal_color(color: vt100::Color, foreground: bool) -> iced::Color {
+    match color {
+        vt100::Color::Default => {
+            if foreground {
+                iced::color!(0xd5e0dc)
+            } else {
+                iced::color!(0x111a20)
+            }
+        }
+        vt100::Color::Rgb(r, g, b) => iced::Color::from_rgb8(r, g, b),
+        vt100::Color::Idx(index) => {
+            const ANSI: [(u8, u8, u8); 16] = [
+                (0, 0, 0),
+                (205, 49, 49),
+                (13, 188, 121),
+                (229, 229, 16),
+                (36, 114, 200),
+                (188, 63, 188),
+                (17, 168, 205),
+                (229, 229, 229),
+                (102, 102, 102),
+                (241, 76, 76),
+                (35, 209, 139),
+                (245, 245, 67),
+                (59, 142, 234),
+                (214, 112, 214),
+                (41, 184, 219),
+                (255, 255, 255),
+            ];
+            let (r, g, b) = match index {
+                0..=15 => ANSI[usize::from(index)],
+                16..=231 => {
+                    let cube = |value: u8| if value == 0 { 0 } else { 55 + value * 40 };
+                    let value = index - 16;
+                    (cube(value / 36), cube(value / 6 % 6), cube(value % 6))
+                }
+                _ => {
+                    let grey = 8 + (index - 232) * 10;
+                    (grey, grey, grey)
+                }
+            };
+            iced::Color::from_rgb8(r, g, b)
+        }
+    }
 }
 
 fn perform<F>(work: F, label: String) -> Task<Message>

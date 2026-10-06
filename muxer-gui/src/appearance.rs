@@ -1,7 +1,7 @@
 use iced::{
     Border, Color, Theme, color,
     theme::Palette,
-    widget::{button, container, text_input},
+    widget::{button, container},
 };
 
 pub const BACKGROUND: Color = color!(0xf6f7f4);
@@ -109,24 +109,5 @@ pub fn ghost(_: &Theme, status: button::Status) -> button::Style {
             ..Default::default()
         },
         ..Default::default()
-    }
-}
-
-pub fn input(_: &Theme, status: text_input::Status) -> text_input::Style {
-    text_input::Style {
-        background: SURFACE.into(),
-        border: Border {
-            color: if matches!(status, text_input::Status::Focused { .. }) {
-                PRIMARY
-            } else {
-                BORDER
-            },
-            width: 1.0,
-            radius: 9.0.into(),
-        },
-        icon: MUTED,
-        placeholder: MUTED,
-        value: FOREGROUND,
-        selection: color!(0xdce8df),
     }
 }

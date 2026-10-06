@@ -24,9 +24,11 @@ the workspace. Select a tab to switch to it, use **+** to add one, or click its
 **Spaces** to choose a new **Terminal** or **Solmu** space. Right-click a space
 and choose **Delete space** to remove it. Solmu opens the shared native desktop
 interface, including its conversation list and Profile, Audit, Tasks, and
-other pages. Choosing **Terminal** opens a system shell directly; it does not
-start the Solmu CLI. You can run command-line clients such as Claude Code from
-that shell.
+other pages. Choosing **Terminal** opens a full interactive system shell
+directly; it does not start the Solmu CLI. Click inside the terminal to type
+and use shell shortcuts. Press **Ctrl+C** (or **Cmd+C** on macOS) to close its
+terminal pane. You can run command-line clients such as Claude Code from that
+shell.
 
 Muxer GUI owns the session lock while open. Close it before opening that
 session in the terminal Muxer app; the session layout and metadata are saved

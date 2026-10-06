@@ -5631,6 +5631,7 @@ dependencies = [
  "solmu-desktop",
  "solmu-muxer",
  "tokio",
+ "vt100",
 ]
 
 [[package]]
