@@ -148,6 +148,7 @@ pub fn daemon_id(arguments: &[std::ffi::OsString]) -> Option<String> {
 pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
     let id = text(arguments, 1)?.to_owned();
     let root = root()?;
+    await_registered(&id)?;
     with_context(read(&root, &id), "read session record")?;
     let socket_path = socket_path(&root, &id);
     let control_path = control_path(&root, &id);
