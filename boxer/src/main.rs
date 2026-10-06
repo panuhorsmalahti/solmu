@@ -35,6 +35,7 @@ enum BuiltinProfile {
     Solmu,
     Codex,
     ClaudeCode,
+    OpenCode,
 }
 
 impl BuiltinProfile {
@@ -43,8 +44,9 @@ impl BuiltinProfile {
             Some("solmu") => Ok(Self::Solmu),
             Some("codex") => Ok(Self::Codex),
             Some("claude-code" | "claude") => Ok(Self::ClaudeCode),
+            Some("opencode" | "open-code") => Ok(Self::OpenCode),
             _ => Err(io::Error::other(
-                "Unknown profile; available profiles: solmu, codex, claude-code",
+                "Unknown profile; available profiles: solmu, codex, claude-code, opencode",
             )),
         }
     }
@@ -54,6 +56,7 @@ impl BuiltinProfile {
             Self::Solmu => "solmu",
             Self::Codex => "codex",
             Self::ClaudeCode => "claude-code",
+            Self::OpenCode => "opencode",
         }
     }
 
@@ -62,6 +65,7 @@ impl BuiltinProfile {
             Self::Solmu => "solmu",
             Self::Codex => "codex",
             Self::ClaudeCode => "claude",
+            Self::OpenCode => "opencode",
         }
     }
 
@@ -70,6 +74,7 @@ impl BuiltinProfile {
             Self::Solmu => None,
             Self::Codex => Some(AgentProfile::Codex),
             Self::ClaudeCode => Some(AgentProfile::ClaudeCode),
+            Self::OpenCode => Some(AgentProfile::OpenCode),
         }
     }
 }
@@ -82,10 +87,13 @@ fn prepare_agent_home(policy: &mut Policy, agent: AgentProfile) -> io::Result<()
         .join("profiles")
         .join(agent.name());
     let config = match agent {
-        AgentProfile::Codex => ".codex",
-        AgentProfile::ClaudeCode => ".claude",
+        AgentProfile::Codex => vec![".codex"],
+        AgentProfile::ClaudeCode => vec![".claude"],
+        AgentProfile::OpenCode => vec!["config", "data", "cache", "log", "state"],
     };
-    std::fs::create_dir_all(state.join(config))?;
+    for directory in config {
+        std::fs::create_dir_all(state.join(directory))?;
+    }
     std::fs::create_dir_all(state.join("tmp"))?;
     let state = state.canonicalize()?;
     policy.write.push(state.clone());
@@ -115,7 +123,7 @@ fn run() -> io::Result<i32> {
     while let Some(argument) = arguments.next() {
         if argument == "--help" || argument == "-h" {
             println!(
-                "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--profile solmu|codex|claude-code: workspace policy and clean environment; Codex and Claude Code use separate login homes.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
+                "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--profile solmu|codex|claude-code|opencode: workspace policy and clean environment; agent profiles use separate login homes.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
             );
             println!(
                 "--network allow|deny|proxy: unrestricted (default), offline on Linux/macOS, or a routed Linux isolated network.\n--allow-host HOST[:PORT]: exact remote hostname for proxy networking, default port 443 (repeatable).\n--allow-local IP:PORT: explicitly forward a host loopback service into the private network (repeatable).\n--publish PORT: expose a guest service on the same host loopback port (repeatable)."

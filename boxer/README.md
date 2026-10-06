@@ -36,9 +36,10 @@ boxer --profile solmu --cwd /path/to/project -- solmu-backend
 boxer --workspace --cwd /path/to/project --read /path/to/reference -- another-agent
 ```
 
-Boxer also has profiles for installed Codex and Claude Code CLIs on Linux/macOS:
+Boxer also has profiles for installed OpenCode, Codex, and Claude Code CLIs on Linux/macOS:
 
 ```sh
+boxer --profile opencode --cwd /path/to/project
 boxer --profile codex --cwd /path/to/project
 boxer --profile claude-code --cwd /path/to/project
 ```

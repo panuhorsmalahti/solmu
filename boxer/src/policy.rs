@@ -50,6 +50,7 @@ pub enum Network {
 pub enum AgentProfile {
     Codex,
     ClaudeCode,
+    OpenCode,
 }
 
 impl AgentProfile {
@@ -57,6 +58,7 @@ impl AgentProfile {
         match self {
             Self::Codex => "codex",
             Self::ClaudeCode => "claude-code",
+            Self::OpenCode => "opencode",
         }
     }
 }
@@ -282,6 +284,14 @@ impl Policy {
                 AgentProfile::ClaudeCode => {
                     command.env("CLAUDE_CONFIG_DIR", home.join(".claude"));
                 }
+                AgentProfile::OpenCode => {
+                    command
+                        .env("OPENCODE_CONFIG_DIR", home.join("config"))
+                        .env("OPENCODE_DATA_DIR", home.join("data"))
+                        .env("OPENCODE_CACHE_DIR", home.join("cache"))
+                        .env("OPENCODE_LOG_DIR", home.join("log"))
+                        .env("OPENCODE_STATE_DIR", home.join("state"));
+                }
             }
         }
     }
@@ -361,6 +371,24 @@ fn forwarded_for_agent(name: &str, agent: AgentProfile) -> bool {
                 || name.starts_with("ANTHROPIC_")
                 || name.starts_with("AWS_")
                 || name.starts_with("VERTEX_")
+        }
+        AgentProfile::OpenCode => {
+            name.ends_with("_API_KEY")
+                || name.ends_with("_AUTH_TOKEN")
+                || matches!(
+                    name,
+                    "AWS_REGION"
+                        | "AWS_DEFAULT_REGION"
+                        | "AWS_PROFILE"
+                        | "AWS_ACCESS_KEY_ID"
+                        | "AWS_SECRET_ACCESS_KEY"
+                        | "AWS_SESSION_TOKEN"
+                        | "GOOGLE_APPLICATION_CREDENTIALS"
+                        | "GOOGLE_CLOUD_PROJECT"
+                        | "GOOGLE_CLOUD_REGION"
+                        | "VERTEX_PROJECT_ID"
+                        | "VERTEX_LOCATION"
+                )
         }
     }
 }

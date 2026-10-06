@@ -14,6 +14,7 @@ fn profile_plan(profile: &str) -> (tempfile::TempDir, Value) {
         .env("OPENAI_API_KEY", "codex-test-key")
         .env("ANTHROPIC_API_KEY", "claude-test-key")
         .env("BOXER_PRIVATE_VALUE", "keep-private")
+        .env("OPENCODE_SERVER_PASSWORD", "never-forward-this")
         .output()
         .unwrap();
     assert!(
@@ -92,6 +93,36 @@ fn profile_alias_and_program_override_work() {
 }
 
 #[test]
+fn opencode_profile_uses_private_state_and_forwards_provider_auth_without_opencode_secrets() {
+    let (root, plan) = profile_plan("opencode");
+    let state = root.path().join(".boxer").join("profiles").join("opencode");
+    assert_eq!(plan["profile"], "opencode");
+    assert_eq!(plan["program"], "opencode");
+    assert_eq!(plan["policy"]["mode"], "workspace");
+    assert_eq!(plan["environment"]["inherit"], false);
+    for directory in ["config", "data", "cache", "log", "state", "tmp"] {
+        assert!(state.join(directory).is_dir(), "missing {directory}");
+    }
+    let names = plan["environment"]["forwarded_names"].as_array().unwrap();
+    for name in [
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OPENCODE_CONFIG_DIR",
+        "OPENCODE_DATA_DIR",
+        "OPENCODE_CACHE_DIR",
+        "OPENCODE_LOG_DIR",
+        "OPENCODE_STATE_DIR",
+    ] {
+        assert!(names.contains(&json!(name)), "missing {name}");
+    }
+    for name in ["BOXER_PRIVATE_VALUE", "OPENCODE_SERVER_PASSWORD"] {
+        assert!(!names.contains(&json!(name)), "unexpected {name}");
+    }
+    let writable = plan["policy"]["write"].as_array().unwrap();
+    assert!(writable.contains(&json!(state.canonicalize().unwrap())));
+}
+
+#[test]
 fn unsupported_profiles_and_conflicting_policy_are_rejected() {
     let workspace = tempfile::tempdir().unwrap();
     let policy = workspace.path().join("boxer.json");
@@ -155,4 +186,36 @@ fn agent_profiles_run_with_their_private_home_and_writable_project() {
             "missing"
         );
     }
+
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let output = Command::new(binary("boxer"))
+        .args(["--profile", "opencode", "--cwd"])
+        .arg(&project)
+        .args([
+            "--", "/bin/sh", "-c",
+            "printf '%s' \"$OPENCODE_CONFIG_DIR|$OPENCODE_DATA_DIR|$OPENCODE_CACHE_DIR|$OPENCODE_LOG_DIR|$OPENCODE_STATE_DIR\" > agent-paths",
+        ])
+        .env("HOME", root.path())
+        .env("OPENCODE_SERVER_PASSWORD", "secret")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let home = root
+        .path()
+        .join(".boxer/profiles/opencode")
+        .canonicalize()
+        .unwrap();
+    let paths = ["config", "data", "cache", "log", "state"]
+        .map(|name| home.join(name).to_string_lossy().into_owned())
+        .join("|");
+    assert_eq!(
+        std::fs::read_to_string(project.join("agent-paths")).unwrap(),
+        paths
+    );
 }

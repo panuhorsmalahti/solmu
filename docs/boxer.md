@@ -38,22 +38,27 @@ and proxy settings remain available. `SSH_AUTH_SOCK` and unrelated secrets are
 not forwarded. Provider keys are still visible to the launched program; this
 is environment filtering, not credential brokering.
 
-### Run Claude Code or Codex
+### Run OpenCode, Claude Code, or Codex
 
 Install the agent's CLI first, then start it in a project on Linux or macOS:
 
 ```sh
 boxer --profile codex --cwd /path/to/project
 boxer --profile claude-code --cwd /path/to/project
+boxer --profile opencode --cwd /path/to/project
 ```
 
-These profiles start `codex` and `claude`, respectively. They allow writes to
+These profiles start `opencode`, `claude`, and `codex`. They allow writes to
 the project and keep each agent's login and settings in its own directory under
-`~/.boxer/profiles/`. Sign in the first time you run each profile. A login in
-your usual CLI home is separate from its Boxer login. The profiles forward the
-corresponding provider credentials if they are set, along with terminal and
+`~/.boxer/profiles/`. OpenCode's config, data, cache, logs, and state each use a
+private directory there. Sign in the first time you run a profile. A login in
+your usual CLI home is separate from its Boxer login. The profiles forward
+provider credentials and settings needed by each agent, along with terminal and
 proxy settings. They leave unrelated environment variables out. All network
 requests remain allowed by default.
+
+Install the agent CLI before using its profile. OpenCode uses the `opencode`
+command; see the [OpenCode installation guide](https://opencode.ai/docs/).
 
 If your CLI or its dependencies are installed outside the system runtime and
 project, grant the installation directory with `--read PATH`. Use `--write PATH`
