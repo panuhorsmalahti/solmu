@@ -190,7 +190,7 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
             policy
                 .upstream_proxy
                 .as_deref()
-                .map(crate::network::UpstreamProxy::parse)
+                .map(|value| crate::network::UpstreamProxy::parse(value))
                 .transpose()?
                 .as_ref(),
             &policy.upstream_bypass,

@@ -36,7 +36,7 @@ impl Host {
         let upstream_proxy = policy
             .upstream_proxy
             .as_deref()
-            .map(UpstreamProxy::parse)
+            .map(|value| UpstreamProxy::parse(value))
             .transpose()?;
         let upstream_bypass = policy.upstream_bypass.clone();
         let listeners = policy
@@ -279,7 +279,8 @@ async fn open_tunnel(
         stream.read_exact(&mut byte).await?;
         response.push(byte[0]);
     }
-    let text = std::str::from_utf8(&response)?;
+    let text = std::str::from_utf8(&response)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let status = text
         .split_once("\r\n")
         .map(|(line, _)| line)
