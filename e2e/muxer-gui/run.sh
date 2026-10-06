@@ -96,7 +96,7 @@ for _ in $(seq 1 30); do
   count=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = next(item for item in data["spaces"] if item["id"] == data["active"])
+space = data["spaces"][0]
 print(len(space["tabs"]))
 PY
 )
