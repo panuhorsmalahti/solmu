@@ -209,7 +209,7 @@ fn run() -> io::Result<i32> {
                 "--runtime-group node|python|rust|go: read access to detected toolchain files (repeatable; requires --workspace or --isolated)."
             );
             println!(
-                "--credential openai|anthropic|gemini: proxy a key from the OS credential store so the agent receives only a per-session token (requires --isolated --network proxy)."
+                "--credential openai|anthropic|gemini|github|gitlab: proxy a key from the OS credential store so the agent receives only a per-session token (requires --isolated --network proxy)."
             );
             println!(
                 "--allow-endpoint PROVIDER:METHOD:PATH: allow a brokered API endpoint (repeatable; * matches one path segment and ** matches multiple)."

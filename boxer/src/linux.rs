@@ -211,6 +211,12 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
                 crate::policy::CredentialProvider::Gemini => {
                     format!("http://127.0.0.1:{port}/gemini/")
                 }
+                crate::policy::CredentialProvider::Github => {
+                    format!("http://127.0.0.1:{port}/github/")
+                }
+                crate::policy::CredentialProvider::Gitlab => {
+                    format!("http://127.0.0.1:{port}/gitlab/api/")
+                }
             };
             if policy.solmu {
                 command.env("LLM_ENDPOINT", base);
@@ -229,6 +235,12 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
                     }
                     crate::policy::CredentialProvider::Gemini => {
                         command.env("GEMINI_BASE_URL", base);
+                    }
+                    crate::policy::CredentialProvider::Github => {
+                        command.env("GITHUB_API_URL", base);
+                    }
+                    crate::policy::CredentialProvider::Gitlab => {
+                        command.env("GITLAB_API_URL", base);
                     }
                 }
             }

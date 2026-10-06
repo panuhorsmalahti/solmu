@@ -28,6 +28,7 @@ const HEADER_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct Credential {
     provider: CredentialProvider,
+    upstream_prefix: &'static str,
     secret: Zeroizing<String>,
     token: Zeroizing<String>,
 }
@@ -66,6 +67,7 @@ impl Broker {
             let token = session_token()?;
             let entry = Credential {
                 provider: *provider,
+                upstream_prefix: "",
                 secret,
                 token: Zeroizing::new(token.clone()),
             };
@@ -281,7 +283,7 @@ fn parse_request(
         .get(route)
         .cloned()
         .ok_or(RequestError::Invalid)?;
-    let upstream_path = format!("/{upstream_path}");
+    let upstream_path = format!("{}{upstream_path}", credential.upstream_prefix);
     let mut headers = Vec::new();
     let mut supplied_token = None;
     let mut content_length = None;
@@ -355,6 +357,24 @@ fn parse_request(
             }
             token
         }
+        CredentialProvider::Github => {
+            let (scheme, token) = supplied_token
+                .split_once(' ')
+                .ok_or(RequestError::Unauthorized)?;
+            if !scheme.eq_ignore_ascii_case("token") || token.is_empty() {
+                return Err(RequestError::Unauthorized);
+            }
+            token
+        }
+        CredentialProvider::Gitlab => {
+            let (scheme, token) = supplied_token
+                .split_once(' ')
+                .ok_or(RequestError::Unauthorized)?;
+            if !scheme.eq_ignore_ascii_case("Bearer") || token.is_empty() {
+                return Err(RequestError::Unauthorized);
+            }
+            token
+        }
         CredentialProvider::Anthropic | CredentialProvider::Gemini => supplied_token.as_str(),
     };
     if !bool::from(supplied_token.as_bytes().ct_eq(credential.token.as_bytes())) {
@@ -395,6 +415,16 @@ fn parse_request(
         }
         CredentialProvider::Gemini => {
             upstream_header.push_str("x-goog-api-key: ");
+            upstream_header.push_str(&credential.secret);
+            upstream_header.push_str("\r\n");
+        }
+        CredentialProvider::Github => {
+            upstream_header.push_str("Authorization: token ");
+            upstream_header.push_str(&credential.secret);
+            upstream_header.push_str("\r\n");
+        }
+        CredentialProvider::Gitlab => {
+            upstream_header.push_str("Authorization: Bearer ");
             upstream_header.push_str(&credential.secret);
             upstream_header.push_str("\r\n");
         }
@@ -545,6 +575,7 @@ mod tests {
             provider.route().to_owned(),
             Arc::new(Credential {
                 provider,
+                upstream_prefix: "",
                 secret: Zeroizing::new("real-secret".to_owned()),
                 token: Zeroizing::new("session-token".to_owned()),
             }),
@@ -595,6 +626,46 @@ mod tests {
             request
                 .upstream_header
                 .contains("/v1beta/models/gemini:generateContent")
+        );
+        assert!(!request.upstream_header.contains("session-token"));
+    }
+
+    #[test]
+    fn github_proxy_uses_token_authorization_and_pins_upstream_host() {
+        let request = parse_request(
+            b"GET /github/user HTTP/1.1\r\nAuthorization: token session-token\r\nHost: 127.0.0.1\r\n\r\n",
+            &credentials(CredentialProvider::Github),
+            &[],
+        )
+        .unwrap();
+        assert!(request.upstream_header.contains("Host: api.github.com\r\n"));
+        assert!(
+            request
+                .upstream_header
+                .contains("Authorization: token real-secret\r\n")
+        );
+        assert!(request.upstream_header.contains("GET /user HTTP/1.1"));
+        assert!(!request.upstream_header.contains("session-token"));
+    }
+
+    #[test]
+    fn gitlab_proxy_uses_bearer_authorization_and_keeps_api_path() {
+        let request = parse_request(
+            b"GET /gitlab/api/v4/projects HTTP/1.1\r\nAuthorization: Bearer session-token\r\nHost: 127.0.0.1\r\n\r\n",
+            &credentials(CredentialProvider::Gitlab),
+            &[],
+        )
+        .unwrap();
+        assert!(request.upstream_header.contains("Host: gitlab.com\r\n"));
+        assert!(
+            request
+                .upstream_header
+                .contains("Authorization: Bearer real-secret\r\n")
+        );
+        assert!(
+            request
+                .upstream_header
+                .contains("GET /api/v4/projects HTTP/1.1")
         );
         assert!(!request.upstream_header.contains("session-token"));
     }

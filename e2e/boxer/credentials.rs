@@ -91,6 +91,10 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
             "openai",
             "--credential",
             "gemini",
+            "--credential",
+            "github",
+            "--credential",
+            "gitlab",
             "--allow-endpoint",
             "openai:POST:/v1/chat/completions",
             "--cwd",
@@ -99,6 +103,8 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
         .args(["--print-policy", "--", "unused-program"])
         .env("OPENAI_API_KEY", "real-secret-fixture")
         .env("GEMINI_API_KEY", "gemini-secret-fixture")
+        .env("GITHUB_TOKEN", "github-secret-fixture")
+        .env("GITLAB_TOKEN", "gitlab-secret-fixture")
         .output()
         .unwrap();
     assert!(
@@ -109,6 +115,8 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["policy"]["credentials"][0], "openai");
     assert_eq!(result["policy"]["credentials"][1], "gemini");
+    assert_eq!(result["policy"]["credentials"][2], "github");
+    assert_eq!(result["policy"]["credentials"][3], "gitlab");
     assert_eq!(
         result["policy"]["endpoint_rules"][0]["path"],
         "/v1/chat/completions"
@@ -127,6 +135,15 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
             .iter()
             .any(|host| { host == "generativelanguage.googleapis.com:443" })
     );
+    for host in ["api.github.com:443", "gitlab.com:443"] {
+        assert!(
+            result["policy"]["hosts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|found| found == host)
+        );
+    }
     assert!(
         !result["environment"]["forwarded_names"]
             .as_array()
@@ -141,6 +158,17 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
             .iter()
             .any(|name| name == "GEMINI_API_KEY")
     );
+    for name in ["GITHUB_TOKEN", "GITLAB_TOKEN"] {
+        assert!(
+            !result["environment"]["forwarded_names"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|found| found == name)
+        );
+    }
     assert!(!String::from_utf8_lossy(&output.stdout).contains("real-secret-fixture"));
     assert!(!String::from_utf8_lossy(&output.stdout).contains("gemini-secret-fixture"));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("github-secret-fixture"));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("gitlab-secret-fixture"));
 }

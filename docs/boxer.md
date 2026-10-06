@@ -139,7 +139,10 @@ The matching provider host is allowed automatically. Use
 `--credential anthropic` with a stored `ANTHROPIC_API_KEY` for Anthropic, or
 `--credential gemini` with a stored `GEMINI_API_KEY` for Gemini. Gemini requests
 are routed to `generativelanguage.googleapis.com` and the broker adds the key as
-`x-goog-api-key`. This
+`x-goog-api-key`. GitHub and GitLab routes are also available with
+`GITHUB_TOKEN` and `GITLAB_TOKEN`; Boxer injects `Authorization: token …` for
+GitHub and `Authorization: Bearer …` for GitLab. It sets `GITHUB_API_URL` and
+`GITLAB_API_URL` in the launched process to the local broker routes. This
 requires Linux isolated mode with routed networking; other network destinations
 still need explicit routes. The local broker verifies the session token and
 does not print the stored key. The agent can make requests through the broker,
@@ -406,7 +409,8 @@ The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `credentials`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
 and `cgroup_root`. Endpoint rules have
 `provider`, `method`, and `path` fields and require a matching entry in
-`credentials`. Proxy credentials are `openai`, `anthropic`, and `gemini`; runtime groups
+`credentials`. Proxy credentials are `openai`, `anthropic`, `gemini`, `github`,
+and `gitlab`; runtime groups
 are `node`, `python`, `rust`, and `go`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
@@ -598,8 +602,8 @@ Permissive networking remains the default on every platform.
 
 Ordinary network routes do not hide provider keys: environment variables you
 forward still reach the agent, and `.env` files within shared paths remain
-readable. Use `--credential openai`, `--credential anthropic`, or
-`--credential gemini` on Linux for
+readable. Use `--credential openai`, `--credential anthropic`,
+`--credential gemini`, `--credential github`, or `--credential gitlab` on Linux for
 provider-key proxy injection. This does not protect other secrets stored in the
 workspace.
 

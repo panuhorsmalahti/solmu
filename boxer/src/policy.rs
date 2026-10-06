@@ -100,6 +100,8 @@ pub enum CredentialProvider {
     Openai,
     Anthropic,
     Gemini,
+    Github,
+    Gitlab,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -253,8 +255,10 @@ impl CredentialProvider {
             "openai" => Ok(Self::Openai),
             "anthropic" => Ok(Self::Anthropic),
             "gemini" => Ok(Self::Gemini),
+            "github" => Ok(Self::Github),
+            "gitlab" => Ok(Self::Gitlab),
             _ => Err(io::Error::other(
-                "Unknown credential provider; available providers: openai, anthropic, gemini",
+                "Unknown credential provider; available providers: openai, anthropic, gemini, github, gitlab",
             )),
         }
     }
@@ -264,6 +268,8 @@ impl CredentialProvider {
             Self::Openai => "OPENAI_API_KEY",
             Self::Anthropic => "ANTHROPIC_API_KEY",
             Self::Gemini => "GEMINI_API_KEY",
+            Self::Github => "GITHUB_TOKEN",
+            Self::Gitlab => "GITLAB_TOKEN",
         }
     }
 
@@ -272,6 +278,8 @@ impl CredentialProvider {
             Self::Openai => "api.openai.com:443",
             Self::Anthropic => "api.anthropic.com:443",
             Self::Gemini => "generativelanguage.googleapis.com:443",
+            Self::Github => "api.github.com:443",
+            Self::Gitlab => "gitlab.com:443",
         }
     }
 
@@ -280,6 +288,8 @@ impl CredentialProvider {
             Self::Openai => "openai",
             Self::Anthropic => "anthropic",
             Self::Gemini => "gemini",
+            Self::Github => "github",
+            Self::Gitlab => "gitlab",
         }
     }
 
