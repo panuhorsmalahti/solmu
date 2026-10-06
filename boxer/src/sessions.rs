@@ -148,37 +148,58 @@ pub fn daemon_id(arguments: &[std::ffi::OsString]) -> Option<String> {
 pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
     let id = text(arguments, 1)?.to_owned();
     let root = root()?;
-    read(&root, &id)?;
+    with_context(read(&root, &id), "read session record")?;
     let socket_path = socket_path(&root, &id);
     let control_path = control_path(&root, &id);
     let _ = fs::remove_file(&socket_path);
     let _ = fs::remove_file(&control_path);
-    let listener = UnixListener::bind(&socket_path)?;
-    let control_listener = UnixListener::bind(&control_path)?;
-    fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))?;
-    fs::set_permissions(&control_path, fs::Permissions::from_mode(0o600))?;
+    let listener = with_context(
+        UnixListener::bind(&socket_path),
+        &format!("bind session socket {}", socket_path.display()),
+    )?;
+    let control_listener = with_context(
+        UnixListener::bind(&control_path),
+        &format!("bind control socket {}", control_path.display()),
+    )?;
+    with_context(
+        fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600)),
+        "secure session socket",
+    )?;
+    with_context(
+        fs::set_permissions(&control_path, fs::Permissions::from_mode(0o600)),
+        "secure control socket",
+    )?;
     listener.set_nonblocking(true)?;
     control_listener.set_nonblocking(true)?;
 
-    let pair = native_pty_system()
-        .openpty(PtySize {
-            rows: 24,
-            cols: 80,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(io::Error::other)?;
+    let pair = with_context(
+        native_pty_system()
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(io::Error::other),
+        "open session PTY",
+    )?;
     let mut command = CommandBuilder::new(std::env::current_exe()?);
     command.arg(CHILD_ARGUMENT);
     command.arg(&id);
     command.args(&arguments[2..]);
-    let mut child = pair
-        .slave
-        .spawn_command(command)
-        .map_err(io::Error::other)?;
+    let mut child = with_context(
+        pair.slave.spawn_command(command).map_err(io::Error::other),
+        "start session process",
+    )?;
     drop(pair.slave);
-    let mut writer = pair.master.take_writer().map_err(io::Error::other)?;
-    let reader = pair.master.try_clone_reader().map_err(io::Error::other)?;
+    let mut writer = with_context(
+        pair.master.take_writer().map_err(io::Error::other),
+        "open session PTY writer",
+    )?;
+    let reader = with_context(
+        pair.master.try_clone_reader().map_err(io::Error::other),
+        "open session PTY reader",
+    )?;
     let (output_tx, output_rx) = mpsc::sync_channel::<Vec<u8>>(64);
     thread::spawn(move || {
         let mut reader = reader;
@@ -198,9 +219,12 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
     let mut active: Option<UnixStream> = None;
     let mut pending_output = VecDeque::new();
     let mut history = VecDeque::with_capacity(HISTORY_LIMIT);
-    let mut log = OpenOptions::new()
-        .append(true)
-        .open(root.join(format!("{id}.out")))?;
+    let mut log = with_context(
+        OpenOptions::new()
+            .append(true)
+            .open(root.join(format!("{id}.out"))),
+        "open session output log",
+    )?;
     let mut stop_requested = false;
     loop {
         while let Ok(bytes) = output_rx.try_recv() {
@@ -527,6 +551,10 @@ fn now_ms() -> io::Result<u128> {
         .duration_since(UNIX_EPOCH)
         .map_err(io::Error::other)?
         .as_millis())
+}
+
+fn with_context<T>(result: io::Result<T>, context: &str) -> io::Result<T> {
+    result.map_err(|error| io::Error::new(error.kind(), format!("{context}: {error}")))
 }
 
 fn text(arguments: &[std::ffi::OsString], index: usize) -> io::Result<&str> {
