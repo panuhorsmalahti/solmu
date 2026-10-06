@@ -128,8 +128,10 @@ boxer learn --profile local-agent -- solmu
 
 JSON output separates read, write, and read/write paths and includes numeric
 network addresses and ports, with counts for repeated connections or listeners.
-Paths are deduplicated. DNS names are not resolved, and the report only
-includes successful traced operations. `--timeout` stops the traced process
+When the trace sees a matching UDP DNS answer, outbound endpoints also include
+the queried hostname. Paths are deduplicated. DNS-over-HTTPS, encrypted DNS,
+and answers that were resolved before tracing cannot be correlated. The report
+only includes successful traced operations. `--timeout` stops the traced process
 group and returns status 124 when the limit is reached. This feature currently
 requires Linux; other platforms report that it is unavailable. With `--json`,
 the report is written to stdout and the command's captured output is replayed
@@ -138,12 +140,12 @@ to stderr so the JSON remains parseable.
 Pass `--policy FILE` or `--profile NAME` to include filesystem access that the
 resolved policy does not grant. A profile name is loaded from
 `~/.config/boxer/profiles` (or `BOXER_PROFILE_DIR`); an explicit file path also
-works with `--profile`. Outbound connections and listening ports are listed as denied for an
-offline policy. For a hostname allowlist, Boxer reports numeric outbound
-endpoints that need review against the configured host rules because this trace
-does not correlate DNS names. In isolated proxy mode, listening ports not in
-`publish` are also listed. The command itself still runs without that policy
-applied.
+works with `--profile`. Outbound connections and listening ports are listed as
+denied for an offline policy. For a hostname allowlist, correlated DNS names
+are checked against the configured host rules; numeric endpoints without a
+matching DNS answer are listed for review. In isolated proxy mode, listening
+ports not in `publish` are also listed. The command itself still runs without
+that policy applied.
 
 ## Verify trusted instruction files
 

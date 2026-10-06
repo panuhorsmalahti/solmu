@@ -27,6 +27,27 @@ fn main() {
         }
         return;
     }
+    if arguments
+        .first()
+        .is_some_and(|value| value == "--learn-dns-fixture")
+    {
+        let resolver = arguments[1].to_string_lossy();
+        let port: u16 = arguments[2].to_string_lossy().parse().unwrap();
+        let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let mut question = vec![
+            0x53, 0x4f, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        for label in ["agent", "solmu", "test"] {
+            question.push(label.len() as u8);
+            question.extend_from_slice(label.as_bytes());
+        }
+        question.extend_from_slice(&[0, 0, 1, 0, 1]);
+        socket.send_to(&question, resolver.as_ref()).unwrap();
+        let mut answer = [0u8; 512];
+        socket.recv_from(&mut answer).unwrap();
+        TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
+        return;
+    }
     if arguments.first().is_some_and(|value| {
         value == "--write-only-check" || value == "--write-only-directory-check"
     }) {

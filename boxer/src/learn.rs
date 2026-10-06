@@ -4,6 +4,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     io,
+    net::{Ipv4Addr, Ipv6Addr},
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
@@ -14,7 +15,7 @@ use std::{
 struct Trace {
     read: BTreeSet<PathBuf>,
     write: BTreeSet<PathBuf>,
-    outbound: BTreeMap<(String, u16), usize>,
+    outbound: BTreeMap<(String, u16, Option<String>), usize>,
     listening: BTreeMap<(String, u16), usize>,
 }
 
@@ -46,6 +47,8 @@ struct Endpoint {
     address: String,
     port: u16,
     count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hostname: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -219,6 +222,8 @@ impl Trace {
         timed_out: bool,
         policy_gaps: Option<PolicyGaps>,
     ) -> Report {
+        let outbound = self.outbound_endpoints();
+        let listening = self.listening_endpoints();
         let read_write: Vec<_> = self.read.intersection(&self.write).cloned().collect();
         let read: Vec<_> = self.read.difference(&self.write).cloned().collect();
         let write: Vec<_> = self.write.difference(&self.read).cloned().collect();
@@ -229,13 +234,37 @@ impl Trace {
                 read_write,
             },
             network: Network {
-                outbound: self.outbound.into_iter().map(endpoint_record).collect(),
-                listening: self.listening.into_iter().map(endpoint_record).collect(),
+                outbound,
+                listening,
             },
             policy_gaps,
             command_exit_code,
             timed_out,
         }
+    }
+
+    fn outbound_endpoints(&self) -> Vec<Endpoint> {
+        self.outbound
+            .iter()
+            .map(|((address, port, hostname), count)| Endpoint {
+                address: address.clone(),
+                port: *port,
+                count: *count,
+                hostname: hostname.clone(),
+            })
+            .collect()
+    }
+
+    fn listening_endpoints(&self) -> Vec<Endpoint> {
+        self.listening
+            .iter()
+            .map(|((address, port), count)| Endpoint {
+                address: address.clone(),
+                port: *port,
+                count: *count,
+                hostname: None,
+            })
+            .collect()
     }
 
     fn policy_gaps(
@@ -286,8 +315,8 @@ impl Trace {
             .cloned()
             .collect();
 
-        let outbound: Vec<_> = self.outbound.iter().map(endpoint_record_ref).collect();
-        let listening: Vec<_> = self.listening.iter().map(endpoint_record_ref).collect();
+        let outbound = self.outbound_endpoints();
+        let listening = self.listening_endpoints();
         let (
             outbound_denied,
             outbound_hostname_check_needed,
@@ -298,15 +327,35 @@ impl Trace {
             NetworkPolicy::Deny => (outbound, Vec::new(), listening, Vec::new()),
             // Traces contain IP addresses, while Boxer host rules match DNS
             // names. Report these for review instead of claiming they are gaps.
-            NetworkPolicy::Proxy => (
-                Vec::new(),
-                outbound,
-                Vec::new(),
-                listening
-                    .into_iter()
-                    .filter(|endpoint| !policy.publish.contains(&endpoint.port))
-                    .collect(),
-            ),
+            NetworkPolicy::Proxy => {
+                let mut denied = Vec::new();
+                let mut hostname_check_needed = Vec::new();
+                for endpoint in outbound {
+                    if let Some(hostname) = endpoint.hostname.as_deref() {
+                        let allowed = policy.hosts.iter().any(|pattern| {
+                            crate::network::HostPattern::parse(pattern)
+                                .is_ok_and(|pattern| pattern.matches(hostname, endpoint.port))
+                        });
+                        if allowed
+                            && !crate::network::is_denied_domain(hostname, &policy.deny_hosts)
+                        {
+                            continue;
+                        }
+                        denied.push(endpoint);
+                    } else {
+                        hostname_check_needed.push(endpoint);
+                    }
+                }
+                (
+                    denied,
+                    hostname_check_needed,
+                    Vec::new(),
+                    listening
+                        .into_iter()
+                        .filter(|endpoint| !policy.publish.contains(&endpoint.port))
+                        .collect(),
+                )
+            }
         };
         PolicyGaps {
             filesystem: Filesystem {
@@ -321,22 +370,6 @@ impl Trace {
                 listening_not_published,
             },
         }
-    }
-}
-
-fn endpoint_record(((address, port), count): ((String, u16), usize)) -> Endpoint {
-    Endpoint {
-        address,
-        port,
-        count,
-    }
-}
-
-fn endpoint_record_ref(((address, port), count): (&(String, u16), &usize)) -> Endpoint {
-    Endpoint {
-        address: address.clone(),
-        port: *port,
-        count: *count,
     }
 }
 
@@ -380,6 +413,7 @@ fn resolve_policy_file(reference: &Path) -> io::Result<PathBuf> {
 
 fn parse(contents: &str, directory: &Path) -> Trace {
     let mut trace = Trace::default();
+    let mut hostnames = BTreeMap::new();
     for line in contents.lines() {
         let line = strip_prefix(line);
         let Some((call, arguments)) = line.split_once('(') else {
@@ -395,7 +429,8 @@ fn parse(contents: &str, directory: &Path) -> Trace {
         if matches!(call, "connect" | "sendto")
             && let Some((address, port)) = endpoint(arguments)
         {
-            *trace.outbound.entry((address, port)).or_default() += 1;
+            let hostname = hostnames.get(&address).cloned();
+            *trace.outbound.entry((address, port, hostname)).or_default() += 1;
             continue;
         }
         if call == "bind"
@@ -403,6 +438,14 @@ fn parse(contents: &str, directory: &Path) -> Trace {
         {
             *trace.listening.entry((address, port)).or_default() += 1;
             continue;
+        }
+        if matches!(call, "recvfrom" | "recvmsg" | "recv" | "recvmmsg")
+            && let Some((hostname, addresses)) =
+                first_quoted_bytes(arguments).and_then(|(bytes, _)| dns_response(&bytes))
+        {
+            for address in addresses {
+                hostnames.insert(address, hostname.clone());
+            }
         }
         let paths = quoted_values(arguments);
         let paths = if matches!(call, "symlink" | "symlinkat") {
@@ -492,11 +535,16 @@ fn strip_prefix(line: &str) -> &str {
 }
 
 fn first_quoted(input: &str) -> Option<(String, usize)> {
+    let (bytes, end) = first_quoted_bytes(input)?;
+    Some((String::from_utf8_lossy(&bytes).into_owned(), end))
+}
+
+fn first_quoted_bytes(input: &str) -> Option<(Vec<u8>, usize)> {
     let mut index = 0;
     while index < input.len() {
         if input.as_bytes()[index] == b'"' {
             index += 1;
-            let mut value = String::new();
+            let mut value = Vec::new();
             while index < input.len() {
                 match input.as_bytes()[index] {
                     b'"' => return Some((value, index + 1)),
@@ -506,17 +554,38 @@ fn first_quoted(input: &str) -> Option<(String, usize)> {
                             return None;
                         }
                         match input.as_bytes()[index] {
-                            b'\\' => value.push('\\'),
-                            b'"' => value.push('"'),
-                            b'n' => value.push('\n'),
-                            b't' => value.push('\t'),
-                            byte => value.push(byte as char),
+                            b'\\' => value.push(b'\\'),
+                            b'"' => value.push(b'"'),
+                            b'n' => value.push(b'\n'),
+                            b't' => value.push(b'\t'),
+                            b'r' => value.push(b'\r'),
+                            b'x' if index + 2 < input.len() => {
+                                let hex = &input[index + 1..index + 3];
+                                value.push(u8::from_str_radix(hex, 16).ok()?);
+                                index += 2;
+                            }
+                            byte @ b'0'..=b'7' => {
+                                let mut octal = (byte - b'0') as u16;
+                                let mut digits = 1;
+                                while digits < 3 && index + 1 < input.len() {
+                                    let next = input.as_bytes()[index + 1];
+                                    if !(b'0'..=b'7').contains(&next) {
+                                        break;
+                                    }
+                                    octal = octal * 8 + (next - b'0') as u16;
+                                    index += 1;
+                                    digits += 1;
+                                }
+                                value.push(octal as u8);
+                            }
+                            byte => value.push(byte),
                         }
                         index += 1;
                     }
                     _ => {
                         let character = input[index..].chars().next()?;
-                        value.push(character);
+                        let mut buffer = [0; 4];
+                        value.extend_from_slice(character.encode_utf8(&mut buffer).as_bytes());
                         index += character.len_utf8();
                     }
                 }
@@ -524,6 +593,101 @@ fn first_quoted(input: &str) -> Option<(String, usize)> {
             return None;
         }
         index += 1;
+    }
+    None
+}
+
+fn dns_response(bytes: &[u8]) -> Option<(String, Vec<String>)> {
+    let packet = if bytes.len() >= 14
+        && u16::from_be_bytes([bytes[0], bytes[1]]) as usize == bytes.len() - 2
+    {
+        &bytes[2..]
+    } else {
+        bytes
+    };
+    if packet.len() < 12 || packet[2] & 0x80 == 0 {
+        return None;
+    }
+    let questions = u16::from_be_bytes([packet[4], packet[5]]) as usize;
+    let answers = u16::from_be_bytes([packet[6], packet[7]]) as usize;
+    if questions == 0 || answers == 0 {
+        return None;
+    }
+    let mut offset = 12;
+    let mut hostname = None;
+    for _ in 0..questions {
+        let name = dns_name(packet, &mut offset)?;
+        if hostname.is_none() {
+            hostname = Some(name);
+        }
+        offset = offset.checked_add(4)?;
+        if offset > packet.len() {
+            return None;
+        }
+    }
+    let hostname = hostname?;
+    let mut addresses = Vec::new();
+    for _ in 0..answers {
+        let _owner = dns_name(packet, &mut offset)?;
+        if offset.checked_add(10)? > packet.len() {
+            return None;
+        }
+        let kind = u16::from_be_bytes([packet[offset], packet[offset + 1]]);
+        let length = u16::from_be_bytes([packet[offset + 8], packet[offset + 9]]) as usize;
+        offset += 10;
+        let end = offset.checked_add(length)?;
+        let data = packet.get(offset..end)?;
+        match (kind, data) {
+            (1, [a, b, c, d]) => addresses.push(Ipv4Addr::new(*a, *b, *c, *d).to_string()),
+            (28, [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p]) => addresses.push(
+                Ipv6Addr::from([
+                    *a, *b, *c, *d, *e, *f, *g, *h, *i, *j, *k, *l, *m, *n, *o, *p,
+                ])
+                .to_string(),
+            ),
+            _ => {}
+        }
+        offset = end;
+    }
+    (!addresses.is_empty()).then_some((hostname, addresses))
+}
+
+fn dns_name(packet: &[u8], offset: &mut usize) -> Option<String> {
+    let mut cursor = *offset;
+    let mut jumped = false;
+    let mut labels = Vec::new();
+    for _ in 0..128 {
+        let length = *packet.get(cursor)?;
+        if length == 0 {
+            if !jumped {
+                *offset = cursor + 1;
+            }
+            return Some(labels.join("."));
+        }
+        if length & 0xc0 == 0xc0 {
+            let low = *packet.get(cursor + 1)?;
+            let target = (((length & 0x3f) as usize) << 8) | low as usize;
+            if target >= packet.len() {
+                return None;
+            }
+            if !jumped {
+                *offset = cursor + 2;
+                jumped = true;
+            }
+            cursor = target;
+            continue;
+        }
+        if length & 0xc0 != 0 || length > 63 {
+            return None;
+        }
+        let start = cursor + 1;
+        let end = start.checked_add(length as usize)?;
+        let label = std::str::from_utf8(packet.get(start..end)?).ok()?;
+        labels.push(label.to_ascii_lowercase());
+        cursor = end;
+        if !jumped {
+            *offset = cursor;
+        }
     }
     None
 }
@@ -625,8 +789,13 @@ fn print_endpoints(endpoints: &[Endpoint]) {
         println!("  (none)");
     } else {
         for endpoint in endpoints {
+            let hostname = endpoint
+                .hostname
+                .as_deref()
+                .map(|hostname| format!(" · {hostname}"))
+                .unwrap_or_default();
             println!(
-                "  {}:{} ({} {})",
+                "  {}:{} ({} {}){}",
                 endpoint.address,
                 endpoint.port,
                 endpoint.count,
@@ -634,7 +803,8 @@ fn print_endpoints(endpoints: &[Endpoint]) {
                     "access"
                 } else {
                     "accesses"
-                }
+                },
+                hostname
             );
         }
     }
@@ -668,7 +838,10 @@ mod tests {
         assert!(trace.write.contains(Path::new("/work/project/output.txt")));
         assert!(trace.read.contains(Path::new("/work/project/both.txt")));
         assert!(trace.write.contains(Path::new("/work/project/both.txt")));
-        assert_eq!(trace.outbound.get(&("203.0.113.8".into(), 443)), Some(&2));
+        assert_eq!(
+            trace.outbound.get(&("203.0.113.8".into(), 443, None)),
+            Some(&2)
+        );
         assert_eq!(trace.listening.get(&("::1".into(), 8080)), Some(&1));
     }
 }
