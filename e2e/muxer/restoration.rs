@@ -1,6 +1,23 @@
 use super::sessions::Session;
 use super::*;
 
+fn rename_workspace_after_exit(source: &std::path::Path, destination: &std::path::Path) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        match std::fs::rename(source, destination) {
+            Ok(()) => return,
+            Err(error)
+                if cfg!(windows)
+                    && error.raw_os_error() == Some(32)
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => panic!("could not move the stopped workspace: {error}"),
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn missing_workspace_stays_unavailable_and_closing_the_last_tab_resets_layout() {
     let backend = Backend::start().await;
@@ -21,7 +38,7 @@ async fn missing_workspace_stays_unavailable_and_closing_the_last_tab_resets_lay
     first.wait("Ready").await;
     assert!(session.command(&["server", "stop"]).status.success());
     first.wait_exit().await;
-    std::fs::rename(&project, &moved).unwrap();
+    rename_workspace_after_exit(&project, &moved);
     let mut restored = Terminal::start_session(&backend, "missing");
     restored.wait("Solmu 1 · workspace unavailable").await;
     restored.wait("This pane is stopped").await;
