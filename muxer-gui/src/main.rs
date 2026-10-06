@@ -594,11 +594,8 @@ impl MuxerGui {
                     .filter(|pane| pane["tab"].as_u64() == Some(tab_id))
                     .collect();
                 if tab_panes.len() > 1 {
-                    spaces_section = spaces_section.push(
-                        text("PANES")
-                            .size(9)
-                            .color(appearance::MUTED),
-                    );
+                    spaces_section =
+                        spaces_section.push(text("PANES").size(9).color(appearance::MUTED));
                 }
                 for pane in tab_panes {
                     let pane_id = pane["id"].as_u64().unwrap_or_default();
