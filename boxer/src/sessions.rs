@@ -161,20 +161,25 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
     listener.set_nonblocking(true)?;
     control_listener.set_nonblocking(true)?;
 
-    let pair = native_pty_system().openpty(PtySize {
-        rows: 24,
-        cols: 80,
-        pixel_width: 0,
-        pixel_height: 0,
-    })?;
+    let pair = native_pty_system()
+        .openpty(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(io::Error::other)?;
     let mut command = CommandBuilder::new(std::env::current_exe()?);
     command.arg(CHILD_ARGUMENT);
     command.arg(&id);
     command.args(&arguments[2..]);
-    let mut child = pair.slave.spawn_command(command)?;
+    let mut child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(io::Error::other)?;
     drop(pair.slave);
-    let mut writer = pair.master.take_writer()?;
-    let reader = pair.master.try_clone_reader()?;
+    let mut writer = pair.master.take_writer().map_err(io::Error::other)?;
+    let reader = pair.master.try_clone_reader().map_err(io::Error::other)?;
     let (output_tx, output_rx) = mpsc::sync_channel::<Vec<u8>>(64);
     thread::spawn(move || {
         let mut reader = reader;
@@ -220,12 +225,14 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
                     b'R' => {
                         let rows = u16::from_be_bytes([message[1], message[2]]).max(1);
                         let cols = u16::from_be_bytes([message[3], message[4]]).max(1);
-                        pair.master.resize(PtySize {
-                            rows,
-                            cols,
-                            pixel_width: 0,
-                            pixel_height: 0,
-                        })?;
+                        pair.master
+                            .resize(PtySize {
+                                rows,
+                                cols,
+                                pixel_width: 0,
+                                pixel_height: 0,
+                            })
+                            .map_err(io::Error::other)?;
                     }
                     b'D' => {
                         active = None;
@@ -444,8 +451,8 @@ fn prune() -> io::Result<i32> {
             fs::remove_file(root.join(format!("{id}.json")))?;
             let _ = fs::remove_file(root.join(format!("{id}.out")));
             let _ = fs::remove_file(root.join(format!("{id}.err")));
-            let _ = fs::remove_file(socket_path(root, &id));
-            let _ = fs::remove_file(control_path(root, &id));
+            let _ = fs::remove_file(socket_path(&root, &id));
+            let _ = fs::remove_file(control_path(&root, &id));
             removed += 1;
         }
     }
