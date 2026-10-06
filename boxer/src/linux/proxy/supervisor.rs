@@ -64,10 +64,6 @@ impl Supervisor {
         })
     }
 
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
     pub fn stop(&self) {
         self.running.store(false, Ordering::Release);
     }
