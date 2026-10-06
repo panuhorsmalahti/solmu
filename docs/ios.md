@@ -26,6 +26,8 @@ calls and shows the prompt-cache hit rate for the last 24 hours. Tasks creates,
 edits, runs, pauses, and removes one-shot or cron schedules. More includes
 webhook management and the current workspace's Skills, MCP servers, and
 Plugins. Backend events keep the open views current after changes and reconnects.
+Enter `/goal <objective>` in chat to start a persistent goal, or `/goal` to
+list saved goals. See [Goals](goals.md).
 
 ## Build
 

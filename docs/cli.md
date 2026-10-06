@@ -63,6 +63,9 @@ The Audit header also shows the last 24 hours' prompt cache hit rate and token c
 
 ## Scheduled tasks
 
+Use `/goal <objective>` to start a persistent multi-step goal, or `/goal` to
+list goals across conversations. See [Goals](goals.md).
+
 Use `/tasks` to browse scheduled work. `/task once <RFC3339 time> | <name> | <prompt>`
 creates a one-time task; `/task cron <five fields> | <name> | <prompt>` creates a
 recurring task. `/task run`, `pause`, `resume`, `runs`, and `delete` take a task ID.

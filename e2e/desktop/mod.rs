@@ -118,6 +118,7 @@ mod audit;
 mod commands;
 mod compaction;
 mod conversations;
+mod goals;
 mod mcp;
 mod models;
 mod muxer_embedded;

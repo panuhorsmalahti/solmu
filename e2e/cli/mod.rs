@@ -180,6 +180,7 @@ mod responses;
 mod audit;
 #[cfg(unix)]
 mod boxer;
+mod goals;
 mod input;
 mod mcp;
 mod models;

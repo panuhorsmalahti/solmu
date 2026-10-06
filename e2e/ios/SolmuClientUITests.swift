@@ -27,6 +27,10 @@ final class SolmuClientUITests: XCTestCase {
         input.typeText("Hello from iOS")
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
+        input.tap(); input.typeText("/goal Keep iOS covered")
+        app.buttons["send-message"].tap()
+        XCTAssertTrue(app.alerts.staticTexts["Goal started: Keep iOS covered (goal-ios)"].waitForExistence(timeout: 10))
+        app.alerts.buttons["OK"].tap()
 
         app.tabBars.buttons["Profile"].tap()
         let prompt = app.descendants(matching: .any).matching(identifier: "profile-prompt").firstMatch

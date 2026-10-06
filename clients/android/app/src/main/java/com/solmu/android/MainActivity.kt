@@ -325,6 +325,24 @@ private class SolmuModel(
         val thread = current ?: return
         val content = draft.trim()
         if (content.isEmpty() || responding || busy) return
+        if (content == "/goal" || content.startsWith("/goal ")) {
+            val objective = content.removePrefix("/goal").trim()
+            draft = ""
+            scope.launch {
+                busy = true; error = ""
+                try {
+                    if (objective.isEmpty()) {
+                        val goals = api.list("/goals")
+                        notice = if (goals.isEmpty()) "No goals yet. Start one with /goal <objective>." else goals.joinToString("\n") { "[${it.string("status")}] ${it.string("objective")} (${it.string("id")})" }
+                    } else {
+                        val goal = api.post("/goals", json { put("objective", objective); put("thread_id", thread.id) })
+                        notice = "Goal started: ${goal.string("objective")} (${goal.string("id")})"
+                    }
+                } catch (failure: Exception) { error = failure.message ?: "Cannot access goals" }
+                busy = false
+            }
+            return
+        }
         val operation = scope.launch {
             busy = true; responding = true; error = ""; partial = ""
             try {

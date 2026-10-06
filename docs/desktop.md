@@ -57,6 +57,9 @@ The Audit header also shows the last 24 hours' prompt cache hit rate and token c
 
 ## Scheduled tasks
 
+Enter `/goal <objective>` in chat to start a persistent goal, or `/goal` to
+list goals across conversations. See [Goals](goals.md).
+
 Choose **Tasks** in the sidebar to create one-time or recurring work, edit or
 pause it, run it now, view run history, and open its conversation. Task changes
 appear automatically. See [scheduled tasks](tasks.md).

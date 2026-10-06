@@ -150,6 +150,20 @@ export default function App() {
   function send() {
     if (!current || !draft.trim() || busy) return
     const content = draft
+    if (content === '/goal' || content.startsWith('/goal ')) {
+      const objective = content.slice('/goal'.length).trim()
+      setDraft('')
+      void act(async () => {
+        if (objective) {
+          const goal = await request<{ id: string; objective: string }>('/goals', 'POST', { objective, thread_id: current.id })
+          setCopyNotice(`Goal started: ${goal.objective} (${goal.id})`)
+        } else {
+          const page = await request<{ items: { id: string; objective: string; status: string }[] }>('/goals')
+          setCopyNotice(page.items.length ? page.items.map(goal => `[${goal.status}] ${goal.objective} (${goal.id})`).join('\n') : 'No goals yet. Start one with /goal <objective>.')
+        }
+      })
+      return
+    }
     const abort = new AbortController(); controller.current = abort; setResponding(true)
     void act(async () => {
       const message = await request<Message>(`/threads/${current.id}/messages`, 'POST', { content }, abort.signal)
@@ -239,7 +253,7 @@ export default function App() {
       </header>
       {current?.workspace && <p className="workspace-path" aria-label="Workspace" title={current.workspace}>{current.workspace}</p>}
       {infoPanel && <section className="model-picker" aria-label={`${infoPanel} details`}><div className="message-content"><strong>{infoPanel === 'status' ? 'Conversation status' : 'Current context'}</strong><br/>{infoDetails}</div><Button variant="ghost" onClick={() => setInfoPanel(null)}>Close</Button></section>}
-      {copyNotice && <p role="status" className="working">{copyNotice}</p>}
+      {copyNotice && <p role="status" className="working" style={{ whiteSpace: 'pre-wrap' }}>{copyNotice}</p>}
       {pluginsOpen && current ? <Plugins key={current.id} threadId={current.id} revision={pluginsRevision} onClose={() => setPluginsOpen(false)}/> : mcpOpen && current ? <Mcp key={current.id} threadId={current.id} revision={mcpRevision} onClose={() => setMcpOpen(false)}/> : skillsOpen && current ? <Skills key={current.id} threadId={current.id} revision={skillsRevision} onClose={() => setSkillsOpen(false)}/> : <>
       {modelPicker && <section className="model-picker" role="dialog" aria-label="Select model"><h2>Model for this thread</h2><p>{catalog?.provider ?? 'Configure a provider first'} · Changes apply to the next reply.</p><div className="model-options">{[{ id: '', name: `Default${catalog?.default_model ? ` · ${catalog.default_model}` : ''}` }, ...(catalog?.models ?? [])].map(model => <Button key={model.id} variant={model.id === (current?.model ?? '') ? 'default' : 'outline'} disabled={busy} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: model.id || null }); setCurrent(thread); setModelPicker(false); await refresh() })}>{model.name}</Button>)}</div><div className="model-custom"><Input aria-label="Custom model ID" placeholder="Custom model ID" value={customModel} disabled={busy} onChange={event => setCustomModel(event.target.value)}/><Button disabled={busy || !customModel.trim()} onClick={() => void act(async () => { const thread = await request<Thread>(`/threads/${current!.id}`, 'PATCH', { model: customModel.trim() }); setCurrent(thread); setModelPicker(false); await refresh() })}>Apply model</Button><Button variant="ghost" onClick={() => setModelPicker(false)}>Cancel</Button></div></section>}
       <section className="history" aria-label="Conversation" aria-busy={busy}>

@@ -92,6 +92,13 @@ impl AppState {
         });
     }
 
+    pub fn goals_changed(&self) {
+        let _ = self.events.send(Change {
+            kind: "goals_changed",
+            thread_id: None,
+        });
+    }
+
     pub fn webhooks_changed(&self) {
         let _ = self.events.send(Change {
             kind: "webhooks_changed",

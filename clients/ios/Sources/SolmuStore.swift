@@ -210,6 +210,21 @@ final class SolmuStore: ObservableObject {
 
     func send(_ raw: String) {
         let content = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if content == "/goal" || content.hasPrefix("/goal ") {
+            let objective = String(content.dropFirst("/goal".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            Task {
+                await perform {
+                    if objective.isEmpty {
+                        let goals = try await self.list("/goals")
+                        self.notice = goals.isEmpty ? "No goals yet. Start one with /goal <objective>." : goals.map { "[\($0.string("status"))] \($0.string("objective")) (\($0.string("id")))" }.joined(separator: "\n")
+                    } else {
+                        let goal = try await self.request("POST", "/goals", body: ["objective": objective, "thread_id": self.current?.string("id") as Any? ?? NSNull()])
+                        self.notice = "Goal started: \(goal.string("objective")) (\(goal.string("id")))"
+                    }
+                }
+            }
+            return
+        }
         guard !content.isEmpty, let id = current?.string("id"), !responding, !busy else { return }
         replyTask?.cancel()
         busy = true
@@ -430,6 +445,7 @@ final class SolmuStore: ObservableObject {
         var messages: [SolmuJSON] = screenshotMode ? [["id": "sample-ios", "thread_id": "thread-ios", "role": "assistant", "content": "Hello. I can help you make a plan, explore an idea, or work through a task in your workspace."]] : []
         var profilePrompt = "You are Solmu, an autonomous agent."
         var task: SolmuJSON?
+        var goal: SolmuJSON?
         var webhook: SolmuJSON?
         SolmuURLProtocol.handler = { request in
             let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
@@ -466,6 +482,13 @@ final class SolmuStore: ObservableObject {
             case ("GET", "/models"): return json(["default_model": "gpt-6-sol", "models": [["id": "gpt-6-sol", "name": "GPT 6 Sol"]]])
             case ("GET", "/audit"): return json(["items": [["id": "audit-ios", "name": "Read", "status": "completed", "thread_title": thread.string("title"), "created_at": "2026-10-03T00:00:00Z", "arguments": ["path": "README.md"], "result": "# Solmu"]], "next_cursor": NSNull(), "cache_24h": ["input_tokens": 100, "output_tokens": 20, "cached_input_tokens": 40, "cache_creation_input_tokens": 5, "hit_rate_percent": 40.0]])
             case ("GET", "/tasks"): return json(["items": task.map { [$0] } ?? []])
+            case ("GET", "/goals"): return json(["items": goal.map { [$0] } ?? []])
+            case ("POST", "/goals"):
+                goal = ["id": "goal-ios", "objective": body.string("objective"), "status": "active", "thread_id": body["thread_id"] ?? NSNull(), "created_at": "2026-10-07T00:00:00Z", "updated_at": "2026-10-07T00:00:00Z"]
+                return json(goal ?? [:])
+            case ("PATCH", let path) where path.hasPrefix("/goals/"):
+                goal?.merge(body) { _, value in value }
+                return json(goal ?? [:])
             case ("POST", "/tasks"):
                 task = ["id": "task-ios", "name": body.string("name"), "prompt": body.string("prompt"), "schedule_kind": body.string("schedule_kind"), "schedule": body.string("schedule"), "enabled": true, "running": false]
                 return json(task!)

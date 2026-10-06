@@ -78,6 +78,9 @@ The page also shows the last 24 hours' prompt cache hit rate and token counts.
 
 ## Scheduled tasks
 
+Enter `/goal <objective>` in chat to start a persistent goal, or `/goal` to
+list goals across conversations. See [Goals](goals.md).
+
 Choose **Tasks** in the sidebar or open `/tasks`. Create a one-time or recurring
 task, edit or pause it, run it now, see its run history, and open its saved
 conversation. The page updates automatically while preserving your form draft.

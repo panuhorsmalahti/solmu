@@ -4,7 +4,7 @@ test('website describes Solmu features and links to every client and installatio
   await page.goto('http://127.0.0.1:4174/solmu/')
   await expect(page).toHaveTitle('Solmu — your ideas, connected')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Good ideas')
-  for (const feature of ['See it take shape', 'Follow your threads', 'Bring your model', 'Make it yours', 'Put ideas to work', 'See every action', 'Put work on the calendar', 'Add project skills', 'Connect your tools', 'Bring plugins along']) await expect(page.getByRole('heading', { name: feature })).toBeVisible()
+  for (const feature of ['See it take shape', 'Follow your threads', 'Keep a goal moving', 'Bring your model', 'Make it yours', 'Put ideas to work', 'See every action', 'Put work on the calendar', 'Add project skills', 'Connect your tools', 'Bring plugins along']) await expect(page.getByRole('heading', { name: feature })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Congregator', exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Explore Congregator' })).toHaveAttribute('href', 'docs/congregator/')
   for (const product of ['muxer', 'boxer', 'congregator']) await expect(page.locator('.product-pages').getByRole('link', { name: new RegExp(product, 'i') })).toHaveAttribute('href', `${product}/`)

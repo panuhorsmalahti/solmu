@@ -40,6 +40,7 @@ mod events;
 
 mod audit;
 mod configuration;
+mod goals;
 mod mcp;
 mod mcp_transports;
 mod plugin_validation;

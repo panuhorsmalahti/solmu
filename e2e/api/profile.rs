@@ -81,6 +81,8 @@ async fn profile_is_validated_persistent_and_used_for_subsequent_replies() {
     let internal = messages[0]["content"].as_str().unwrap();
     assert!(internal.contains(".agents/skills/<name>/SKILL.md"));
     assert!(internal.contains("Use Bash, Edit, Glob, Grep, Read, and Write"));
+    assert!(internal.contains("Goals tool"));
+    assert!(internal.contains("/goal [objective]"));
     assert_eq!(messages[1]["role"], "system");
     assert_eq!(messages[1]["content"], prompt);
 }
@@ -133,6 +135,7 @@ async fn internal_instructions_remain_with_editable_preferences_for_both_provide
         };
         assert!(system.contains(".agents/skills/<name>/SKILL.md"));
         assert!(system.contains("Use Bash, Edit, Glob, Grep, Read, and Write"));
+        assert!(system.contains("Goals tool"));
         assert!(system.contains("Respect its filesystem and network restrictions"));
         assert!(system.contains(preferences));
     }

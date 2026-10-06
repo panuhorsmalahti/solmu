@@ -35,6 +35,7 @@ class NativeAndroidClientTest {
     private val profilePrompt = AtomicReference("You are Solmu, an autonomous agent.")
     private val taskCreated = AtomicReference(false)
     private val webhookCreated = AtomicReference(false)
+    private val goalCreated = AtomicReference(false)
 
     init {
         server.dispatcher = object : Dispatcher() {
@@ -61,6 +62,12 @@ class NativeAndroidClientTest {
                         )
                     }
                     path == "/api/v1/threads/thread-android/compact" -> jsonResponse("{}")
+                    path == "/api/v1/goals" && request.method == "POST" -> {
+                        goalCreated.set(true)
+                        val objective = org.json.JSONObject(request.body.readUtf8()).getString("objective")
+                        jsonResponse("""{"id":"goal-android","objective":${org.json.JSONObject.quote(objective)},"status":"active","thread_id":"thread-android","created_at":"2026-10-07T00:00:00Z","updated_at":"2026-10-07T00:00:00Z"}""")
+                    }
+                    path == "/api/v1/goals" && request.method == "GET" -> jsonResponse(if (goalCreated.get()) """{"items":[{"id":"goal-android","objective":"Keep Android covered","status":"active"}],"limit":50,"offset":0}""" else """{"items":[],"limit":50,"offset":0}""")
                     path == "/api/v1/profile" && request.method == "GET" -> jsonResponse("""{"system_prompt":${org.json.JSONObject.quote(profilePrompt.get())},"model":null,"backend_default_model":"gpt-6-sol","edited_at":"2026-10-03T00:00:00Z"}""")
                     path == "/api/v1/profile" && request.method == "PUT" -> {
                         profilePrompt.set(org.json.JSONObject(request.body.readUtf8()).getString("system_prompt"))
@@ -105,6 +112,11 @@ class NativeAndroidClientTest {
         compose.waitUntil(conditionDescription = "the streamed assistant reply appears", timeoutMillis = 30_000) {
             compose.onAllNodesWithText("Hello from Solmu").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithTag("message-input").performTextInput("/goal Keep Android covered")
+        compose.onNodeWithTag("send-message").performClick()
+        compose.waitUntil(conditionDescription = "the Android goal is created", timeoutMillis = 30_000) { goalCreated.get() }
+        compose.onNodeWithText("Goal started: Keep Android covered (goal-android)").assertIsDisplayed()
+        compose.onNodeWithText("Dismiss").performClick()
 
         compose.onNodeWithTag("nav-Profile").performClick()
         compose.onNodeWithText("System prompt").assertIsDisplayed()

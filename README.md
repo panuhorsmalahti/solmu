@@ -15,6 +15,7 @@ Licensed under [MIT](LICENSE).
 - Customize the shared system prompt and default model in Profile.
 - Inspect every saved tool call and the last 24 hours' prompt cache hit rate in Audit. See [Audit](docs/audit.md).
 - Schedule Solmu to run once later or on a recurring cron schedule, with a saved conversation and run history for each task. See [Tasks](docs/tasks.md).
+- Track multi-step work as persistent goals. Start one with `/goal <objective>` or ask Solmu to keep working toward an objective. See [Goals](docs/goals.md).
 - Use project skills discovered automatically from `.agents/skills/`.
 - Connect workspace MCP servers to use additional tools and inspect their live status in every client. See [MCP setup](docs/mcp.md).
 - Trigger agent conversations from GitHub and other services with authenticated [webhooks](docs/webhooks.md).

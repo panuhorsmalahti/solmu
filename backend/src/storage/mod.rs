@@ -1,3 +1,4 @@
+pub mod goals;
 pub mod messages;
 pub mod profile;
 pub mod scheduled_tasks;

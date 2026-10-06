@@ -80,6 +80,14 @@ test('Scheduled tasks are introduced on the website and documented from root doc
   await expect(page.locator('article img[alt="Tasks on the web"]')).toBeVisible()
 })
 
+test('Goals are described on the website and documented from root docs', async ({ page }) => {
+  await page.goto(home)
+  await page.getByRole('link', { name: 'Explore Goals' }).click()
+  await expect(page).toHaveURL(`${home}docs/goals/`)
+  await expect(page.locator('article')).toContainText('/goal <objective>')
+  await expect(page.locator('article')).toContainText('Goals tool')
+})
+
 test('webhook setup is published from the shared docs and linked on the website', async ({ page }) => {
   await page.goto(`${home}docs/webhooks/`)
   await expect(page.getByRole('heading', { name: 'Webhooks', exact: true })).toBeVisible()

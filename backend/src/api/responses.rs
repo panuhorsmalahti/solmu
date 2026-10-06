@@ -143,6 +143,10 @@ pub async fn create(
     let mut messages =
         messages::history_for_reply(&state.pool, &thread_id, &input.message_id).await?;
     let mut history = tools::history(&state.pool, &thread_id, &messages).await?;
+    let active_goals = crate::storage::goals::active(&state.pool).await?;
+    if !active_goals.is_empty() {
+        history.insert(0, ChatMessage::system(format!("Active Solmu goals (continue making progress when relevant; preserve the user's constraints):\n{}", active_goals.iter().map(|goal| format!("- [{}] {} (id: {})", goal.status, goal.objective, goal.id)).collect::<Vec<_>>().join("\n"))));
+    }
     history.insert(0, ChatMessage::user(skills.context()));
     if state
         .llm
@@ -183,6 +187,9 @@ pub async fn create(
         state.changed(&thread_id);
         messages = messages::history_for_reply(&state.pool, &thread_id, &input.message_id).await?;
         history = tools::history(&state.pool, &thread_id, &messages).await?;
+        if !active_goals.is_empty() {
+            history.insert(0, ChatMessage::system(format!("Active Solmu goals (continue making progress when relevant; preserve the user's constraints):\n{}", active_goals.iter().map(|goal| format!("- [{}] {} (id: {})", goal.status, goal.objective, goal.id)).collect::<Vec<_>>().join("\n"))));
+        }
         history.insert(0, ChatMessage::user(skills.context()));
     }
     let mut reply = tokio::select! {
@@ -208,7 +215,7 @@ pub async fn create(
         let _permit=permit;
         let mut recovery=Recovery{state:state.clone(),thread_id:thread_id.clone(),ids:Vec::new()};
         yield Ok(event("start",json!({"message_id":input.message_id})));
-        let context=Context{state:state.clone(),workspace:workspace.into(),skill_roots:skills.roots,cancellation:token.clone()};
+        let context=Context{state:state.clone(),thread_id:thread_id.clone(),workspace:workspace.into(),skill_roots:skills.roots,cancellation:token.clone()};
         let mut pending=Some(first);
         let mut total_calls=0;
         for round in 0..16 {

@@ -16,8 +16,8 @@ use tokio::sync::mpsc;
 mod settings;
 
 const COMMANDS: &[&str] = &[
-    "/new", "/threads", "/open", "/model", "/profile", "/audit", "/tasks", "/task", "/skills",
-    "/mcp", "/plugins", "/rename", "/delete", "/status", "/export", "/copy", "/context",
+    "/new", "/threads", "/open", "/model", "/profile", "/audit", "/tasks", "/task", "/goal",
+    "/skills", "/mcp", "/plugins", "/rename", "/delete", "/status", "/export", "/copy", "/context",
     "/compact", "/help", "/stop", "/exit",
 ];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -188,6 +188,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                         Connection::ProfileChanged => { if let Some(page) = &mut page && page.refresh() { settings::load(session.api.clone(), settings_sender.clone()); } },
                         Connection::Disconnected => connected = false,
                         Connection::TasksChanged => { if page.as_ref().is_some_and(settings::Page::is_tasks) { settings::tasks(session.api.clone(), settings_sender.clone()); } },
+                        Connection::GoalsChanged => {},
                         Connection::Connected | Connection::Changed => {
                             connected = true;
                             if page.as_ref().is_some_and(settings::Page::is_tasks) { settings::tasks(session.api.clone(), settings_sender.clone()); }
@@ -271,6 +272,14 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             if text == "/stop" { stop(&mut session, &mut active, &sender, &mut runtime); input.clear(); continue; }
                             if text == "/audit" { input.clear(); page = Some(settings::Page::audit()); settings::audit(session.api.clone(), None, settings_sender.clone()); continue; }
                             if text == "/tasks" { input.clear(); page = Some(settings::Page::tasks()); settings::tasks(session.api.clone(), settings_sender.clone()); continue; }
+                            if text == "/goal" || text.starts_with("/goal ") {
+                                input.clear();
+                                let argument = text.strip_prefix("/goal").unwrap_or_default().trim();
+                                let result = if argument.is_empty() { session.api.goals().await.map(|goals| if goals.is_empty() { "No goals yet. Start one with /goal <objective>.".into() } else { goals.iter().map(|goal| format!("[{}] {} ({})", goal.status, goal.objective, goal.id)).collect::<Vec<_>>().join("\n") }) }
+                                    else { session.api.create_goal(argument, session.current.as_ref().map(|thread| thread.id.as_str())).await.map(|goal| format!("Goal started: {} ({})", goal.objective, goal.id)) };
+                                match result { Ok(message) => { session.error = Some(message); }, Err(error) => { session.error = Some(error); } }
+                                continue;
+                            }
                             if text.is_empty() { continue; }
                             if session.busy {
                                 // Live refreshes and conversation operations can
@@ -319,7 +328,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
                                 "/compact" if argument.is_empty() => Action::Compact,
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /tasks · /task · /skills · /mcp · /plugins · /status · /context · /compact · /export <path> · /copy · /delete · /stop · /exit".into()); continue; },
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /tasks · /task · /goal [objective] · /skills · /mcp · /plugins · /status · /context · /compact · /export <path> · /copy · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -605,6 +614,7 @@ fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
         "/plugins" => "Show installed plugins",
         "/audit" => "Browse saved tool calls",
         "/tasks" => "Browse scheduled tasks",
+        "/goal" => "Start or view a persistent goal",
         "/task" => "Create and manage scheduled tasks",
         "/rename" => "Rename this conversation",
         "/delete" => "Delete this conversation",

@@ -25,11 +25,13 @@ Skills, MCP, Plugins, and Webhooks. The app updates conversation lists and
 other open pages automatically when the backend changes.
 
 Android supports the same saved conversations, per-thread models, editable
-Profile prompt, tool history, prompt-cache audit, scheduled tasks, webhook
+Profile prompt, tool history, prompt-cache audit, scheduled tasks, persistent
+goals, webhook
 management, skills, MCP servers, and Agent Plugins as the other clients. See
 the guides for [Profile](profile.md), [Audit](audit.md), [Tasks](tasks.md),
 [skills](skills.md), [MCP](mcp.md), [plugins](plugins.md), and
-[webhooks](webhooks.md).
+[webhooks](webhooks.md). In chat, use `/goal <objective>` to start a persistent
+goal, or `/goal` to list goals. See [Goals](goals.md).
 
 ## Build
 

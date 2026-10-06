@@ -70,6 +70,7 @@ const CHAT_COMMANDS: &[(&str, &str)] = &[
     ("/audit", "Review tool calls"),
     ("/tasks", "View scheduled tasks"),
     ("/task", "Create or manage a scheduled task"),
+    ("/goal", "Start or view a persistent goal"),
     ("/skills", "Show workspace skills"),
     ("/mcp", "Show MCP servers and tools"),
     ("/plugins", "Show installed plugins"),
@@ -116,6 +117,7 @@ pub enum Event {
     TasksLoaded(Result<Vec<ScheduledTask>, String>),
     TaskRunsLoaded(Result<Vec<TaskRun>, String>),
     TaskMutated(Result<(), String>),
+    GoalNotice(Result<String, String>),
     TaskName(String),
     TaskPrompt(String),
     TaskSchedule(String),
@@ -397,6 +399,10 @@ impl Desktop {
                         Task::none()
                     }
                 }
+            }
+            Event::GoalNotice(result) => {
+                self.session.error = Some(result.unwrap_or_else(|error| error));
+                Task::none()
             }
             Event::TaskName(value) => {
                 self.task_name = value;
@@ -797,6 +803,7 @@ impl Desktop {
                             return Task::batch(tasks);
                         }
                     }
+                    Connection::GoalsChanged => {}
                     Connection::Connected | Connection::Changed => {
                         self.connected = true;
                         if self.tasks_open {
@@ -915,6 +922,44 @@ impl Desktop {
             "/profile" if argument.is_empty() => self.update(Event::OpenProfile),
             "/audit" if argument.is_empty() => self.update(Event::OpenAudit),
             "/tasks" | "/task" if argument.is_empty() => self.update(Event::OpenTasks),
+            "/goal" => {
+                let api = self.session.api.clone();
+                let thread = self
+                    .session
+                    .current
+                    .as_ref()
+                    .map(|thread| thread.id.clone());
+                let objective = argument.to_owned();
+                Task::perform(
+                    async move {
+                        if objective.is_empty() {
+                            api.goals().await.map(|goals| {
+                                if goals.is_empty() {
+                                    "No goals yet. Start one with /goal <objective>.".into()
+                                } else {
+                                    goals
+                                        .iter()
+                                        .map(|goal| {
+                                            format!(
+                                                "[{}] {} ({})",
+                                                goal.status, goal.objective, goal.id
+                                            )
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join("\n")
+                                }
+                            })
+                        } else {
+                            api.create_goal(&objective, thread.as_deref())
+                                .await
+                                .map(|goal| {
+                                    format!("Goal started: {} ({})", goal.objective, goal.id)
+                                })
+                        }
+                    },
+                    Event::GoalNotice,
+                )
+            }
             "/skills" if argument.is_empty() => self.update(Event::OpenSkills),
             "/mcp" if argument.is_empty() => self.update(Event::OpenMcp),
             "/plugins" if argument.is_empty() => self.update(Event::OpenPlugins),

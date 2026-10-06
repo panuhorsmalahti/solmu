@@ -294,6 +294,15 @@ pub struct TaskRun {
     pub status: String,
     pub error: Option<String>,
 }
+#[derive(Debug, Clone, Deserialize)]
+pub struct Goal {
+    pub id: String,
+    pub objective: String,
+    pub status: String,
+    pub thread_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
 impl ToolRun {
     pub fn details(&self) -> String {
         let arguments = format!("Arguments: {}", self.arguments);
@@ -337,6 +346,7 @@ impl Api {
                                 },
                                 Some("profile_changed") => yield Connection::ProfileChanged,
                                 Some("tasks_changed") => yield Connection::TasksChanged,
+                                Some("goals_changed") => yield Connection::GoalsChanged,
                                 _ => {},
                             }
                         }
@@ -411,6 +421,35 @@ impl Api {
         self.json::<Page>(Method::GET, "/tasks", None)
             .await
             .map(|page| page.items)
+    }
+    pub async fn goals(&self) -> Result<Vec<Goal>, String> {
+        #[derive(Deserialize)]
+        struct Page {
+            items: Vec<Goal>,
+        }
+        self.json::<Page>(Method::GET, "/goals", None)
+            .await
+            .map(|page| page.items)
+    }
+    pub async fn create_goal(
+        &self,
+        objective: &str,
+        thread_id: Option<&str>,
+    ) -> Result<Goal, String> {
+        self.json(
+            Method::POST,
+            "/goals",
+            Some(json!({"objective": objective, "thread_id": thread_id})),
+        )
+        .await
+    }
+    pub async fn update_goal(&self, id: &str, status: &str) -> Result<Goal, String> {
+        self.json(
+            Method::PATCH,
+            &format!("/goals/{id}"),
+            Some(json!({"status": status})),
+        )
+        .await
     }
     pub async fn create_task(
         &self,
@@ -649,6 +688,7 @@ pub enum Connection {
     Changed,
     ProfileChanged,
     TasksChanged,
+    GoalsChanged,
     Disconnected,
 }
 #[derive(Clone, Debug)]

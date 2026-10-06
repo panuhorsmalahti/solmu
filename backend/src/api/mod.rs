@@ -1,5 +1,6 @@
 pub mod error;
 mod events;
+mod goals;
 mod mcp;
 mod messages;
 mod models;
@@ -50,6 +51,8 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/tools", get(tools::definitions))
         .route("/api/v1/audit", get(tools::audit))
+        .route("/api/v1/goals", get(goals::list).post(goals::create))
+        .route("/api/v1/goals/{id}", axum::routing::patch(goals::update))
         .route(
             "/api/v1/tasks",
             get(scheduled_tasks::list).post(scheduled_tasks::create),
