@@ -269,9 +269,7 @@ impl CustomCredential {
 
     pub fn validate(&self, name: &str) -> io::Result<String> {
         validate_custom_credential_name(name)?;
-        if !crate::credential::valid_name(&self.credential_key)
-            && !crate::credential::is_onepassword_reference(&self.credential_key)
-        {
+        if !crate::credential::valid_source_key(&self.credential_key) {
             return Err(io::Error::other(format!(
                 "Invalid credential key for custom route {name}"
             )));
@@ -667,6 +665,7 @@ pub struct Policy {
     pub clean_env: bool,
     pub pass_env: Vec<String>,
     pub env_credentials: Vec<String>,
+    pub env_credential_map: std::collections::BTreeMap<String, String>,
     pub runtime_groups: Vec<RuntimeGroup>,
     pub credentials: Vec<String>,
     #[serde(default)]
@@ -815,6 +814,10 @@ impl Policy {
                         .env_credentials
                         .iter()
                         .any(|env| env.eq_ignore_ascii_case(variable))
+                        || self
+                            .env_credential_map
+                            .values()
+                            .any(|env| env.eq_ignore_ascii_case(variable))
                     {
                         return Err(io::Error::other(format!(
                             "Credential route {name} conflicts with --env-credential {variable}"
@@ -976,6 +979,23 @@ impl Policy {
             if !credentials.insert(name.to_ascii_uppercase()) {
                 return Err(io::Error::other(format!(
                     "Credential {name} was specified more than once"
+                )));
+            }
+        }
+        for (source, target) in &self.env_credential_map {
+            if !crate::credential::valid_source_key(source) {
+                return Err(io::Error::other(format!(
+                    "Invalid credential source in --env-credential-map: {source}"
+                )));
+            }
+            if !crate::credential::valid_name(target) {
+                return Err(io::Error::other(format!(
+                    "Invalid target environment variable in --env-credential-map: {target}"
+                )));
+            }
+            if !credentials.insert(target.to_ascii_uppercase()) {
+                return Err(io::Error::other(format!(
+                    "Credential environment variable {target} was specified more than once"
                 )));
             }
         }

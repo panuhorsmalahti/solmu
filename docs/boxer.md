@@ -120,6 +120,18 @@ is also the environment variable provided to the launched program. Multiple
 macOS, Credential Manager on Windows, and Secret Service on Linux). On Linux,
 a Secret Service provider must be available to the user session.
 
+Use `--env-credential-map SOURCE TARGET` when the credential store key differs
+from the child environment variable, or when using a 1Password reference:
+
+```sh
+boxer --env-credential-map 'op://Development/OpenAI API Key/credential' OPENAI_API_KEY \
+  --cwd /path/to/project -- solmu
+```
+
+Policies can store the same mapping in `env_credential_map`, with source keys
+and target environment variable names as values. Boxer resolves 1Password
+references with the installed, signed-in `op` CLI before starting the child.
+
 This makes the value easier to manage and avoids exposing it in Boxer command
 arguments. The value is still present in the agent's environment and available
 to that agent and its child processes.
@@ -452,7 +464,7 @@ mode and resource options override file values, and `--read-only` and
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `deny_hosts`,
-`local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`,
+`local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`, `env_credential_map`,
 `credentials`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
 `custom_credentials`, and `cgroup_root`. Custom credential definitions provide
 an HTTPS `upstream` and a `credential_key`; `env_var`, `inject_mode`,

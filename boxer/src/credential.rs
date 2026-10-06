@@ -85,6 +85,10 @@ pub fn is_onepassword_reference(value: &str) -> bool {
         })
 }
 
+pub fn valid_source_key(value: &str) -> bool {
+    valid_name(value) || is_onepassword_reference(value)
+}
+
 fn read_onepassword(reference: &str) -> io::Result<String> {
     if !is_onepassword_reference(reference) {
         return Err(io::Error::other("Invalid 1Password secret reference"));

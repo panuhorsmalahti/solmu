@@ -223,7 +223,7 @@ fn run() -> io::Result<i32> {
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
-                "boxer credential set|status|delete NAME: manage credentials in the OS credential store; --env-credential NAME loads one into a program's environment."
+                "boxer credential set|status|delete NAME: manage credentials in the OS credential store; --env-credential NAME or --env-credential-map SOURCE TARGET loads a value into a program's environment."
             );
             println!(
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|verify` reviews the local audit trail."
@@ -329,6 +329,18 @@ fn run() -> io::Result<i32> {
                     .and_then(|value| value.into_string().ok())
                     .ok_or_else(|| io::Error::other("--env-credential requires a variable name"))?,
             );
+        } else if argument == "--env-credential-map" {
+            let source = arguments
+                .next()
+                .and_then(|value| value.into_string().ok())
+                .ok_or_else(|| io::Error::other("--env-credential-map requires a source"))?;
+            let target = arguments
+                .next()
+                .and_then(|value| value.into_string().ok())
+                .ok_or_else(|| {
+                    io::Error::other("--env-credential-map requires a target environment variable")
+                })?;
+            policy.env_credential_map.insert(source, target);
         } else if argument == "--runtime-group" {
             policy.runtime_groups.push(RuntimeGroup::parse(
                 &arguments
@@ -486,6 +498,9 @@ fn run() -> io::Result<i32> {
     resolved.write.extend(policy.write);
     resolved.pass_env.extend(policy.pass_env);
     resolved.env_credentials.extend(policy.env_credentials);
+    resolved
+        .env_credential_map
+        .extend(policy.env_credential_map);
     resolved.runtime_groups.extend(policy.runtime_groups);
     resolved.credentials.extend(policy.credentials);
     resolved
@@ -612,6 +627,13 @@ fn run() -> io::Result<i32> {
     let credentials = credential::load(&resolved.env_credentials)?;
     for (name, value) in credentials {
         command.env(name, value.as_str());
+    }
+    let mapped_sources: Vec<_> = resolved.env_credential_map.keys().cloned().collect();
+    let credentials = credential::load(&mapped_sources)?;
+    for (source, value) in credentials {
+        if let Some(target) = resolved.env_credential_map.get(&source) {
+            command.env(target, value.as_str());
+        }
     }
     #[cfg(not(target_os = "linux"))]
     if resolved.isolated {

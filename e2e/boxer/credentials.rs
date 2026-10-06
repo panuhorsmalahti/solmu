@@ -34,7 +34,7 @@ fn environment_credentials_can_be_declared_in_a_policy_file() {
     let policy = temp.path().join("policy.json");
     std::fs::write(
         &policy,
-        r#"{"version":1,"mode":"workspace","network":"allow","env_credentials":["OPENAI_API_KEY"]}"#,
+        r#"{"version":1,"mode":"workspace","network":"allow","env_credentials":["OPENAI_API_KEY"],"env_credential_map":{"op://Development/OpenAI API Key/credential":"OPENAI_API_KEY_ALT"}}"#,
     )
     .unwrap();
     let process = Command::new(binary("boxer"))
@@ -52,7 +52,47 @@ fn environment_credentials_can_be_declared_in_a_policy_file() {
     );
     let output: serde_json::Value = serde_json::from_slice(&process.stdout).unwrap();
     assert_eq!(output["policy"]["env_credentials"][0], "OPENAI_API_KEY");
+    assert_eq!(
+        output["policy"]["env_credential_map"]["op://Development/OpenAI API Key/credential"],
+        "OPENAI_API_KEY_ALT"
+    );
     assert!(!String::from_utf8_lossy(&process.stdout).contains("test-secret"));
+}
+
+#[test]
+fn environment_credential_map_accepts_secret_references_and_validates_target_names() {
+    let temp = tempfile::tempdir().unwrap();
+    let valid = Command::new(binary("boxer"))
+        .args([
+            "--env-credential-map",
+            "op://Development/OpenAI API Key/credential",
+            "OPENAI_API_KEY",
+            "--cwd",
+        ])
+        .arg(temp.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .output()
+        .unwrap();
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stderr)
+    );
+    let policy: serde_json::Value = serde_json::from_slice(&valid.stdout).unwrap();
+    assert_eq!(
+        policy["policy"]["env_credential_map"]["op://Development/OpenAI API Key/credential"],
+        "OPENAI_API_KEY"
+    );
+
+    let invalid = run(&[
+        "--env-credential-map",
+        "op://Development/OpenAI API Key/credential",
+        "SOLMU_WORKSPACE",
+        "--",
+        "must-not-run",
+    ]);
+    assert_eq!(invalid.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("Invalid target environment"));
 }
 
 #[test]
