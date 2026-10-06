@@ -56,8 +56,8 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
             Ok(0)
         }
         Some("diff") if args.len() >= 4 => {
-            let before_path = PathBuf::from(&args[2]);
-            let after_path = PathBuf::from(&args[3]);
+            let before_path = resolve_policy_reference(Path::new(&args[2]))?;
+            let after_path = resolve_policy_reference(Path::new(&args[3]))?;
             let mut workspace = std::env::current_dir()?;
             let mut index = 4;
             while index < args.len() {
@@ -160,23 +160,47 @@ fn schema() -> io::Result<i32> {
 }
 
 fn init(args: &[OsString]) -> io::Result<i32> {
-    let mut output = PathBuf::from("boxer-policy.json");
+    let mut name = None;
+    let mut output = None;
+    let mut extends = None;
     let mut index = 0;
     while index < args.len() {
         if args[index] == "--output" && index + 1 < args.len() {
-            output = PathBuf::from(&args[index + 1]);
+            if output.is_some() {
+                return Err(usage());
+            }
+            output = Some(PathBuf::from(&args[index + 1]));
             index += 2;
+        } else if args[index] == "--extends" && index + 1 < args.len() {
+            if extends.is_some() {
+                return Err(usage());
+            }
+            extends = Some(args[index + 1].clone());
+            index += 2;
+        } else if name.is_none()
+            && let Some(value) = args[index].to_str()
+            && valid_profile_name(value)
+        {
+            name = Some(value.to_owned());
+            index += 1;
         } else {
             return Err(usage());
         }
     }
-    let policy = json!({
-        "version": 1,
-        "mode": "workspace",
-        "network": "allow",
-        "read": [],
-        "write": []
-    });
+    let output = match output {
+        Some(output) => output,
+        None if name.is_some() => {
+            let directory = crate::profiles::profile_directory()?;
+            std::fs::create_dir_all(&directory)?;
+            directory.join(format!("{}.json", name.as_deref().expect("name is set")))
+        }
+        None => PathBuf::from("boxer-policy.json"),
+    };
+    let policy = if let Some(extends) = extends {
+        json!({"version":1,"extends":extends,"read":[],"write":[]})
+    } else {
+        json!({"version":1,"mode":"workspace","network":"allow","read":[],"write":[]})
+    };
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -199,8 +223,15 @@ fn init(args: &[OsString]) -> io::Result<i32> {
     Ok(0)
 }
 
+fn valid_profile_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
 fn parse_file_and_cwd(args: &[OsString], file_index: usize) -> io::Result<(PathBuf, PathBuf)> {
-    let file = PathBuf::from(&args[file_index]);
+    let file = resolve_policy_reference(Path::new(&args[file_index]))?;
     let mut workspace = std::env::current_dir()?;
     let mut index = file_index + 1;
     while index < args.len() {
@@ -212,6 +243,22 @@ fn parse_file_and_cwd(args: &[OsString], file_index: usize) -> io::Result<(PathB
         }
     }
     Ok((file, workspace.canonicalize()?))
+}
+
+fn resolve_policy_reference(reference: &Path) -> io::Result<PathBuf> {
+    if reference.is_file() || reference.components().count() != 1 {
+        return Ok(reference.to_owned());
+    }
+    let Some(name) = reference.to_str().filter(|name| valid_profile_name(name)) else {
+        return Ok(reference.to_owned());
+    };
+    let directory = crate::profiles::profile_directory()?;
+    let jsonc = directory.join(format!("{name}.jsonc"));
+    if jsonc.is_file() {
+        Ok(jsonc)
+    } else {
+        Ok(directory.join(format!("{name}.json")))
+    }
 }
 
 fn load(file: &Path, workspace: &Path) -> io::Result<Policy> {
@@ -236,6 +283,6 @@ fn supported(policy: &Policy) -> bool {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer policy init [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
+        "Usage: boxer policy init [NAME] [--extends PROFILE] [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
     )
 }

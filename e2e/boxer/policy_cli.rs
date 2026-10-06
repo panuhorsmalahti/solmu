@@ -48,6 +48,71 @@ fn policy_init_creates_a_valid_scaffold_without_overwriting_existing_files() {
 }
 
 #[test]
+fn policy_init_scaffolds_a_named_profile_with_optional_inheritance() {
+    let root = tempfile::tempdir().unwrap();
+    let profiles = root.path().join("profiles");
+    let workspace = root.path().join("workspace");
+    std::fs::create_dir_all(&profiles).unwrap();
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::write(
+        profiles.join("base.json"),
+        r#"{"version":1,"mode":"workspace","network":"deny"}"#,
+    )
+    .unwrap();
+
+    let created = Command::new(binary("boxer"))
+        .args(["policy", "init", "reviewer", "--extends", "base"])
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let scaffold: Value =
+        serde_json::from_slice(&std::fs::read(profiles.join("reviewer.json")).unwrap()).unwrap();
+    assert_eq!(scaffold["extends"], "base");
+    assert!(scaffold.get("mode").is_none());
+
+    let validated = Command::new(binary("boxer"))
+        .args(["policy", "validate", "reviewer", "--cwd"])
+        .arg(&workspace)
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert!(
+        validated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validated.stderr)
+    );
+    let resolved: Value = serde_json::from_slice(&validated.stdout).unwrap();
+    assert_eq!(resolved["policy"]["network"], "deny");
+
+    let shown = Command::new(binary("boxer"))
+        .args(["policy", "show", "reviewer", "--cwd"])
+        .arg(&workspace)
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert!(
+        shown.status.success(),
+        "{}",
+        String::from_utf8_lossy(&shown.stderr)
+    );
+    let shown: Value = serde_json::from_slice(&shown.stdout).unwrap();
+    assert_eq!(shown["policy"]["network"], "deny");
+
+    let repeated = Command::new(binary("boxer"))
+        .args(["policy", "init", "reviewer"])
+        .env("BOXER_PROFILE_DIR", &profiles)
+        .output()
+        .unwrap();
+    assert_eq!(repeated.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&repeated.stderr).contains("Refusing to overwrite"));
+}
+
+#[test]
 fn policy_commands_validate_resolve_diff_and_list_builtin_profiles() {
     let temp = tempfile::tempdir().unwrap();
     let workspace = temp.path().join("workspace");
