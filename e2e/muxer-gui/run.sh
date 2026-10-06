@@ -40,13 +40,14 @@ data = json.load(open(sys.argv[1]))
 assert data["spaces"], "default workspace was not created"
 assert data["panes"], "default terminal pane was not created"
 PY
+sleep 2
 mkdir -p docs/screenshots
 
 # Send a shell command through the GUI and verify its file side effect.
 marker="$state/gui-command.txt"
 xdotool windowfocus --sync "$window"
 eval "$(xdotool getwindowgeometry --shell "$window")"
-xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT - 75))" click 1
+xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT - 45))" click 1
 xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
