@@ -322,6 +322,7 @@ fn parse_request(
             expect_continue = true;
         } else if name.eq_ignore_ascii_case("authorization")
             || name.eq_ignore_ascii_case("x-api-key")
+            || name.eq_ignore_ascii_case("x-goog-api-key")
             || name.eq_ignore_ascii_case("anthropic-auth-token")
         {
             if supplied_token.replace(value.to_owned()).is_some() {
@@ -354,7 +355,7 @@ fn parse_request(
             }
             token
         }
-        CredentialProvider::Anthropic => supplied_token.as_str(),
+        CredentialProvider::Anthropic | CredentialProvider::Gemini => supplied_token.as_str(),
     };
     if !bool::from(supplied_token.as_bytes().ct_eq(credential.token.as_bytes())) {
         return Err(RequestError::Unauthorized);
@@ -389,6 +390,11 @@ fn parse_request(
         }
         CredentialProvider::Anthropic => {
             upstream_header.push_str("x-api-key: ");
+            upstream_header.push_str(&credential.secret);
+            upstream_header.push_str("\r\n");
+        }
+        CredentialProvider::Gemini => {
+            upstream_header.push_str("x-goog-api-key: ");
             upstream_header.push_str(&credential.secret);
             upstream_header.push_str("\r\n");
         }
@@ -563,6 +569,32 @@ mod tests {
             request
                 .upstream_header
                 .contains("/v1/chat/completions?stream=true")
+        );
+        assert!(!request.upstream_header.contains("session-token"));
+    }
+
+    #[test]
+    fn gemini_proxy_replaces_phantom_token_with_google_api_key_header() {
+        let request = parse_request(
+            b"POST /gemini/v1beta/models/gemini:generateContent HTTP/1.1\r\nx-goog-api-key: session-token\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n",
+            &credentials(CredentialProvider::Gemini),
+            &[],
+        )
+        .unwrap();
+        assert!(
+            request
+                .upstream_header
+                .contains("Host: generativelanguage.googleapis.com\r\n")
+        );
+        assert!(
+            request
+                .upstream_header
+                .contains("x-goog-api-key: real-secret\r\n")
+        );
+        assert!(
+            request
+                .upstream_header
+                .contains("/v1beta/models/gemini:generateContent")
         );
         assert!(!request.upstream_header.contains("session-token"));
     }

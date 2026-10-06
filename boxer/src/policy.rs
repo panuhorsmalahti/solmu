@@ -99,6 +99,7 @@ pub enum RuntimeGroup {
 pub enum CredentialProvider {
     Openai,
     Anthropic,
+    Gemini,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -251,8 +252,9 @@ impl CredentialProvider {
         match name {
             "openai" => Ok(Self::Openai),
             "anthropic" => Ok(Self::Anthropic),
+            "gemini" => Ok(Self::Gemini),
             _ => Err(io::Error::other(
-                "Unknown credential provider; available providers: openai, anthropic",
+                "Unknown credential provider; available providers: openai, anthropic, gemini",
             )),
         }
     }
@@ -261,6 +263,7 @@ impl CredentialProvider {
         match self {
             Self::Openai => "OPENAI_API_KEY",
             Self::Anthropic => "ANTHROPIC_API_KEY",
+            Self::Gemini => "GEMINI_API_KEY",
         }
     }
 
@@ -268,6 +271,7 @@ impl CredentialProvider {
         match self {
             Self::Openai => "api.openai.com:443",
             Self::Anthropic => "api.anthropic.com:443",
+            Self::Gemini => "generativelanguage.googleapis.com:443",
         }
     }
 
@@ -275,6 +279,7 @@ impl CredentialProvider {
         match self {
             Self::Openai => "openai",
             Self::Anthropic => "anthropic",
+            Self::Gemini => "gemini",
         }
     }
 

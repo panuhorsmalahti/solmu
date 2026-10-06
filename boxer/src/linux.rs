@@ -201,22 +201,36 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
         policy.local.push(format!("127.0.0.1:{port}"));
         for (provider, token) in session_tokens {
             command.env(provider.key_env(), token);
-            let base = if provider == crate::policy::CredentialProvider::Openai {
-                format!("http://127.0.0.1:{port}/openai/v1/")
-            } else {
-                format!("http://127.0.0.1:{port}/anthropic/")
+            let base = match provider {
+                crate::policy::CredentialProvider::Openai => {
+                    format!("http://127.0.0.1:{port}/openai/v1/")
+                }
+                crate::policy::CredentialProvider::Anthropic => {
+                    format!("http://127.0.0.1:{port}/anthropic/")
+                }
+                crate::policy::CredentialProvider::Gemini => {
+                    format!("http://127.0.0.1:{port}/gemini/")
+                }
             };
             if policy.solmu {
                 command.env("LLM_ENDPOINT", base);
-            } else if provider == crate::policy::CredentialProvider::Openai {
-                command
-                    .env_remove("CODEX_API_KEY")
-                    .env_remove("CODEX_ACCESS_TOKEN")
-                    .env("OPENAI_BASE_URL", base);
             } else {
-                command
-                    .env_remove("ANTHROPIC_AUTH_TOKEN")
-                    .env("ANTHROPIC_BASE_URL", base);
+                match provider {
+                    crate::policy::CredentialProvider::Openai => {
+                        command
+                            .env_remove("CODEX_API_KEY")
+                            .env_remove("CODEX_ACCESS_TOKEN")
+                            .env("OPENAI_BASE_URL", base);
+                    }
+                    crate::policy::CredentialProvider::Anthropic => {
+                        command
+                            .env_remove("ANTHROPIC_AUTH_TOKEN")
+                            .env("ANTHROPIC_BASE_URL", base);
+                    }
+                    crate::policy::CredentialProvider::Gemini => {
+                        command.env("GEMINI_BASE_URL", base);
+                    }
+                }
             }
         }
         credential_broker = Some(broker);

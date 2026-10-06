@@ -89,6 +89,8 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
             "proxy",
             "--credential",
             "openai",
+            "--credential",
+            "gemini",
             "--allow-endpoint",
             "openai:POST:/v1/chat/completions",
             "--cwd",
@@ -96,6 +98,7 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
         .arg(workspace.path())
         .args(["--print-policy", "--", "unused-program"])
         .env("OPENAI_API_KEY", "real-secret-fixture")
+        .env("GEMINI_API_KEY", "gemini-secret-fixture")
         .output()
         .unwrap();
     assert!(
@@ -105,6 +108,7 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
     );
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["policy"]["credentials"][0], "openai");
+    assert_eq!(result["policy"]["credentials"][1], "gemini");
     assert_eq!(
         result["policy"]["endpoint_rules"][0]["path"],
         "/v1/chat/completions"
@@ -117,11 +121,26 @@ fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
             .any(|host| { host == "api.openai.com:443" })
     );
     assert!(
+        result["policy"]["hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|host| { host == "generativelanguage.googleapis.com:443" })
+    );
+    assert!(
         !result["environment"]["forwarded_names"]
             .as_array()
             .unwrap()
             .iter()
             .any(|name| name == "OPENAI_API_KEY")
     );
+    assert!(
+        !result["environment"]["forwarded_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|name| name == "GEMINI_API_KEY")
+    );
     assert!(!String::from_utf8_lossy(&output.stdout).contains("real-secret-fixture"));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("gemini-secret-fixture"));
 }
