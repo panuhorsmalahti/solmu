@@ -2,7 +2,11 @@ use crate::{
     Policy,
     policy::{self, Mode, Network},
 };
-use std::{io, os::unix::process::CommandExt, process::Command};
+use std::{
+    io,
+    os::unix::process::{CommandExt, ExitStatusExt},
+    process::Command,
+};
 
 pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
     if policy.network == Network::Deny {
@@ -102,6 +106,12 @@ pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
         } else {
             sandbox.env_remove(name);
         }
+    }
+    if crate::sessions::is_child() {
+        let status = sandbox.status()?;
+        return Ok(status
+            .code()
+            .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)));
     }
     // sandbox-exec applies Seatbelt to this process tree. Missing native support
     // produces an error; there is no unprotected fallback.

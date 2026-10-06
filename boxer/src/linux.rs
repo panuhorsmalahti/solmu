@@ -103,6 +103,13 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     if policy.network == Network::Deny {
         seccomp::install_network_denial()?;
     }
+    if crate::sessions::is_child() {
+        return command.status().map(|status| {
+            status
+                .code()
+                .unwrap_or_else(|| 128 + status.signal().unwrap_or(1))
+        });
+    }
     Err(command.exec())
 }
 

@@ -21,6 +21,26 @@ contains the process tree and terminates remaining descendants on exit.
 `--read-only` denies new filesystem writes on Linux/macOS. Inherited open
 handles retain their access. Windows rejects filesystem restrictions.
 
+## Run a detached session
+
+On Linux and macOS, add `--detached` to leave a Boxer process running after the
+terminal closes. Boxer records the session under `~/.boxer/sessions` and saves
+standard output and errors there. Review, stop, and clean up sessions with:
+
+```sh
+boxer --detached --profile solmu --cwd /path/to/project -- solmu
+boxer sessions list
+boxer sessions inspect <session-id>
+boxer sessions logs <session-id>
+boxer sessions stop <session-id>
+boxer sessions prune
+```
+
+The session runs in its own process group so stopping it also signals ordinary
+child processes. Boxer stores the workspace and command with each session. This
+first detached-session workflow captures logs rather than reconnecting an
+interactive terminal.
+
 ## Explain a path decision
 
 Use `boxer why` to inspect how a policy treats a path without launching an

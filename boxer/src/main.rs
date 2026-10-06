@@ -8,6 +8,8 @@ mod network;
 mod policy;
 mod policy_cli;
 mod rollback;
+#[cfg(unix)]
+mod sessions;
 mod trust;
 use policy::{AgentProfile, EndpointRule, Mode, Network, Policy, RuntimeGroup};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -27,7 +29,56 @@ mod windows;
 use windows as platform;
 
 fn main() {
-    let code = match run() {
+    let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    let session_child: Option<String> = {
+        #[cfg(unix)]
+        {
+            sessions::child_id(&arguments)
+        }
+        #[cfg(not(unix))]
+        {
+            None
+        }
+    };
+    #[cfg(unix)]
+    sessions::set_child(session_child.is_some());
+    #[cfg(unix)]
+    if let Some(id) = &session_child {
+        if let Err(error) = sessions::await_registered(id) {
+            eprintln!("Solmu Boxer: {error}");
+            std::process::exit(125);
+        }
+    }
+    let result = if arguments.first().is_some_and(|arg| arg == "sessions") {
+        #[cfg(unix)]
+        {
+            sessions::command(&arguments)
+        }
+        #[cfg(not(unix))]
+        {
+            Err(io::Error::other(
+                "Detached sessions are currently supported on Linux and macOS",
+            ))
+        }
+    } else {
+        run()
+    };
+    let result = if session_child.is_some() {
+        let code = result.unwrap_or_else(|error| {
+            eprintln!("Solmu Boxer: {error}");
+            125
+        });
+        #[cfg(unix)]
+        if let Some(id) = session_child.as_deref() {
+            if let Err(error) = sessions::finish(id, code) {
+                eprintln!("Solmu Boxer: could not record session completion: {error}");
+            }
+        }
+        Ok(code)
+    } else {
+        result
+    };
+    let code = match result {
         Ok(code) => code,
         Err(error) => {
             eprintln!("Solmu Boxer: {error}");
@@ -116,6 +167,16 @@ fn prepare_agent_home(policy: &mut Policy, agent: AgentProfile) -> io::Result<()
 
 fn run() -> io::Result<i32> {
     let mut raw_arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    #[cfg(unix)]
+    if raw_arguments
+        .first()
+        .is_some_and(|arg| arg == sessions::CHILD_ARGUMENT)
+    {
+        raw_arguments.drain(..2);
+    }
+    if raw_arguments.first().is_some_and(|arg| arg == "run") {
+        raw_arguments.remove(0);
+    }
     if raw_arguments
         .first()
         .is_some_and(|argument| argument == "credential")
@@ -176,6 +237,7 @@ fn run() -> io::Result<i32> {
     let mut print_policy = false;
     let mut check_policy = false;
     let mut rollback_session = false;
+    let mut detached = false;
     let mut why_path = None;
     let mut why_operation = "read";
     let mut trust_key = None;
@@ -227,6 +289,9 @@ fn run() -> io::Result<i32> {
             );
             println!(
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|verify` reviews the local audit trail."
+            );
+            println!(
+                "--detached: start a background session; manage it with `boxer sessions list|inspect|logs|stop|prune` (Linux/macOS)."
             );
             return Ok(0);
         } else if argument == "--version" {
@@ -389,6 +454,8 @@ fn run() -> io::Result<i32> {
             check_policy = true;
         } else if argument == "--rollback" {
             rollback_session = true;
+        } else if argument == "--detached" {
+            detached = true;
         } else if argument == "--path" && why_command {
             why_path =
                 Some(std::path::PathBuf::from(arguments.next().ok_or_else(
@@ -603,6 +670,29 @@ fn run() -> io::Result<i32> {
         program.unwrap_or_else(|| profile.map_or("solmu", BuiltinProfile::program).into()),
     );
     command.args(command_arguments).current_dir(&workspace);
+    if detached {
+        if rollback_session {
+            return Err(io::Error::other(
+                "--detached cannot be combined with --rollback",
+            ));
+        }
+        #[cfg(unix)]
+        {
+            let forwarded: Vec<_> = raw_arguments
+                .into_iter()
+                .filter(|arg| arg != "--detached")
+                .collect();
+            return sessions::start(
+                &forwarded,
+                &workspace,
+                &command.get_program().to_string_lossy(),
+            );
+        }
+        #[cfg(not(unix))]
+        return Err(io::Error::other(
+            "Detached sessions are currently supported on Linux and macOS",
+        ));
+    }
     if rollback_session && !rollback_child {
         return rollback::run(&raw_arguments, &workspace, command.get_program());
     }
