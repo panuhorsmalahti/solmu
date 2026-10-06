@@ -118,7 +118,7 @@ fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
                 },
                 "openai": {
                     "upstream": "https://openai-proxy.example.com/v1",
-                    "credential_key": "OPENAI_PROXY_API_KEY",
+                    "credential_key": "op://Development/OpenAI API Key/credential",
                     "env_var": "OPENAI_API_KEY",
                     "inject_header": "Authorization",
                     "credential_format": "Bearer {}"
@@ -154,6 +154,10 @@ fn custom_credential_routes_are_configurable_and_add_only_the_upstream_host() {
     assert_eq!(
         result["policy"]["custom_credentials"]["example_api"]["inject_header"],
         "X-API-Key"
+    );
+    assert_eq!(
+        result["policy"]["custom_credentials"]["openai"]["credential_key"],
+        "op://Development/OpenAI API Key/credential"
     );
     assert_eq!(
         result["policy"]["endpoint_rules"][0]["provider"],

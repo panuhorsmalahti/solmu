@@ -1,5 +1,5 @@
 use keyring::Entry;
-use std::{ffi::OsString, io};
+use std::{ffi::OsString, io, process::Command};
 use zeroize::{Zeroize, Zeroizing};
 
 const SERVICE: &str = "solmu-boxer";
@@ -51,13 +51,64 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
 }
 
 pub fn load(names: &[String]) -> io::Result<Vec<(String, Zeroizing<String>)>> {
-    load_with(names, |name| match entry(name)?.get_password() {
-        Ok(password) => Ok(password),
-        Err(keyring::Error::NoEntry) => Err(io::Error::other(format!(
-            "Credential {name} is not set; run `boxer credential set {name}`"
-        ))),
-        Err(_) => Err(store_error(name, "read")),
+    load_with(names, |name| {
+        if name.starts_with("op://") {
+            return read_onepassword(name);
+        }
+        match entry(name)?.get_password() {
+            Ok(password) => Ok(password),
+            Err(keyring::Error::NoEntry) => Err(io::Error::other(format!(
+                "Credential {name} is not set; run `boxer credential set {name}`"
+            ))),
+            Err(_) => Err(store_error(name, "read")),
+        }
     })
+}
+
+pub fn is_onepassword_reference(value: &str) -> bool {
+    if value.chars().any(char::is_control) {
+        return false;
+    }
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    url.scheme() == "op"
+        && url.host_str().is_some_and(|vault| !vault.is_empty())
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && url.fragment().is_none()
+        && url.path_segments().is_some_and(|mut segments| {
+            segments.next().is_some_and(|item| !item.is_empty())
+                && segments.next().is_some_and(|field| !field.is_empty())
+                && segments.next().is_none()
+        })
+}
+
+fn read_onepassword(reference: &str) -> io::Result<String> {
+    if !is_onepassword_reference(reference) {
+        return Err(io::Error::other("Invalid 1Password secret reference"));
+    }
+    let mut output = Command::new("op")
+        .args(["read", "--no-newline", reference])
+        .output()
+        .map_err(|_| io::Error::other("Could not read secret using the 1Password CLI"))?;
+    if !output.status.success() {
+        output.stdout.zeroize();
+        return Err(io::Error::other(
+            "Could not read secret using the 1Password CLI; check that `op` is installed and signed in",
+        ));
+    }
+    match String::from_utf8(std::mem::take(&mut output.stdout)) {
+        Ok(secret) => Ok(secret),
+        Err(error) => {
+            let mut bytes = error.into_bytes();
+            bytes.zeroize();
+            Err(io::Error::other(
+                "1Password returned a secret that is not valid UTF-8",
+            ))
+        }
+    }
 }
 
 fn load_with(
@@ -183,5 +234,24 @@ mod tests {
         }
         assert!(valid_name("OPENAI_API_KEY"));
         assert!(valid_name("DATABASE_PASSWORD"));
+    }
+
+    #[test]
+    fn onepassword_secret_references_require_a_vault_item_and_field() {
+        assert!(is_onepassword_reference(
+            "op://Development/OpenAI API Key/credential"
+        ));
+        for invalid in [
+            "op://",
+            "op://vault/item",
+            "op://vault//field",
+            "op://user@vault/item/field",
+            "op://vault/item/field#fragment",
+        ] {
+            assert!(!is_onepassword_reference(invalid), "accepted {invalid}");
+        }
+        assert!(is_onepassword_reference(
+            "op://vault/item/one-time%20password?attribute=otp"
+        ));
     }
 }

@@ -188,6 +188,13 @@ stores the real value as `username:password`; the client sends the Base64 form o
 the session token in its Basic auth field, and Boxer substitutes the stored pair.
 Endpoint rules can limit a route to selected methods and paths.
 
+For custom routes, `credential_key` can instead point to a 1Password secret
+reference such as `op://Development/Search API/credential`. Boxer reads it with
+the installed `op` CLI before launching the sandbox, so the CLI must be signed
+in and able to access that vault. The retrieved value is held by Boxer and
+injected by the proxy; it is not added to the child environment. Query options
+in a reference are supported, for example `?attribute=otp`.
+
 By default, the broker allows any API path on the selected provider. Add one or
 more `--allow-endpoint PROVIDER:METHOD:PATH` options to limit it to specific
 endpoints. Once rules are present, other requests receive `403 Forbidden`:

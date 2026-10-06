@@ -246,7 +246,7 @@ fn validate_credential_name(name: &str) -> io::Result<()> {
         || !name.as_bytes()[0].is_ascii_lowercase()
     {
         return Err(io::Error::other(
-            "Credential route names must be lowercase identifiers and cannot replace built-in providers",
+            "Credential route names must be lowercase identifiers",
         ));
     }
     Ok(())
@@ -269,7 +269,9 @@ impl CustomCredential {
 
     pub fn validate(&self, name: &str) -> io::Result<String> {
         validate_custom_credential_name(name)?;
-        if !crate::credential::valid_name(&self.credential_key) {
+        if !crate::credential::valid_name(&self.credential_key)
+            && !crate::credential::is_onepassword_reference(&self.credential_key)
+        {
             return Err(io::Error::other(format!(
                 "Invalid credential key for custom route {name}"
             )));
