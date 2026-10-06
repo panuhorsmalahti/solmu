@@ -63,8 +63,6 @@ impl fmt::Display for SpaceType {
 #[derive(Debug, Clone)]
 enum Message {
     Tick,
-    SessionChanged(String),
-    WorkspaceChanged(String),
     InputChanged(String),
     ToggleSpaceMenu,
     SpaceContextMenu(u64),
@@ -108,17 +106,6 @@ impl MuxerGui {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick => self.snapshot_task(),
-            Message::SessionChanged(value) => {
-                self.session = value;
-                self.snapshot = Value::Null;
-                self.selected_pane = None;
-                self.screen.clear();
-                Task::none()
-            }
-            Message::WorkspaceChanged(value) => {
-                self.workspace = value;
-                Task::none()
-            }
             Message::ToggleSpaceMenu => {
                 self.show_space_types = !self.show_space_types;
                 Task::none()
@@ -599,17 +586,6 @@ impl MuxerGui {
                 }
             }
         }
-        let session_fields = column![
-            text("SESSION").size(10).color(appearance::MUTED),
-            text_input("Session name", &self.session)
-                .on_input(Message::SessionChanged)
-                .style(appearance::input),
-            text("WORKSPACE").size(10).color(appearance::MUTED),
-            text_input("Project folder", &self.workspace)
-                .on_input(Message::WorkspaceChanged)
-                .style(appearance::input),
-        ]
-        .spacing(7);
         let sidebar = column![
             brand,
             button(
@@ -623,9 +599,6 @@ impl MuxerGui {
             .width(Length::Fill),
             spaces_section,
             iced::widget::Space::new().height(Length::Fill),
-            container(session_fields)
-                .padding(11)
-                .style(appearance::panel),
         ]
         .spacing(16)
         .padding(18)

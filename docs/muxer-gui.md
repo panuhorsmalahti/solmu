@@ -16,7 +16,7 @@ binary, daemon, or local control server is needed. The GUI installer includes
 the `solmu` runtime for Solmu spaces; start the Solmu backend before using
 those spaces. Terminal spaces launch local shells and command-line clients.
 
-The sidebar shows the session and its spaces. When a tab has multiple panes,
+The sidebar shows spaces. When a tab has multiple panes,
 they appear under **PANES** so you can switch between them; a lone pane needs
 no extra sidebar entry. Tabs appear in a browser-style strip along the top of
 the workspace. Select a tab to switch to it, use **+** to add one, or click its
