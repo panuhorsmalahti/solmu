@@ -2,8 +2,9 @@ use super::{sessions::Session, *};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     process::{Child, ChildStdin, Stdio},
+    sync::{Arc, Mutex},
 };
 
 fn command(session: &Session<'_>, args: &[&str]) -> Value {
@@ -36,6 +37,7 @@ struct Stream {
     child: Child,
     input: ChildStdin,
     frames: tokio::sync::mpsc::UnboundedReceiver<Value>,
+    stderr: Arc<Mutex<Vec<u8>>>,
 }
 impl Stream {
     fn new(session: &Session<'_>, args: &[&str]) -> Self {
@@ -48,6 +50,14 @@ impl Stream {
             .unwrap();
         let input = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
+        let mut child_stderr = child.stderr.take().unwrap();
+        let stderr = Arc::new(Mutex::new(Vec::new()));
+        let captured_stderr = Arc::clone(&stderr);
+        std::thread::spawn(move || {
+            let mut output = Vec::new();
+            let _ = child_stderr.read_to_end(&mut output);
+            *captured_stderr.lock().unwrap() = output;
+        });
         let (sender, frames) = tokio::sync::mpsc::unbounded_channel();
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
@@ -64,6 +74,7 @@ impl Stream {
             child,
             input,
             frames,
+            stderr,
         }
     }
     fn send(&mut self, value: Value) {
@@ -74,10 +85,17 @@ impl Stream {
         self.send(json!({"type":"input","data":STANDARD.encode(text)}));
     }
     async fn next(&mut self) -> Value {
-        tokio::time::timeout(Duration::from_secs(15), self.frames.recv())
+        match tokio::time::timeout(Duration::from_secs(15), self.frames.recv())
             .await
             .unwrap()
-            .expect("Terminal stream ended")
+        {
+            Some(frame) => frame,
+            None => {
+                let status = self.child.try_wait().ok().flatten();
+                let stderr = String::from_utf8_lossy(&self.stderr.lock().unwrap()).into_owned();
+                panic!("Terminal stream ended; client status: {status:?}; stderr: {stderr}");
+            }
+        }
     }
     async fn matching(&mut self, predicate: impl Fn(&Value) -> bool) -> Value {
         tokio::time::timeout(Duration::from_secs(20), async {
