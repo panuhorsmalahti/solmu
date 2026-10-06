@@ -1,7 +1,7 @@
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     os::unix::{
@@ -102,7 +102,28 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
             stop(id, force, timeout)
         }
         Some("logs") if arguments.len() == 2 + offset => logs(text(arguments, 1 + offset)?),
-        Some("prune") if arguments.len() == 1 + offset => prune(),
+        Some("prune") => {
+            let mut dry_run = false;
+            let mut older_than = None;
+            let mut keep = None;
+            let mut index = 1 + offset;
+            while index < arguments.len() {
+                match arguments[index].to_str() {
+                    Some("--dry-run") if !dry_run => dry_run = true,
+                    Some("--older-than") if older_than.is_none() && index + 1 < arguments.len() => {
+                        index += 1;
+                        older_than = Some(parse_prune_value(&arguments[index], 36500)?);
+                    }
+                    Some("--keep") if keep.is_none() && index + 1 < arguments.len() => {
+                        index += 1;
+                        keep = Some(parse_prune_value(&arguments[index], usize::MAX)?);
+                    }
+                    _ => return Err(session_usage()),
+                }
+                index += 1;
+            }
+            prune(dry_run, older_than, keep)
+        }
         Some("attach") if arguments.len() == 2 + offset => attach(text(arguments, 1 + offset)?),
         Some("detach") if arguments.len() == 2 + offset => {
             control(text(arguments, 1 + offset)?, b'D')
@@ -113,7 +134,7 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
 
 fn session_usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer ps [--all] [--json] | boxer attach <id> | boxer detach <id> | boxer inspect <id> [--json] | boxer logs <id> | boxer stop <id> [--timeout SECONDS | --force] | boxer prune",
+        "Usage: boxer ps [--all] [--json] | boxer attach <id> | boxer detach <id> | boxer inspect <id> [--json] | boxer logs <id> | boxer stop <id> [--timeout SECONDS | --force] | boxer prune [--dry-run] [--older-than DAYS] [--keep COUNT]",
     )
 }
 
@@ -580,23 +601,76 @@ fn logs(id: &str) -> io::Result<i32> {
     Ok(0)
 }
 
-fn prune() -> io::Result<i32> {
+fn prune(dry_run: bool, older_than: Option<usize>, keep: Option<usize>) -> io::Result<i32> {
     let root = root()?;
-    let mut removed = 0;
-    for mut session in all(&root)? {
+    let mut sessions = all(&root)?;
+    for session in &mut sessions {
         refresh_status(&mut session);
         if session.status != "running" {
-            let id = session.id.clone();
+            save(&root, session)?;
+        }
+    }
+    let running = sessions
+        .iter()
+        .filter(|session| session.status == "running")
+        .count();
+    let finished: Vec<_> = sessions
+        .iter()
+        .filter(|session| session.status != "running")
+        .collect();
+    let keep_finished = keep.map(|count| count.saturating_sub(running));
+    let keep_ids: HashSet<_> = keep_finished
+        .map(|count| {
+            finished
+                .iter()
+                .rev()
+                .take(count)
+                .map(|session| session.id.as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    let now = now_ms()?;
+    let cutoff = older_than.map(|days| (days as u128).saturating_mul(86_400_000));
+    let mut candidates = Vec::new();
+    for session in sessions
+        .iter()
+        .filter(|session| session.status != "running")
+    {
+        let older = cutoff.is_some_and(|age| now.saturating_sub(session.created_unix_ms) >= age);
+        let beyond_keep = keep.is_some() && !keep_ids.contains(session.id.as_str());
+        let selected = match (older_than, keep) {
+            (None, None) => true,
+            (Some(_), None) => older,
+            (None, Some(_)) => beyond_keep,
+            (Some(_), Some(_)) => older || beyond_keep,
+        };
+        if selected {
+            candidates.push(session.id.as_str());
+        }
+    }
+    if !dry_run {
+        for id in &candidates {
             fs::remove_file(root.join(format!("{id}.json")))?;
             let _ = fs::remove_file(root.join(format!("{id}.out")));
             let _ = fs::remove_file(root.join(format!("{id}.err")));
-            let _ = fs::remove_file(socket_path(&root, &id));
-            let _ = fs::remove_file(control_path(&root, &id));
-            removed += 1;
+            let _ = fs::remove_file(socket_path(&root, id));
+            let _ = fs::remove_file(control_path(&root, id));
         }
     }
-    println!("Removed {removed} finished session(s)");
+    println!(
+        "{} {} finished session(s)",
+        if dry_run { "Would remove" } else { "Removed" },
+        candidates.len()
+    );
     Ok(0)
+}
+
+fn parse_prune_value(value: &std::ffi::OsStr, maximum: usize) -> io::Result<usize> {
+    value
+        .to_str()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value <= maximum)
+        .ok_or_else(session_usage)
 }
 
 fn refresh_status(session: &mut Session) {

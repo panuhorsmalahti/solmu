@@ -224,8 +224,23 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
     let all: serde_json::Value = serde_json::from_slice(&all_sessions.stdout).unwrap();
     assert_eq!(all[0]["status"], "stopped");
 
+    let recent_prune = Command::new(binary("boxer"))
+        .args(["prune", "--older-than", "1", "--dry-run"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(recent_prune.status.success());
+    assert!(String::from_utf8_lossy(&recent_prune.stdout).contains("Would remove 0"));
+    let preview = Command::new(binary("boxer"))
+        .args(["prune", "--keep", "0", "--dry-run"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(preview.status.success());
+    assert!(String::from_utf8_lossy(&preview.stdout).contains("Would remove 1"));
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 3);
     let prune = Command::new(binary("boxer"))
-        .arg("prune")
+        .args(["prune", "--keep", "0"])
         .env("BOXER_SESSIONS_DIR", directory.path())
         .output()
         .unwrap();

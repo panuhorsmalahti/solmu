@@ -41,6 +41,9 @@ boxer stop <session-id>
 boxer stop <session-id> --timeout 15
 boxer stop <session-id> --force
 boxer prune
+boxer prune --dry-run
+boxer prune --older-than 7
+boxer prune --keep 20
 ```
 
 By default, `boxer ps` lists running sessions. Add `--all` to include sessions
@@ -48,7 +51,10 @@ that have stopped or exited. Use `--json` to script the list, or
 `boxer inspect <session-id> --json` to retrieve one session's details.
 Stopping a session allows up to five seconds for a graceful exit. Set
 `--timeout SECONDS` to change that wait, or use `--force` to terminate it
-immediately.
+immediately. `boxer prune` removes all finished session records by default.
+Use `--dry-run` to preview cleanup, `--older-than DAYS` to remove only older
+records, or `--keep COUNT` to retain the newest finished sessions. When both
+filters are set, a finished session is removed when either filter selects it.
 
 The session runs in its own process group so stopping it also signals ordinary
 child processes. Boxer stores the workspace and command with each session.
