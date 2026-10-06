@@ -656,6 +656,12 @@ TCP and WebSocket clients as well as HTTP clients. Other host loopback ports
 remain inaccessible. Do not publish and forward the same guest port.
 Proxy and `NO_PROXY` settings are set automatically for these routes.
 
+For local IPC, `--open-port PORT` forwards `127.0.0.1:PORT` with the same
+behavior as `--allow-local`. `--listen-port PORT` is the same as `--publish`:
+it makes a guest service available on host loopback. These options use the
+isolated routed-network setup shown above, so allowed remote hosts remain
+controlled by `--allow-host` and network profiles.
+
 Routes can be saved in an explicit policy:
 
 ```json

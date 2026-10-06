@@ -2,6 +2,34 @@ use super::*;
 use serde_json::{Value, json};
 
 #[test]
+fn nono_compatible_local_ipc_flags_resolve_to_boxer_routes() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--open-port",
+            "3001",
+            "--listen-port",
+            "4001",
+            "--cwd",
+        ])
+        .arg(directory.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let policy: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(policy["policy"]["local"], json!(["127.0.0.1:3001"]));
+    assert_eq!(policy["policy"]["publish"], json!([4001]));
+}
+
+#[test]
 fn routed_policies_validate_exact_destinations_and_show_platform_support() {
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("routes.json");
@@ -68,6 +96,8 @@ fn routed_policies_validate_exact_destinations_and_show_platform_support() {
             "192.168.1.1:3000",
         ],
         vec!["--isolated", "--network", "proxy", "--publish", "0"],
+        vec!["--listen-port", "0"],
+        vec!["--open-port", "0"],
         vec![
             "--isolated",
             "--network",
