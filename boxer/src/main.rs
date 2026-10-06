@@ -7,11 +7,13 @@ mod explain;
 mod network;
 mod policy;
 mod policy_cli;
+mod profiles;
 mod rollback;
 #[cfg(unix)]
 mod sessions;
 mod trust;
 use policy::{AgentProfile, EndpointRule, Mode, Network, Policy, RuntimeGroup};
+use profiles::Profile;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 
@@ -109,60 +111,6 @@ fn main() {
     std::process::exit(code);
 }
 
-#[derive(Clone, Copy)]
-enum BuiltinProfile {
-    Solmu,
-    Codex,
-    ClaudeCode,
-    OpenCode,
-    Pi,
-}
-
-impl BuiltinProfile {
-    fn parse(name: &std::ffi::OsStr) -> io::Result<Self> {
-        match name.to_str() {
-            Some("solmu") => Ok(Self::Solmu),
-            Some("codex") => Ok(Self::Codex),
-            Some("claude-code" | "claude") => Ok(Self::ClaudeCode),
-            Some("opencode" | "open-code") => Ok(Self::OpenCode),
-            Some("pi") => Ok(Self::Pi),
-            _ => Err(io::Error::other(
-                "Unknown profile; available profiles: solmu, codex, claude-code, opencode, pi",
-            )),
-        }
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::Solmu => "solmu",
-            Self::Codex => "codex",
-            Self::ClaudeCode => "claude-code",
-            Self::OpenCode => "opencode",
-            Self::Pi => "pi",
-        }
-    }
-
-    fn program(self) -> &'static str {
-        match self {
-            Self::Solmu => "solmu",
-            Self::Codex => "codex",
-            Self::ClaudeCode => "claude",
-            Self::OpenCode => "opencode",
-            Self::Pi => "pi",
-        }
-    }
-
-    fn agent(self) -> Option<AgentProfile> {
-        match self {
-            Self::Solmu => None,
-            Self::Codex => Some(AgentProfile::Codex),
-            Self::ClaudeCode => Some(AgentProfile::ClaudeCode),
-            Self::OpenCode => Some(AgentProfile::OpenCode),
-            Self::Pi => Some(AgentProfile::Pi),
-        }
-    }
-}
-
 fn prepare_agent_home(policy: &mut Policy, agent: AgentProfile) -> io::Result<()> {
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .ok_or_else(|| io::Error::other("Cannot find the user home directory"))?;
@@ -254,7 +202,7 @@ fn run() -> io::Result<i32> {
     let mut network = None;
     let mut network_profile = None;
     let mut policy_file = None;
-    let mut profile = None;
+    let mut profile: Option<Profile> = None;
     let mut print_policy = false;
     let mut check_policy = false;
     let mut rollback_session = false;
@@ -270,7 +218,7 @@ fn run() -> io::Result<i32> {
     while let Some(argument) = arguments.next() {
         if argument == "--help" || argument == "-h" {
             println!(
-                "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace, --allow-cwd: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--profile solmu|codex|claude-code|opencode|pi: workspace policy and clean environment; agent profiles use separate login homes.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
+                "Solmu Boxer\n\nUsage: boxer [OPTIONS] [--] [PROGRAM [ARGS...]]\n\nDefault program: solmu\nDefault permissions: filesystem and all network requests allowed.\n--cwd PATH: project working directory.\n--workspace, --allow-cwd: Linux/macOS filesystem allowlist; writable project, read-only runtime files.\n--read PATH: additional existing read-only file or directory (repeatable).\n--write PATH: additional existing writable file or directory (repeatable).\n--profile solmu|codex|claude-code|opencode|pi|NAME: built-ins or a custom JSON profile from ~/.config/boxer/profiles (BOXER_PROFILE_DIR overrides it). Agent profiles use separate login homes.\n--policy FILE: explicit versioned JSON policy; never loaded implicitly.\n--print-policy: print resolved policy as JSON without starting a program.\n--clean-env: forward only basic terminal, provider, proxy, and Solmu settings.\n--pass-env NAME: preserve an additional environment variable (repeatable).\n--read-only: deny filesystem writes on Linux/macOS.\n--isolated: Linux namespaces, seccomp, cgroups, and dropped capabilities. Requires Bubblewrap and delegated cgroup v2. Network remains allowed by default.\n--cpus N: isolated CPU quota in cores (default 2).\n--memory-mib N: isolated memory limit (default 2048 MiB, no swap).\n--pids N: isolated process/thread limit (default 256).\n--cgroup-root PATH: delegated cgroup parent (or SOLMU_CGROUP_ROOT; auto-detects systemd delegation).\nWindows: kernel Job Object contains the process tree; filesystem and network restrictions are rejected."
             );
             println!(
                 "--network allow|deny|proxy: unrestricted (default), offline on Linux/macOS, or a routed Linux isolated network.\n--allow-host DOMAIN[:PORT]: exact or wildcard remote hostname for proxy networking, default port 443 (repeatable).\n--deny-host DOMAIN: deny a domain even when another rule allows it (repeatable; * matches all and * may replace complete labels).\n--allow-local IP:PORT or --open-port PORT: forward a host loopback service into the private network (repeatable).\n--publish PORT or --listen-port PORT: expose a guest service on the same host loopback port (repeatable).\n--proxy-port PORT: use a fixed local port for the Linux network proxy (otherwise an available port is chosen)."
@@ -528,7 +476,7 @@ fn run() -> io::Result<i32> {
             let name = arguments
                 .next()
                 .ok_or_else(|| io::Error::other("--profile requires a profile name"))?;
-            profile = Some(BuiltinProfile::parse(&name)?);
+            profile = Some(Profile::parse(&name)?);
         } else if argument == "--cpus" || argument == "--memory-mib" || argument == "--pids" {
             let value = arguments
                 .next()
@@ -579,13 +527,17 @@ fn run() -> io::Result<i32> {
     }
     let mut resolved = if let Some(path) = policy_file {
         Policy::from_file(&path)?
-    } else if let Some(profile) = profile {
-        Policy {
-            mode: Mode::Workspace,
-            clean_env: true,
-            solmu: matches!(profile, BuiltinProfile::Solmu),
-            agent: profile.agent(),
-            ..Policy::default()
+    } else if let Some(profile) = profile.as_ref() {
+        if let Some(path) = profile.custom_policy() {
+            Policy::from_file(path)?
+        } else {
+            Policy {
+                mode: Mode::Workspace,
+                clean_env: true,
+                solmu: profile.is_solmu(),
+                agent: profile.agent(),
+                ..Policy::default()
+            }
         }
     } else {
         Policy::default()
@@ -687,9 +639,13 @@ fn run() -> io::Result<i32> {
         }
         return check::run(&resolved, &workspace);
     }
-    let mut command = Command::new(
-        program.unwrap_or_else(|| profile.map_or("solmu", BuiltinProfile::program).into()),
-    );
+    let mut command = Command::new(program.unwrap_or_else(|| {
+        profile
+            .as_ref()
+            .and_then(Profile::program)
+            .unwrap_or("solmu")
+            .into()
+    }));
     command.args(command_arguments).current_dir(&workspace);
     if detached {
         if rollback_session {
@@ -737,7 +693,7 @@ fn run() -> io::Result<i32> {
             .collect();
         println!("{}", serde_json::to_string_pretty(&serde_json::json!({
             "version": 1, "platform": std::env::consts::OS, "platform_supported": supported,
-            "profile": profile.map(BuiltinProfile::name),
+            "profile": profile.as_ref().map(Profile::name),
             "enforcement": "not-applied",
             "workspace": workspace, "policy": resolved,
             "network": match resolved.network { Network::Allow => "allowed", Network::Deny => "denied", Network::Proxy => "routed" },

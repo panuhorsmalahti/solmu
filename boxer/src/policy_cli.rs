@@ -28,15 +28,18 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
         Some("init") => init(&args[2..]),
         Some("schema") if args.len() == 2 => schema(),
         Some("profiles") if args.len() == 2 => {
+            let mut profiles: Vec<_> = PROFILES
+                .iter()
+                .map(|(name, description)| json!({"name":name,"description":description}))
+                .collect();
+            profiles.extend(
+                crate::profiles::custom_profiles()?
+                    .into_iter()
+                    .map(|name| json!({"name":name,"description":"Custom Boxer profile"})),
+            );
             println!(
                 "{}",
-                serde_json::to_string_pretty(
-                    &PROFILES
-                        .iter()
-                        .map(|(name, description)| json!({"name":name,"description":description}))
-                        .collect::<Vec<_>>()
-                )
-                .map_err(io::Error::other)?
+                serde_json::to_string_pretty(&profiles).map_err(io::Error::other)?
             );
             Ok(0)
         }

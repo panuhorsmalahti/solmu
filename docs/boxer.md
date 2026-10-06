@@ -345,6 +345,23 @@ Install the agent CLI before using its profile. OpenCode uses the `opencode`
 command; Pi uses the `pi` command. See the [OpenCode installation guide](https://opencode.ai/docs/)
 and [Pi coding agent guide](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
 
+### Create a named policy profile
+
+Save a versioned Boxer policy as `~/.config/boxer/profiles/NAME.json` to use it
+with `--profile NAME`. Use `BOXER_PROFILE_DIR` to choose another profile
+directory. For example, create a starter policy and save it as
+`~/.config/boxer/profiles/reviewer.json`:
+
+```sh
+boxer policy init --output ~/.config/boxer/profiles/reviewer.json
+boxer policy validate ~/.config/boxer/profiles/reviewer.json --cwd /path/to/project
+boxer --profile reviewer --cwd /path/to/project -- solmu
+boxer policy profiles
+```
+
+Named custom profiles use the same versioned JSON policy format as `--policy`.
+The built-in profile names take precedence over files with the same name.
+
 ## Review and restore a session
 
 Add `--rollback` to save the workspace before and after an agent runs:

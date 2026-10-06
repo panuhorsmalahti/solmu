@@ -29,6 +29,62 @@ fn profile_plan(profile: &str) -> (tempfile::TempDir, Value) {
 }
 
 #[test]
+fn custom_named_profiles_load_from_the_profile_directory_and_are_discoverable() {
+    let root = tempfile::tempdir().unwrap();
+    let profile_directory = root.path().join("profiles");
+    std::fs::create_dir(&profile_directory).unwrap();
+    std::fs::write(
+        profile_directory.join("reviewer.json"),
+        r#"{"version":1,"mode":"workspace","network":"deny","read_only":true}"#,
+    )
+    .unwrap();
+    let workspace = root.path().join("project");
+    std::fs::create_dir(&workspace).unwrap();
+
+    let plan = Command::new(binary("boxer"))
+        .args(["--profile", "reviewer", "--cwd"])
+        .arg(&workspace)
+        .arg("--print-policy")
+        .env("BOXER_PROFILE_DIR", &profile_directory)
+        .env("HOME", root.path())
+        .env("USERPROFILE", root.path())
+        .output()
+        .unwrap();
+    assert!(
+        plan.status.success(),
+        "{}",
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let plan: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(plan["profile"], "reviewer");
+    assert_eq!(plan["policy"]["mode"], "workspace");
+    assert_eq!(plan["policy"]["network"], "deny");
+    assert_eq!(plan["policy"]["read_only"], true);
+
+    let listed = Command::new(binary("boxer"))
+        .args(["policy", "profiles"])
+        .env("BOXER_PROFILE_DIR", &profile_directory)
+        .output()
+        .unwrap();
+    assert!(listed.status.success());
+    let listed: Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|profile| profile["name"] == "reviewer")
+    );
+
+    let invalid = Command::new(binary("boxer"))
+        .args(["--profile", "../reviewer", "--print-policy"])
+        .env("BOXER_PROFILE_DIR", &profile_directory)
+        .output()
+        .unwrap();
+    assert!(!invalid.status.success());
+}
+
+#[test]
 fn agent_profiles_launch_the_expected_program_with_separate_writable_state() {
     for (profile, program, config, allowed, excluded) in [
         (
