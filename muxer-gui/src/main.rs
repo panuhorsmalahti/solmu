@@ -559,30 +559,32 @@ impl MuxerGui {
                 if tab_panes.len() > 1 {
                     spaces_section =
                         spaces_section.push(text("PANES").size(9).color(appearance::MUTED));
-                }
-                for pane in tab_panes {
-                    let pane_id = pane["id"].as_u64().unwrap_or_default();
-                    let name = pane["name"]
-                        .as_str()
-                        .or_else(|| pane["launch"].as_str())
-                        .unwrap_or("Pane")
-                        .to_string();
-                    let pane_selected = self.selected_pane == Some(pane_id);
-                    let pane_state = pane["state"].as_str().unwrap_or("idle").to_string();
-                    let item = button(
-                        row![
-                            text("> ").size(13).color(appearance::MUTED),
-                            text(name).size(12),
-                            iced::widget::Space::new().width(Length::Fill),
-                            text(pane_state).size(9).color(appearance::MUTED),
-                        ]
-                        .align_y(Alignment::Center),
-                    )
-                    .on_press(Message::SelectPane(pane_id))
-                    .style(move |theme, state| appearance::navigation(theme, state, pane_selected))
-                    .padding([7, 10])
-                    .width(Length::Fill);
-                    spaces_section = spaces_section.push(item);
+                    for pane in tab_panes {
+                        let pane_id = pane["id"].as_u64().unwrap_or_default();
+                        let name = pane["name"]
+                            .as_str()
+                            .or_else(|| pane["launch"].as_str())
+                            .unwrap_or("Pane")
+                            .to_string();
+                        let pane_selected = self.selected_pane == Some(pane_id);
+                        let pane_state = pane["state"].as_str().unwrap_or("idle").to_string();
+                        let item = button(
+                            row![
+                                text("> ").size(13).color(appearance::MUTED),
+                                text(name).size(12),
+                                iced::widget::Space::new().width(Length::Fill),
+                                text(pane_state).size(9).color(appearance::MUTED),
+                            ]
+                            .align_y(Alignment::Center),
+                        )
+                        .on_press(Message::SelectPane(pane_id))
+                        .style(move |theme, state| {
+                            appearance::navigation(theme, state, pane_selected)
+                        })
+                        .padding([7, 10])
+                        .width(Length::Fill);
+                        spaces_section = spaces_section.push(item);
+                    }
                 }
             }
         }
