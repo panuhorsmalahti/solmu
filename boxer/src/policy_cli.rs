@@ -26,6 +26,7 @@ const PROFILES: &[(&str, &str)] = &[
 pub fn command(args: &[OsString]) -> io::Result<i32> {
     match args.get(1).and_then(|arg| arg.to_str()) {
         Some("init") => init(&args[2..]),
+        Some("schema") if args.len() == 2 => schema(),
         Some("profiles") if args.len() == 2 => {
             println!(
                 "{}",
@@ -91,6 +92,44 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
         }
         _ => Err(usage()),
     }
+}
+
+fn schema() -> io::Result<i32> {
+    let schema = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://solmu.dev/schemas/boxer-policy-v1.json",
+        "title": "Solmu Boxer policy",
+        "type": "object",
+        "required": ["version", "mode"],
+        "additionalProperties": false,
+        "properties": {
+            "version": {"const": 1},
+            "mode": {"enum": ["unrestricted", "workspace", "isolated"]},
+            "network": {"enum": ["allow", "deny", "proxy"]},
+            "network_profile": {"enum": ["minimal", "developer"]},
+            "hosts": {"type": "array", "items": {"type": "string"}},
+            "local": {"type": "array", "items": {"type": "string"}},
+            "publish": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 65535}},
+            "read_only": {"type": "boolean"},
+            "read": {"type": "array", "items": {"type": "string"}},
+            "write": {"type": "array", "items": {"type": "string"}},
+            "clean_env": {"type": "boolean"},
+            "pass_env": {"type": "array", "items": {"type": "string"}},
+            "cpus": {"type": "integer", "minimum": 1},
+            "memory_mib": {"type": "integer", "minimum": 1},
+            "pids": {"type": "integer", "minimum": 1},
+            "cgroup_root": {"type": "string"}
+        },
+        "allOf": [{
+            "if": {"properties": {"network": {"const": "proxy"}}, "required": ["network"]},
+            "then": {"properties": {"mode": {"const": "isolated"}}}
+        }]
+    });
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&schema).map_err(io::Error::other)?
+    );
+    Ok(0)
 }
 
 fn init(args: &[OsString]) -> io::Result<i32> {
@@ -170,6 +209,6 @@ fn supported(policy: &Policy) -> bool {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer policy init [--output FILE] | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
+        "Usage: boxer policy init [--output FILE] | schema | profiles | validate FILE [--cwd PATH] | show FILE [--cwd PATH] | diff BEFORE AFTER [--cwd PATH]",
     )
 }

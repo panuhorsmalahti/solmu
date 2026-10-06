@@ -23,8 +23,8 @@ Rerun the same command to update Boxer manually. Installed modules update automa
 
 ## Run
 
-Create a policy scaffold with `boxer policy init`. Inspect, validate, or compare
-policy files with `boxer policy profiles`,
+Create a policy scaffold with `boxer policy init` and print its JSON Schema with
+`boxer policy schema`. Inspect, validate, or compare policy files with `boxer policy profiles`,
 `boxer policy validate FILE`, `boxer policy show FILE`, and
 `boxer policy diff BEFORE AFTER`. See the
 [policy guide](../docs/boxer.md#policy-paths-and-fields).

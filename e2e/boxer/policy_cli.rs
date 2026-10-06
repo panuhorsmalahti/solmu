@@ -150,3 +150,40 @@ fn policy_validate_rejects_duplicate_keys_and_invalid_combinations() {
     assert_eq!(output.status.code(), Some(125));
     assert!(String::from_utf8_lossy(&output.stderr).contains("Resource controls require"));
 }
+
+#[test]
+fn policy_schema_describes_the_supported_policy_fields() {
+    let schema = run(&["policy", "schema"]);
+    assert!(
+        schema.status.success(),
+        "{}",
+        String::from_utf8_lossy(&schema.stderr)
+    );
+    let schema: Value = serde_json::from_slice(&schema.stdout).unwrap();
+    assert_eq!(
+        schema["$schema"],
+        "https://json-schema.org/draft/2020-12/schema"
+    );
+    assert_eq!(schema["required"], serde_json::json!(["version", "mode"]));
+    assert_eq!(schema["additionalProperties"], false);
+    for field in [
+        "network",
+        "network_profile",
+        "hosts",
+        "local",
+        "publish",
+        "read_only",
+        "read",
+        "write",
+        "clean_env",
+        "pass_env",
+        "cpus",
+        "memory_mib",
+        "pids",
+        "cgroup_root",
+    ] {
+        assert!(schema["properties"][field].is_object(), "missing {field}");
+    }
+    let invalid_arguments = run(&["policy", "schema", "unexpected"]);
+    assert_eq!(invalid_arguments.status.code(), Some(125));
+}
