@@ -41,6 +41,9 @@ pub fn is_globally_routable(address: IpAddr) -> bool {
                     (0x2001_0000_0000_0000_0000_0000_0000_0000, 32), // Teredo
                     (0x2001_0002_0000_0000_0000_0000_0000_0000, 48), // Benchmarking
                     (0x2001_0db8_0000_0000_0000_0000_0000_0000, 32), // Documentation
+                    (0x2001_0010_0000_0000_0000_0000_0000_0000, 28), // Deprecated ORCHID
+                    (0x2001_0020_0000_0000_0000_0000_0000_0000, 28), // ORCHIDv2
+                    (0x2001_0030_0000_0000_0000_0000_0000_0000, 28), // Drone Remote ID
                     (0x2002_0000_0000_0000_0000_0000_0000_0000, 16), // 6to4
                     (0x3fff_0000_0000_0000_0000_0000_0000_0000, 20), // Documentation
                     (0x5f00_0000_0000_0000_0000_0000_0000_0000, 16), // Segment routing
@@ -73,10 +76,13 @@ mod address_tests {
             "192.0.2.10",  // documentation
             "198.18.0.1",  // benchmarking
             "255.255.255.255",
-            "2001:2::1", // benchmarking
-            "2002::1",   // 6to4
-            "3fff::1",   // documentation
-            "5f00::1",   // segment routing
+            "2001:2::1",  // benchmarking
+            "2001:10::1", // deprecated ORCHID
+            "2001:20::1", // ORCHIDv2
+            "2001:30::1", // Drone Remote ID
+            "2002::1",    // 6to4
+            "3fff::1",    // documentation
+            "5f00::1",    // segment routing
         ] {
             assert!(
                 !is_globally_routable(address.parse().unwrap()),
