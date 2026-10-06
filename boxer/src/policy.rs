@@ -378,6 +378,7 @@ pub struct Policy {
     pub upstream_proxy: Option<Zeroizing<String>>,
     pub upstream_bypass: Vec<String>,
     pub hosts: Vec<String>,
+    pub deny_hosts: Vec<String>,
     pub local: Vec<String>,
     pub publish: Vec<u16>,
     pub read_only: bool,
@@ -569,13 +570,21 @@ impl Policy {
             }
         }
         if self.network != Network::Proxy
-            && (!self.hosts.is_empty() || !self.local.is_empty() || !self.publish.is_empty())
+            && (!self.hosts.is_empty()
+                || !self.deny_hosts.is_empty()
+                || !self.local.is_empty()
+                || !self.publish.is_empty())
         {
             return Err(io::Error::other("Network routes require --network proxy"));
         }
         for host in &mut self.hosts {
             *host = crate::network::Target::parse(host, false)?.authority();
         }
+        for host in &mut self.deny_hosts {
+            *host = crate::network::normalize_domain_pattern(host)?;
+        }
+        self.deny_hosts.sort();
+        self.deny_hosts.dedup();
         for local in &mut self.local {
             *local = crate::network::Target::parse(local, true)?.authority();
         }

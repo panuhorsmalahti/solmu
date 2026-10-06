@@ -140,6 +140,8 @@ async fn local_routes_proxy_acl_dns_rebinding_and_direct_socket_bypasses_are_enf
                 &allowed_address,
                 "--allow-host",
                 &format!("localhost:{}", allowed_address.rsplit_once(':').unwrap().1),
+                "--deny-host",
+                "localhost",
                 "--cwd",
             ])
             .arg(cwd)

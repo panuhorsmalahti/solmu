@@ -117,6 +117,71 @@ fn upstream_proxy_requires_routed_networking_and_valid_http_url() {
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("must use http://"));
 }
 
+#[test]
+fn denied_domains_override_allowlisted_hosts_and_normalize_wildcards() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--allow-host",
+            "api.example.com",
+            "--deny-host",
+            "*.tracking.example",
+            "--deny-host",
+            "build.*.ci.example.com",
+            "--deny-host",
+            "ADS.EXAMPLE.COM",
+            "--print-policy",
+            "--cwd",
+        ])
+        .arg(directory.path())
+        .arg("--")
+        .arg("unused-program")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        result["policy"]["hosts"],
+        serde_json::json!(["api.example.com:443"])
+    );
+    assert_eq!(
+        result["policy"]["deny_hosts"],
+        serde_json::json!([
+            "*.tracking.example",
+            "ads.example.com",
+            "build.*.ci.example.com"
+        ])
+    );
+
+    let unsupported = Command::new(binary("boxer"))
+        .args(["--deny-host", "*.example.com", "--print-policy"])
+        .output()
+        .unwrap();
+    assert_eq!(unsupported.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&unsupported.stderr).contains("require --network proxy"));
+
+    let malformed = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--deny-host",
+            "api*bad.example.com",
+            "--print-policy",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(malformed.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&malformed.stderr).contains("complete hostname label"));
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn upstream_proxy_configuration_is_redacted_and_not_forwarded_to_the_agent() {

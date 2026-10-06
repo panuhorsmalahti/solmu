@@ -25,6 +25,70 @@ pub fn normalize_bypass_pattern(value: &str) -> io::Result<String> {
     })
 }
 
+pub fn normalize_domain_pattern(value: &str) -> io::Result<String> {
+    if value == "*" {
+        return Ok(value.to_owned());
+    }
+    if value.is_empty() || !value.is_ascii() || value.len() > 253 {
+        return Err(io::Error::other("Invalid domain pattern"));
+    }
+    let labels: Vec<_> = value.split('.').collect();
+    if labels.iter().any(|label| {
+        *label != "*"
+            && (label.contains('*')
+                || label.is_empty()
+                || label.len() > 63
+                || label.starts_with('-')
+                || label.ends_with('-')
+                || !label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-'))
+    }) {
+        return Err(io::Error::other(
+            "Domain patterns may use * only as a complete hostname label",
+        ));
+    }
+    let validation_host = labels
+        .iter()
+        .map(|label| if *label == "*" { "wildcard" } else { label })
+        .collect::<Vec<_>>()
+        .join(".");
+    Target::parse(&format!("{validation_host}:443"), false)?;
+    Ok(value.to_ascii_lowercase())
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub fn matches_domain_pattern(host: &str, pattern: &str) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+    if let Some(suffix) = pattern.strip_prefix("*.") {
+        return host.len() > suffix.len()
+            && host.ends_with(suffix)
+            && host.as_bytes()[host.len() - suffix.len() - 1] == b'.';
+    }
+    let host_labels: Vec<_> = host.split('.').collect();
+    let pattern_labels: Vec<_> = pattern.split('.').collect();
+    host_labels.len() == pattern_labels.len()
+        && host_labels
+            .iter()
+            .zip(pattern_labels)
+            .all(|(host_label, pattern_label)| pattern_label == "*" || *host_label == pattern_label)
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub fn is_always_denied_domain(host: &str) -> bool {
+    matches!(host, "metadata.google.internal" | "metadata.azure.internal")
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub fn is_denied_domain(host: &str, patterns: &[String]) -> bool {
+    is_always_denied_domain(host)
+        || patterns
+            .iter()
+            .any(|pattern| matches_domain_pattern(host, pattern))
+}
+
 #[cfg(any(target_os = "linux", test))]
 pub fn matches_bypass(host: &str, patterns: &[String]) -> bool {
     patterns.iter().any(|pattern| {
@@ -199,8 +263,9 @@ fn ipv6_in_subnet(address: u128, network: u128, prefix: u32) -> bool {
 #[cfg(test)]
 mod address_tests {
     use super::{
-        UpstreamProxy, is_globally_routable, is_private_network, matches_bypass,
-        normalize_bypass_pattern,
+        UpstreamProxy, is_always_denied_domain, is_denied_domain, is_globally_routable,
+        is_private_network, matches_bypass, matches_domain_pattern, normalize_bypass_pattern,
+        normalize_domain_pattern,
     };
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -271,6 +336,27 @@ mod address_tests {
         assert!(!matches_bypass("dev.example.com", &patterns));
         assert!(!matches_bypass("evildev.example.com", &patterns));
         assert!(normalize_bypass_pattern("api.*.example.com").is_err());
+    }
+
+    #[test]
+    fn deny_domain_patterns_validate_and_match_complete_labels() {
+        let exact = normalize_domain_pattern("ADS.example.com").unwrap();
+        let suffix = normalize_domain_pattern("*.tracking.example").unwrap();
+        let label = normalize_domain_pattern("build.*.ci.example.com").unwrap();
+        assert!(matches_domain_pattern("ads.example.com", &exact));
+        assert!(matches_domain_pattern("a.tracking.example", &suffix));
+        assert!(!matches_domain_pattern("tracking.example", &suffix));
+        assert!(matches_domain_pattern("build.prod.ci.example.com", &label));
+        assert!(!matches_domain_pattern(
+            "build.prod.staging.ci.example.com",
+            &label
+        ));
+        assert!(matches_domain_pattern("anything.example", "*"));
+        assert!(normalize_domain_pattern("api*bad.example.com").is_err());
+        assert!(is_always_denied_domain("metadata.google.internal"));
+        assert!(!is_always_denied_domain("api.example.com"));
+        assert!(is_denied_domain("metadata.google.internal", &[]));
+        assert!(is_denied_domain("ads.example.com", &[exact]));
     }
 }
 

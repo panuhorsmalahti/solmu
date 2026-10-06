@@ -33,6 +33,7 @@ impl Host {
             .map(|host| Target::parse(host, false))
             .chain(policy.local.iter().map(|host| Target::parse(host, true)))
             .collect::<io::Result<Vec<_>>>()?;
+        let denied = policy.deny_hosts.clone();
         let upstream_proxy = policy
             .upstream_proxy
             .as_deref()
@@ -69,7 +70,8 @@ impl Host {
                 .name("boxer-routes".into())
                 .spawn(move || {
                     while let Ok(target) = ipc::read::<Target>(&mut connection) {
-                        let socket = if allowed.contains(&target) {
+                        let is_denied = crate::network::is_denied_domain(&target.host, &denied);
+                        let socket = if allowed.contains(&target) && !is_denied {
                             runtime
                                 .block_on(connect_route(
                                     &target,

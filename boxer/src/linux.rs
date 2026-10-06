@@ -194,6 +194,7 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
                 .transpose()?
                 .as_ref(),
             &policy.upstream_bypass,
+            &policy.deny_hosts,
             &reserved_ports,
         )?;
         let port = broker.port();

@@ -44,8 +44,17 @@ impl Broker {
         endpoint_rules: &[EndpointRule],
         upstream_proxy: Option<&UpstreamProxy>,
         upstream_bypass: &[String],
+        denied_hosts: &[String],
         reserved_ports: &[u16],
     ) -> io::Result<(Self, Vec<(CredentialProvider, String)>)> {
+        if providers
+            .iter()
+            .any(|provider| crate::network::is_denied_domain(provider.host(), denied_hosts))
+        {
+            return Err(io::Error::other(
+                "A credential provider domain is denied by the network policy",
+            ));
+        }
         let names: Vec<_> = providers
             .iter()
             .map(|provider| provider.key_env().to_owned())

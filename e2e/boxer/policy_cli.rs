@@ -172,6 +172,7 @@ fn policy_schema_describes_the_supported_policy_fields() {
         "upstream_proxy",
         "upstream_bypass",
         "hosts",
+        "deny_hosts",
         "local",
         "publish",
         "read_only",

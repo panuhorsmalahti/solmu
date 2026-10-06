@@ -398,8 +398,8 @@ mode and resource options override file values, and `--read-only` and
 
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
-`network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `local`, `publish`, `clean_env`,
-`upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`,
+`network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `deny_hosts`,
+`local`, `publish`, `clean_env`, `upstream_proxy`, `upstream_bypass`, `pass_env`, `env_credentials`,
 `credentials`, `runtime_groups`, `cpus`, `endpoint_rules`, `memory_mib`, `pids`,
 and `cgroup_root`. Endpoint rules have
 `provider`, `method`, and `path` fields and require a matching entry in
@@ -497,6 +497,14 @@ Package registries may use additional CDN hosts, which you can add explicitly.
 Network profiles configure allowed hostnames, not credentials; use
 `--credential` separately when the agent should receive a proxy session token
 instead of the real provider key.
+
+Use `--deny-host DOMAIN` or policy `deny_hosts` to block a hostname even when
+an allowlist or network profile includes it. Deny patterns are checked before
+connections and credential proxy startup. Patterns accept an exact hostname,
+`*` for every hostname, `*.example.com` for one or more subdomain labels, or a
+complete `*` label such as `build.*.ci.example.com` for exactly one label.
+Metadata service hostnames are always denied. Routed connections also reject
+private, loopback, link-local, and other special-use IP destinations.
 
 To send routed connections through a corporate HTTP CONNECT proxy, pass
 `--upstream-proxy` or set `BOXER_UPSTREAM_PROXY`:

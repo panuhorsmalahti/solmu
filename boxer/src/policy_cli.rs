@@ -110,6 +110,7 @@ fn schema() -> io::Result<i32> {
             "upstream_proxy": {"type": "string", "format": "uri"},
             "upstream_bypass": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
             "hosts": {"type": "array", "items": {"type": "string"}},
+            "deny_hosts": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
             "local": {"type": "array", "items": {"type": "string"}},
             "publish": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 65535}},
             "read_only": {"type": "boolean"},
