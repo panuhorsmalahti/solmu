@@ -191,6 +191,10 @@ PY
   sleep 0.5
 done
 [ "$created" = solmu ] || { echo "GUI did not persist a Solmu space (active=$created)" >&2; exit 1; }
+sleep 2
+# Capture the embedded desktop view, where management is available from the
+# chat command menu instead of a row of extra header buttons.
+import -window "$window" docs/screenshots/muxer-gui.png
 
 # Open Solmu's compact Spaces picker, right-click the original space, delete it,
 # and verify it is removed.

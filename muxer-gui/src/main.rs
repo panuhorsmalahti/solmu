@@ -451,7 +451,7 @@ impl MuxerGui {
             return Task::none();
         }
         let (desktop, task) =
-            Desktop::new_with_thread(Api::from_env().with_workspace(workspace), thread);
+            Desktop::new_for_muxer(Api::from_env().with_workspace(workspace), thread);
         self.desktops.insert(pane_id, desktop);
         task.map(move |event| Message::Desktop(pane_id, event))
     }

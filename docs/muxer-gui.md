@@ -26,7 +26,9 @@ the workspace. Select a tab to switch to it, use **+** to add one, or click its
 **Spaces** to choose a new **Terminal** or **Solmu** space. Right-click a space
 in the sidebar or Spaces picker and choose **Delete space** to remove it.
 Solmu opens the shared native desktop interface, including its conversation
-list and Profile, Audit, Tasks, and other pages. Choosing **Terminal** opens a
+list and Profile, Audit, Tasks, and other pages. In Muxer GUI, use chat commands
+such as `/plugins`, `/mcp`, `/skills`, `/rename`, and `/delete` instead of
+separate header buttons and title controls. Choosing **Terminal** opens a
 full interactive system shell
 directly; it does not start the Solmu CLI. Click inside the terminal to type
 and use shell shortcuts. Press **Ctrl+C** (or **Cmd+C** on macOS) to close its

@@ -120,6 +120,7 @@ mod compaction;
 mod conversations;
 mod mcp;
 mod models;
+mod muxer_embedded;
 mod plugins;
 mod profile;
 mod screenshots;

@@ -12,6 +12,7 @@ mod appearance;
 pub use appearance::theme;
 
 pub struct Desktop {
+    muxer_embedded: bool,
     pub session: Session,
     draft: String,
     title: String,
@@ -150,6 +151,20 @@ pub fn application(
     .window_size((1120.0, 760.0))
 }
 
+pub fn application_for_muxer(
+    api: Api,
+) -> iced::Application<impl iced::Program<State = Desktop, Message = Event, Theme = Theme>> {
+    iced::application(
+        move || Desktop::new_for_muxer(api.clone(), None),
+        Desktop::update,
+        Desktop::view,
+    )
+    .title("Solmu")
+    .theme(theme())
+    .subscription(|state| state.subscription())
+    .window_size((1120.0, 760.0))
+}
+
 fn conversation_markdown(session: &Session) -> String {
     let Some(thread) = &session.current else {
         return String::new();
@@ -201,15 +216,20 @@ fn command_suggestions(input: &str) -> Vec<(&'static str, &'static str)> {
 
 impl Desktop {
     pub fn new(api: Api) -> (Self, Task<Event>) {
-        Self::build(api, Action::New("New conversation".into()))
+        Self::build(api, Action::New("New conversation".into()), false)
     }
 
     pub fn new_with_thread(api: Api, thread: Option<String>) -> (Self, Task<Event>) {
-        Self::build(api, thread.map_or(Action::List, Action::Open))
+        Self::build(api, thread.map_or(Action::List, Action::Open), false)
     }
 
-    fn build(api: Api, initial: Action) -> (Self, Task<Event>) {
+    pub fn new_for_muxer(api: Api, thread: Option<String>) -> (Self, Task<Event>) {
+        Self::build(api, thread.map_or(Action::List, Action::Open), true)
+    }
+
+    fn build(api: Api, initial: Action, muxer_embedded: bool) -> (Self, Task<Event>) {
         let mut desktop = Self {
+            muxer_embedded,
             session: Session::new(api),
             draft: String::new(),
             title: String::new(),
@@ -1698,60 +1718,79 @@ impl Desktop {
             );
         }
         let has_thread = self.session.current.is_some();
-        let heading = row![
-            text_input("Conversation title", &self.title)
-                .style(appearance::input)
-                .on_input(Event::Title)
-                .width(Length::Fill),
-            button("Rename").style(appearance::ghost).on_press_maybe(
-                (enabled && has_thread && !self.title.trim().is_empty())
-                    .then(|| Event::Action(Action::Rename(self.title.clone())))
-            ),
-            button("Delete")
-                .style(appearance::danger)
-                .on_press_maybe((enabled && has_thread).then_some(Event::Action(Action::Delete))),
-        ]
-        .spacing(8)
-        .align_y(iced::Alignment::Center);
+        let heading: Element<'_, Event> = if self.muxer_embedded {
+            iced::widget::space().height(0).into()
+        } else {
+            row![
+                text_input("Conversation title", &self.title)
+                    .style(appearance::input)
+                    .on_input(Event::Title)
+                    .width(Length::Fill),
+                button("Rename").style(appearance::ghost).on_press_maybe(
+                    (enabled && has_thread && !self.title.trim().is_empty())
+                        .then(|| Event::Action(Action::Rename(self.title.clone())))
+                ),
+                button("Delete").style(appearance::danger).on_press_maybe(
+                    (enabled && has_thread).then_some(Event::Action(Action::Delete))
+                ),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center)
+            .into()
+        };
         let model_label = self
             .session
             .current
             .as_ref()
             .and_then(|thread| thread.model.as_deref())
             .unwrap_or("Default model");
-        let model = row![
-            button(text("Plugins").size(12))
-                .style(appearance::ghost)
-                .on_press_maybe(
-                    (enabled && self.session.current.is_some()).then_some(Event::OpenPlugins)
-                ),
-            button(text("MCP").size(12))
-                .style(appearance::ghost)
-                .on_press_maybe(
-                    (enabled && self.session.current.is_some()).then_some(Event::OpenMcp)
-                ),
-            button(text("Skills").size(12))
-                .style(appearance::ghost)
-                .on_press_maybe(
-                    (enabled && self.session.current.is_some()).then_some(Event::OpenSkills)
-                ),
-            button(text(model_label).size(12))
-                .style(appearance::ghost)
-                .on_press_maybe(
-                    (enabled && self.session.current.is_some()).then_some(Event::OpenModels)
-                ),
-            text(
-                self.session
-                    .current
-                    .as_ref()
-                    .and_then(|thread| thread.workspace.as_deref())
-                    .unwrap_or("")
+        let mut model = row![];
+        if !self.muxer_embedded {
+            model = model
+                .push(
+                    button(text("Plugins").size(12))
+                        .style(appearance::ghost)
+                        .on_press_maybe(
+                            (enabled && self.session.current.is_some())
+                                .then_some(Event::OpenPlugins),
+                        ),
+                )
+                .push(
+                    button(text("MCP").size(12))
+                        .style(appearance::ghost)
+                        .on_press_maybe(
+                            (enabled && self.session.current.is_some()).then_some(Event::OpenMcp),
+                        ),
+                )
+                .push(
+                    button(text("Skills").size(12))
+                        .style(appearance::ghost)
+                        .on_press_maybe(
+                            (enabled && self.session.current.is_some())
+                                .then_some(Event::OpenSkills),
+                        ),
+                );
+        }
+        model = model
+            .push(
+                button(text(model_label).size(12))
+                    .style(appearance::ghost)
+                    .on_press_maybe(
+                        (enabled && self.session.current.is_some()).then_some(Event::OpenModels),
+                    ),
             )
-            .size(11)
-            .color(appearance::MUTED)
-        ]
-        .spacing(12)
-        .align_y(iced::Alignment::Center);
+            .push(
+                text(
+                    self.session
+                        .current
+                        .as_ref()
+                        .and_then(|thread| thread.workspace.as_deref())
+                        .unwrap_or(""),
+                )
+                .size(11)
+                .color(appearance::MUTED),
+            );
+        model = model.spacing(12).align_y(iced::Alignment::Center);
         let utilities = row![
             button("Compact").style(appearance::ghost).on_press_maybe(
                 (enabled && self.session.current.is_some())
