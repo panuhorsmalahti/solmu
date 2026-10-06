@@ -74,6 +74,7 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         .unwrap();
     assert!(inspect.status.success());
     assert!(String::from_utf8_lossy(&inspect.stdout).contains("Status: running"));
+    assert!(String::from_utf8_lossy(&inspect.stdout).contains("Attachment: detached"));
     assert!(String::from_utf8_lossy(&inspect.stdout).contains(workspace.path().to_str().unwrap()));
 
     let ps = Command::new(binary("boxer"))
@@ -122,6 +123,13 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         directory.path(),
         id,
     );
+    let attached_inspect = Command::new(binary("boxer"))
+        .args(["inspect", id])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(attached_inspect.status.success());
+    assert!(String::from_utf8_lossy(&attached_inspect.stdout).contains("Attachment: attached"));
     writer.write_all(b"hello\r").unwrap();
     assert_output(
         &output_rx,
@@ -145,6 +153,13 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         );
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
+    let detached_inspect = Command::new(binary("boxer"))
+        .args(["inspect", id])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(detached_inspect.status.success());
+    assert!(String::from_utf8_lossy(&detached_inspect.stdout).contains("Attachment: detached"));
 
     let mut log_found = false;
     for _ in 0..40 {

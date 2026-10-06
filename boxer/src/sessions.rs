@@ -41,6 +41,8 @@ struct Session {
     workspace: String,
     command: String,
     status: String,
+    #[serde(default)]
+    attached: bool,
     exit_code: Option<i32>,
 }
 
@@ -109,6 +111,7 @@ pub fn start(
         workspace: workspace.to_string_lossy().into_owned(),
         command: command.to_owned(),
         status: "running".into(),
+        attached: false,
         exit_code: None,
     };
     if let Err(error) = save(&root, &session) {
@@ -263,6 +266,7 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
                     b'D' => {
                         active = None;
                         pending_output.clear();
+                        update_attachment(&root, &id, false)?;
                     }
                     b'K' => {
                         stop_requested = true;
@@ -285,6 +289,7 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
             stream.set_nonblocking(true)?;
             pending_output.extend(history.iter().copied());
             active = Some(stream);
+            update_attachment(&root, &id, true)?;
         }
 
         if stop_requested {
@@ -313,6 +318,7 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
             }
             .into();
             finished.exit_code = Some(status.exit_code() as i32);
+            finished.attached = false;
             save(&root, &finished)?;
             break;
         }
@@ -335,6 +341,7 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
         if disconnect {
             active = None;
             pending_output.clear();
+            update_attachment(&root, &id, false)?;
         }
         if stop_requested && child.try_wait()?.is_some() {
             continue;
@@ -377,18 +384,23 @@ pub fn finish(id: &str, code: i32) -> io::Result<()> {
     let root = root()?;
     let mut session = read(&root, id)?;
     session.status = "finished".into();
+    session.attached = false;
     session.exit_code = Some(code);
     save(&root, &session)
 }
 
 fn list() -> io::Result<i32> {
     let root = root()?;
-    println!("ID\tSTATUS\tPID\tCOMMAND");
+    println!("ID\tSTATUS\tATTACHMENT\tPID\tCOMMAND");
     for mut session in all(&root)? {
         refresh_status(&mut session);
         println!(
-            "{}\t{}\t{}\t{}",
-            session.id, session.status, session.pid, session.command
+            "{}\t{}\t{}\t{}\t{}",
+            session.id,
+            session.status,
+            attachment_label(session.attached),
+            session.pid,
+            session.command
         );
         if session.status != "running" {
             save(&root, &session)?;
@@ -403,9 +415,10 @@ fn inspect(id: &str) -> io::Result<i32> {
     refresh_status(&mut session);
     save(&root, &session)?;
     println!(
-        "ID: {}\nStatus: {}\nPID: {}\nCommand: {}\nWorkspace: {}\nStarted: {}\nExit code: {}",
+        "ID: {}\nStatus: {}\nAttachment: {}\nPID: {}\nCommand: {}\nWorkspace: {}\nStarted: {}\nExit code: {}",
         session.id,
         session.status,
+        attachment_label(session.attached),
         session.pid,
         session.command,
         session.workspace,
@@ -490,7 +503,21 @@ fn prune() -> io::Result<i32> {
 fn refresh_status(session: &mut Session) {
     if session.status == "running" && !is_live_session(session.pid) {
         session.status = "finished".into();
+        session.attached = false;
     }
+}
+
+fn update_attachment(root: &std::path::Path, id: &str, attached: bool) -> io::Result<()> {
+    let mut session = read(root, id)?;
+    if session.status == "running" && session.attached != attached {
+        session.attached = attached;
+        save(root, &session)?;
+    }
+    Ok(())
+}
+
+fn attachment_label(attached: bool) -> &'static str {
+    if attached { "attached" } else { "detached" }
 }
 
 fn is_live_session(pid: u32) -> bool {

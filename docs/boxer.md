@@ -43,7 +43,9 @@ The session runs in its own process group so stopping it also signals ordinary
 child processes. Boxer stores the workspace and command with each session.
 Attaching reconnects to the same terminal, including interactive prompts; output
 produced while detached is kept in a short terminal history and in the session
-log. Session records and the local attach socket are private to your account.
+log. `boxer inspect <session-id>` and `boxer ps` show whether a running session
+is currently attached to a terminal or running detached. Session records and the
+local attach socket are private to your account.
 
 ## Explain a path decision
 
