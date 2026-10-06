@@ -18,6 +18,7 @@ pub struct Worker {
     pub arguments: Vec<OsString>,
     pub local: Vec<Target>,
     pub publish: Vec<u16>,
+    pub proxy_port: Option<u16>,
 }
 
 pub const WORKER: &str = "--boxer-network-worker";

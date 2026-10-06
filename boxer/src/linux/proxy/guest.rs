@@ -67,17 +67,7 @@ pub fn worker() -> io::Result<Option<i32>> {
                 }
             })?;
     }
-    let listener = (0..64)
-        .find_map(|_| match TcpListener::bind("127.0.0.1:0") {
-            Ok(listener) if !worker.publish.contains(&listener.local_addr().ok()?.port()) => {
-                Some(Ok(listener))
-            }
-            Ok(_) => None,
-            Err(error) => Some(Err(error)),
-        })
-        .ok_or_else(|| {
-            io::Error::other("No proxy port outside published service ports was available")
-        })??;
+    let listener = bind_proxy_listener(worker.proxy_port, &worker.publish)?;
     let proxy = format!("http://{}", listener.local_addr()?);
     let outbound_active = active.clone();
     thread::Builder::new()
@@ -132,6 +122,43 @@ pub fn worker() -> io::Result<Option<i32>> {
             .code()
             .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)),
     ))
+}
+
+fn bind_proxy_listener(proxy_port: Option<u16>, reserved_ports: &[u16]) -> io::Result<TcpListener> {
+    if let Some(port) = proxy_port {
+        if reserved_ports.contains(&port) {
+            return Err(io::Error::other(
+                "Network proxy port conflicts with a published service port",
+            ));
+        }
+        return TcpListener::bind(("127.0.0.1", port));
+    }
+    for _ in 0..64 {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        if !reserved_ports.contains(&listener.local_addr()?.port()) {
+            return Ok(listener);
+        }
+    }
+    Err(io::Error::other(
+        "No proxy port outside published service ports was available",
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn network_proxy_binds_the_requested_port_and_rejects_collisions() {
+        let occupied = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = occupied.local_addr().unwrap().port();
+        assert!(bind_proxy_listener(Some(port), &[]).is_err());
+        drop(occupied);
+
+        let listener = bind_proxy_listener(Some(port), &[]).unwrap();
+        assert_eq!(listener.local_addr().unwrap().port(), port);
+        assert!(bind_proxy_listener(Some(port), &[port]).is_err());
+    }
 }
 
 struct Active(Arc<AtomicUsize>);

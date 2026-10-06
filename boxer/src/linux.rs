@@ -177,6 +177,7 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
     let mut credential_broker = None;
     if !policy.credentials.is_empty() {
         let mut reserved_ports = policy.publish.clone();
+        reserved_ports.extend(policy.proxy_port);
         reserved_ports.extend(
             policy
                 .local
@@ -189,7 +190,6 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
             &policy.custom_credentials,
             proxy::credential::BrokerOptions {
                 endpoint_rules: &policy.endpoint_rules,
-                proxy_port: policy.proxy_port,
                 upstream_proxy: policy
                     .upstream_proxy
                     .as_deref()
@@ -259,6 +259,7 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
                 .map(|route| crate::network::Target::parse(route, true))
                 .collect::<io::Result<_>>()?,
             publish: policy.publish.clone(),
+            proxy_port: policy.proxy_port,
         };
         sandbox
             .arg("--ro-bind")

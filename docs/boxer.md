@@ -150,11 +150,11 @@ boxer --profile solmu --isolated --network proxy --credential openai \
   --cwd /path/to/project -- solmu
 ```
 
-By default, Boxer selects an available loopback port for the credential proxy.
-Use `--proxy-port PORT` to request a fixed port for clients that need a stable
-local endpoint. It is available with Linux isolated proxy networking and
-brokered credentials; Boxer rejects collisions with other routed ports or
-services already using that port.
+By default, Boxer selects an available loopback port for its Linux network
+proxy and sets `HTTP_PROXY` and `HTTPS_PROXY` for the child. Use
+`--proxy-port PORT` to request a fixed local port for clients that need a
+stable proxy endpoint. Boxer rejects collisions with local routes, published
+ports, and services already using that port.
 
 The matching provider host is allowed automatically. Use
 `--credential anthropic` with a stored `ANTHROPIC_API_KEY` for Anthropic, or

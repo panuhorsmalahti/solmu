@@ -921,9 +921,9 @@ impl Policy {
                     "--proxy-port requires a port from 1 to 65535",
                 ));
             }
-            if self.credentials.is_empty() {
+            if self.network != Network::Proxy || !self.isolated {
                 return Err(io::Error::other(
-                    "--proxy-port requires at least one brokered credential route",
+                    "--proxy-port requires Linux --isolated --network proxy",
                 ));
             }
             if self.publish.contains(&port)
@@ -933,7 +933,7 @@ impl Policy {
                 })
             {
                 return Err(io::Error::other(
-                    "The credential proxy port conflicts with another routed port",
+                    "The network proxy port conflicts with another routed port",
                 ));
             }
         }

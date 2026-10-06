@@ -57,7 +57,6 @@ pub struct Broker {
 
 pub struct BrokerOptions<'a> {
     pub endpoint_rules: &'a [EndpointRule],
-    pub proxy_port: Option<u16>,
     pub upstream_proxy: Option<&'a UpstreamProxy>,
     pub upstream_bypass: &'a [String],
     pub denied_hosts: &'a [String],
@@ -72,7 +71,6 @@ impl Broker {
     ) -> io::Result<(Self, Vec<BrokeredCredential>)> {
         let BrokerOptions {
             endpoint_rules,
-            proxy_port,
             upstream_proxy,
             upstream_bypass,
             denied_hosts,
@@ -193,7 +191,7 @@ impl Broker {
         let upstream_proxy = upstream_proxy.cloned();
         let upstream_bypass = Arc::new(upstream_bypass.to_vec());
 
-        let listener = bind_listener(proxy_port, reserved_ports)?;
+        let listener = bind_listener(reserved_ports)?;
         listener.set_nonblocking(true)?;
         let port = listener.local_addr()?.port();
         let (shutdown, mut stop) = oneshot::channel();
@@ -259,15 +257,7 @@ impl Broker {
     }
 }
 
-fn bind_listener(proxy_port: Option<u16>, reserved_ports: &[u16]) -> io::Result<TcpListener> {
-    if let Some(port) = proxy_port {
-        if reserved_ports.contains(&port) {
-            return Err(io::Error::other(
-                "Credential proxy port conflicts with another routed port",
-            ));
-        }
-        return TcpListener::bind(("127.0.0.1", port));
-    }
+fn bind_listener(reserved_ports: &[u16]) -> io::Result<TcpListener> {
     for _ in 0..64 {
         let candidate = TcpListener::bind("127.0.0.1:0")?;
         if !reserved_ports.contains(&candidate.local_addr()?.port()) {
@@ -884,18 +874,6 @@ async fn response(client: &mut TcpStream, status: u16, message: &str) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn fixed_proxy_ports_bind_exactly_and_reject_conflicts() {
-        let occupied = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = occupied.local_addr().unwrap().port();
-        assert!(bind_listener(Some(port), &[]).is_err());
-        drop(occupied);
-
-        let listener = bind_listener(Some(port), &[]).unwrap();
-        assert_eq!(listener.local_addr().unwrap().port(), port);
-        assert!(bind_listener(Some(port), &[port]).is_err());
-    }
 
     fn credentials(provider: CredentialProvider) -> HashMap<String, Arc<Credential>> {
         HashMap::from([(

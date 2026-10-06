@@ -125,10 +125,35 @@ fn credential_proxy_requires_isolated_routed_networking() {
 }
 
 #[test]
-fn fixed_credential_proxy_port_requires_a_brokered_route() {
+fn fixed_network_proxy_port_requires_isolated_proxy_networking() {
     let invalid = run(&["--proxy-port", "47891", "--", "must-not-run"]);
     assert_eq!(invalid.status.code(), Some(125));
-    assert!(String::from_utf8_lossy(&invalid.stderr).contains("requires at least one brokered"));
+    assert!(
+        String::from_utf8_lossy(&invalid.stderr)
+            .contains("requires Linux --isolated --network proxy")
+    );
+
+    let workspace = tempfile::tempdir().unwrap();
+    let valid = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--proxy-port",
+            "47891",
+            "--cwd",
+        ])
+        .arg(workspace.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .output()
+        .unwrap();
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stderr)
+    );
+    let policy: serde_json::Value = serde_json::from_slice(&valid.stdout).unwrap();
+    assert_eq!(policy["policy"]["proxy_port"], 47891);
 }
 
 #[test]
