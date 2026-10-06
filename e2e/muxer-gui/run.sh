@@ -47,8 +47,8 @@ mkdir -p docs/screenshots
 first_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-tabs = [item for item in data["tabs"] if item["space"] == data["active"]]
-print(tabs[0]["id"])
+space = next(item for item in data["spaces"] if item["id"] == data["active"])
+print(space["tabs"][0]["id"])
 PY
 )
 xdotool mousemove --window "$window" 390 38 click 1
@@ -56,8 +56,8 @@ for _ in $(seq 1 30); do
   count=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-tabs = [item for item in data["tabs"] if item["space"] == data["active"]]
-print(len(tabs))
+space = next(item for item in data["spaces"] if item["id"] == data["active"])
+print(len(space["tabs"]))
 PY
 )
   [ "$count" = 2 ] && break
@@ -67,8 +67,8 @@ done
 second_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-tabs = [item for item in data["tabs"] if item["space"] == data["active"]]
-print(tabs[1]["id"])
+space = next(item for item in data["spaces"] if item["id"] == data["active"])
+print(space["tabs"][1]["id"])
 PY
 )
 xdotool mousemove --window "$window" 335 38 click 1
@@ -77,7 +77,7 @@ active_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 space = next(item for item in data["spaces"] if item["id"] == data["active"])
-print(space["selected_tab"])
+print(space["selected"])
 PY
 )
 [ "$active_tab" = "$first_tab" ] || { echo 'Top tab strip did not switch tabs' >&2; exit 1; }
@@ -87,7 +87,7 @@ active_tab=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 space = next(item for item in data["spaces"] if item["id"] == data["active"])
-print(space["selected_tab"])
+print(space["selected"])
 PY
 )
 [ "$active_tab" = "$second_tab" ] || { echo 'Top tab strip did not focus the new tab' >&2; exit 1; }
@@ -96,8 +96,8 @@ for _ in $(seq 1 30); do
   count=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-tabs = [item for item in data["tabs"] if item["space"] == data["active"]]
-print(len(tabs))
+space = next(item for item in data["spaces"] if item["id"] == data["active"])
+print(len(space["tabs"]))
 PY
 )
   [ "$count" = 1 ] && break
