@@ -4,6 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod audit;
 mod cleanup;
+mod credentials;
 mod explain;
 mod network;
 mod network_profiles;

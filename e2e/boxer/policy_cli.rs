@@ -177,6 +177,7 @@ fn policy_schema_describes_the_supported_policy_fields() {
         "write",
         "clean_env",
         "pass_env",
+        "env_credentials",
         "cpus",
         "memory_mib",
         "pids",

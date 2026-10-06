@@ -75,7 +75,7 @@ jobs:
           toolchain: '1.98.1'
           targets: ${{ matrix.target }}
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev libdbus-1-dev
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --locked --target ${{ matrix.target }} -p solmu-backend -p solmu-cli -p solmu-desktop -p solmu-boxer -p solmu-muxer -p solmu-muxer-gui
       - name: Package Unix executables

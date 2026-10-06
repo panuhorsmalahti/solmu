@@ -79,6 +79,7 @@ pub struct Policy {
     pub write: Vec<PathBuf>,
     pub clean_env: bool,
     pub pass_env: Vec<String>,
+    pub env_credentials: Vec<String>,
     pub cpus: Option<u32>,
     pub memory_mib: Option<u32>,
     pub pids: Option<u32>,
@@ -223,6 +224,19 @@ impl Policy {
                 return Err(io::Error::other(
                     "Environment names must use letters, digits, and underscores",
                 ));
+            }
+        }
+        let mut credentials = std::collections::HashSet::new();
+        for name in &self.env_credentials {
+            if !crate::credential::valid_name(name) {
+                return Err(io::Error::other(format!(
+                    "Invalid --env-credential environment variable name: {name}"
+                )));
+            }
+            if !credentials.insert(name.to_ascii_uppercase()) {
+                return Err(io::Error::other(format!(
+                    "Credential {name} was specified more than once"
+                )));
             }
         }
         if self.mode != Mode::Unrestricted

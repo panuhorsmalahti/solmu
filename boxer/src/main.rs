@@ -1,5 +1,6 @@
 use std::{ffi::OsString, io, process::Command};
 mod check;
+mod credential;
 mod explain;
 mod network;
 mod policy;
@@ -115,6 +116,12 @@ fn run() -> io::Result<i32> {
     let mut raw_arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
     if raw_arguments
         .first()
+        .is_some_and(|argument| argument == "credential")
+    {
+        return credential::command(&raw_arguments);
+    }
+    if raw_arguments
+        .first()
         .is_some_and(|argument| argument == "trust")
     {
         return trust::command(&raw_arguments);
@@ -202,6 +209,9 @@ fn run() -> io::Result<i32> {
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
+                "boxer credential set|status|delete NAME: manage credentials in the OS credential store; --env-credential NAME loads one into a program's environment."
+            );
+            println!(
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|verify` reviews the local audit trail."
             );
             return Ok(0);
@@ -269,6 +279,13 @@ fn run() -> io::Result<i32> {
                     .next()
                     .and_then(|value| value.into_string().ok())
                     .ok_or_else(|| io::Error::other("--pass-env requires a variable name"))?,
+            );
+        } else if argument == "--env-credential" {
+            policy.env_credentials.push(
+                arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| io::Error::other("--env-credential requires a variable name"))?,
             );
         } else if argument == "--print-policy" {
             print_policy = true;
@@ -400,6 +417,7 @@ fn run() -> io::Result<i32> {
     resolved.read.extend(policy.read);
     resolved.write.extend(policy.write);
     resolved.pass_env.extend(policy.pass_env);
+    resolved.env_credentials.extend(policy.env_credentials);
     resolved.cpus = policy.cpus.or(resolved.cpus);
     resolved.memory_mib = policy.memory_mib.or(resolved.memory_mib);
     resolved.pids = policy.pids.or(resolved.pids);
@@ -516,6 +534,10 @@ fn run() -> io::Result<i32> {
             "resolved_program": policy::executable(&command).ok()
         })).map_err(io::Error::other)?);
         return Ok(0);
+    }
+    let credentials = credential::load(&resolved.env_credentials)?;
+    for (name, value) in credentials {
+        command.env(name, value.as_str());
     }
     #[cfg(not(target_os = "linux"))]
     if resolved.isolated {

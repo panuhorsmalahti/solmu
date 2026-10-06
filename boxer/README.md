@@ -111,6 +111,11 @@ require signatures at launch with `--trust-key` and `--verify` or a signed
 `--trust-policy`. See the
 [instruction trust guide](../docs/boxer.md#verify-trusted-instruction-files).
 
+Store credentials with `boxer credential set NAME` and load them into an agent
+with `--env-credential NAME`. Boxer uses the OS credential store and prompts
+without echoing the value. The value is available to the agent process. See the
+[credential guide](../docs/boxer.md#store-credentials-for-an-agent).
+
 Add `--rollback` to save a workspace before and after a run. Review or restore
 those snapshots with `boxer rollback list`, `boxer rollback show <session-id>`,
 and `boxer rollback restore <session-id>`. See the

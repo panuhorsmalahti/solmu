@@ -99,8 +99,31 @@ symbolic links inside the project do not grant access to files outside it.
 The profile clears unrelated environment variables and sets `SOLMU_WORKSPACE`
 to the selected project. Provider keys, `LLM_*`, `SOLMU_*`, terminal settings,
 and proxy settings remain available. `SSH_AUTH_SOCK` and unrelated secrets are
-not forwarded. Provider keys are still visible to the launched program; this
-is environment filtering, not credential brokering.
+not forwarded. For credentials that should not remain in your shell environment,
+Boxer can load selected values from the operating system credential store.
+
+### Store credentials for an agent
+
+Save a credential without putting its value in shell history or command-line
+arguments. Boxer prompts for it without echoing the input:
+
+```sh
+boxer credential set OPENAI_API_KEY
+boxer credential status OPENAI_API_KEY
+boxer --profile solmu --env-credential OPENAI_API_KEY --cwd /path/to/project -- solmu
+```
+
+Use `boxer credential delete OPENAI_API_KEY` to remove it. The credential name
+is also the environment variable provided to the launched program. Multiple
+`--env-credential NAME` options are supported, and policies can list names in
+`env_credentials`. Boxer stores values in the OS credential store (Keychain on
+macOS, Credential Manager on Windows, and Secret Service on Linux). On Linux,
+a Secret Service provider must be available to the user session.
+
+This makes the value easier to manage and avoids exposing it in Boxer command
+arguments. It is still present in the agent's environment and available to that
+agent and its child processes; use a credential proxy when the agent must not
+read the credential itself.
 
 ### Run Pi, OpenCode, Claude Code, or Codex
 

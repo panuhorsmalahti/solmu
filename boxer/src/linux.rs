@@ -175,13 +175,6 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         .arg("--ro-bind")
         .arg(executable)
         .arg("/opt/solmu/agent");
-    // Explicit environment only: provider credentials remain available, while
-    // SSH agents and other host service handles are not forwarded.
-    for (key, value) in command.get_envs() {
-        if let Some(value) = value {
-            sandbox.arg("--setenv").arg(key).arg(value);
-        }
-    }
     // Host networking is shared only when the policy allows it.
     let group = cgroup::Group::create(&policy)?;
     group.validate_workspace(&directory)?;
@@ -245,6 +238,14 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         .arg("--seccomp")
         .arg(filter_fd.to_string())
         .args(sandbox.get_args());
+    // Values passed as --setenv arguments appear in host process listings.
+    // Give Bubblewrap the already-filtered environment directly instead.
+    supervised.env_clear();
+    for (key, value) in command.get_envs() {
+        if let Some(value) = value {
+            supervised.env(key, value);
+        }
+    }
     // SAFETY: callback uses only write/fcntl and errno access; descriptors stay
     // alive until the child has completed, and attachment precedes exec.
     unsafe {

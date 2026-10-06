@@ -115,6 +115,7 @@ fn schema() -> io::Result<i32> {
             "write": {"type": "array", "items": {"type": "string"}},
             "clean_env": {"type": "boolean"},
             "pass_env": {"type": "array", "items": {"type": "string"}},
+            "env_credentials": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
             "cpus": {"type": "integer", "minimum": 1},
             "memory_mib": {"type": "integer", "minimum": 1},
             "pids": {"type": "integer", "minimum": 1},
