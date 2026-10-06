@@ -489,16 +489,21 @@ boxer --isolated --network proxy --network-profile developer \
 `developer` adds GitHub, npm/Python/Rust registries, Sigstore, and selected
 language documentation hosts. `claude-code`, `codex`, and `opencode` are named
 presets with the same network destinations as `developer`; they do not launch
-the corresponding client or configure credentials. Use the separate
-`--profile` option for Boxer’s client launch profiles. You can add exact
-destinations with `--allow-host`; policy-file `hosts` are also combined with
-the selected network profile. These are fixed host lists, not endpoint filters.
+the corresponding client or configure credentials. `enterprise` adds wildcard
+routes for Google APIs, Azure AI, and Amazon Bedrock. Use the separate
+`--profile` option for Boxer’s client launch profiles. You can add exact hosts
+or hostname patterns with `--allow-host`; policy-file `hosts` are also combined
+with the selected network profile. These are host-level grants, not endpoint
+filters.
 Package registries may use additional CDN hosts, which you can add explicitly.
 Network profiles configure allowed hostnames, not credentials; use
 `--credential` separately when the agent should receive a proxy session token
 instead of the real provider key.
 
-Use `--deny-host DOMAIN` or policy `deny_hosts` to block a hostname even when
+`--allow-host DOMAIN` also accepts complete-label wildcards such as
+`*.example.com` (one or more subdomain labels) and
+`build.*.ci.example.com` (exactly one label). The requested port must match the
+grant. Use `--deny-host DOMAIN` or policy `deny_hosts` to block a hostname even when
 an allowlist or network profile includes it. Deny patterns are checked before
 connections and credential proxy startup. Patterns accept an exact hostname,
 `*` for every hostname, `*.example.com` for one or more subdomain labels, or a

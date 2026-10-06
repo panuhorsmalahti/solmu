@@ -578,7 +578,7 @@ impl Policy {
             return Err(io::Error::other("Network routes require --network proxy"));
         }
         for host in &mut self.hosts {
-            *host = crate::network::Target::parse(host, false)?.authority();
+            *host = crate::network::HostPattern::parse(host)?.authority();
         }
         for host in &mut self.deny_hosts {
             *host = crate::network::normalize_domain_pattern(host)?;

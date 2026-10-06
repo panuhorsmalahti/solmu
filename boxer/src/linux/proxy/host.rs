@@ -30,8 +30,12 @@ impl Host {
         let allowed = policy
             .hosts
             .iter()
-            .map(|host| Target::parse(host, false))
-            .chain(policy.local.iter().map(|host| Target::parse(host, true)))
+            .map(|host| crate::network::HostPattern::parse(host))
+            .collect::<io::Result<Vec<_>>>()?;
+        let local = policy
+            .local
+            .iter()
+            .map(|host| Target::parse(host, true))
             .collect::<io::Result<Vec<_>>>()?;
         let denied = policy.deny_hosts.clone();
         let upstream_proxy = policy
@@ -71,7 +75,11 @@ impl Host {
                 .spawn(move || {
                     while let Ok(target) = ipc::read::<Target>(&mut connection) {
                         let is_denied = crate::network::is_denied_domain(&target.host, &denied);
-                        let socket = if allowed.contains(&target) && !is_denied {
+                        let is_allowed = local.contains(&target)
+                            || allowed
+                                .iter()
+                                .any(|pattern| pattern.matches(&target.host, target.port));
+                        let socket = if is_allowed && !is_denied {
                             runtime
                                 .block_on(connect_route(
                                     &target,

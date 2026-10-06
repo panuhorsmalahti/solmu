@@ -30,7 +30,7 @@ fn routed_policies_validate_exact_destinations_and_show_platform_support() {
             "--network",
             "proxy",
             "--allow-host",
-            "*.example.com",
+            "api*bad.example.com",
         ],
         vec![
             "--isolated",

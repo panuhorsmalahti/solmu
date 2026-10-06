@@ -57,6 +57,53 @@ pub fn normalize_domain_pattern(value: &str) -> io::Result<String> {
     Ok(value.to_ascii_lowercase())
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HostPattern {
+    pub host: String,
+    pub port: u16,
+}
+
+impl HostPattern {
+    pub fn parse(value: &str) -> io::Result<Self> {
+        let (host, port) = match value.rsplit_once(':') {
+            Some((host, port)) => {
+                if port.is_empty() || !port.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return Err(io::Error::other(
+                        "Remote host patterns require a port from 1 to 65535",
+                    ));
+                }
+                let port = port
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|port| *port != 0)
+                    .ok_or_else(|| {
+                        io::Error::other("Remote host patterns require a port from 1 to 65535")
+                    })?;
+                (host, port)
+            }
+            None => (value, 443),
+        };
+        if host.starts_with('[') {
+            return Err(io::Error::other(
+                "Remote host patterns require a DNS hostname, not an IP address",
+            ));
+        }
+        Ok(Self {
+            host: normalize_domain_pattern(host)?,
+            port,
+        })
+    }
+
+    pub fn authority(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub fn matches(&self, host: &str, port: u16) -> bool {
+        self.port == port && matches_domain_pattern(host, &self.host)
+    }
+}
+
 #[cfg(any(target_os = "linux", test))]
 pub fn matches_domain_pattern(host: &str, pattern: &str) -> bool {
     if pattern == "*" {
@@ -263,9 +310,9 @@ fn ipv6_in_subnet(address: u128, network: u128, prefix: u32) -> bool {
 #[cfg(test)]
 mod address_tests {
     use super::{
-        UpstreamProxy, is_always_denied_domain, is_denied_domain, is_globally_routable,
-        is_private_network, matches_bypass, matches_domain_pattern, normalize_bypass_pattern,
-        normalize_domain_pattern,
+        HostPattern, UpstreamProxy, is_always_denied_domain, is_denied_domain,
+        is_globally_routable, is_private_network, matches_bypass, matches_domain_pattern,
+        normalize_bypass_pattern, normalize_domain_pattern,
     };
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -358,6 +405,19 @@ mod address_tests {
         assert!(is_denied_domain("metadata.google.internal", &[]));
         assert!(is_denied_domain("ads.example.com", &[exact]));
     }
+
+    #[test]
+    fn host_grants_support_validated_wildcards_and_match_ports() {
+        let suffix = HostPattern::parse("*.example.com").unwrap();
+        let label = HostPattern::parse("build.*.ci.example.com:8443").unwrap();
+        assert_eq!(suffix.authority(), "*.example.com:443");
+        assert!(suffix.matches("api.example.com", 443));
+        assert!(!suffix.matches("example.com", 443));
+        assert!(label.matches("build.prod.ci.example.com", 8443));
+        assert!(!label.matches("build.prod.ci.example.com", 443));
+        assert!(HostPattern::parse("api*bad.example.com").is_err());
+        assert!(HostPattern::parse("https://api.example.com").is_err());
+    }
 }
 
 pub fn profiles() -> &'static [(&'static str, &'static [&'static str])] {
@@ -386,12 +446,38 @@ pub fn profiles() -> &'static [(&'static str, &'static [&'static str])] {
         "developer.mozilla.org",
         "doc.rust-lang.org",
     ];
+    const ENTERPRISE: &[&str] = &[
+        "api.openai.com",
+        "api.anthropic.com",
+        "generativelanguage.googleapis.com",
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "index.crates.io",
+        "static.crates.io",
+        "github.com",
+        "api.github.com",
+        "raw.githubusercontent.com",
+        "codeload.github.com",
+        "fulcio.sigstore.dev",
+        "rekor.sigstore.dev",
+        "tuf-repo-cdn.sigstore.dev",
+        "docs.python.org",
+        "developer.mozilla.org",
+        "doc.rust-lang.org",
+        "*.googleapis.com",
+        "*.openai.azure.com",
+        "*.cognitiveservices.azure.com",
+        "*.bedrock.amazonaws.com",
+        "*.bedrock-runtime.amazonaws.com",
+    ];
     &[
         ("minimal", LLM_APIS),
         ("developer", DEVELOPER),
         ("claude-code", DEVELOPER),
         ("codex", DEVELOPER),
         ("opencode", DEVELOPER),
+        ("enterprise", ENTERPRISE),
     ]
 }
 
@@ -402,7 +488,7 @@ pub fn profile_hosts(name: &str) -> io::Result<Vec<String>> {
         .map(|(_, hosts)| hosts.iter().map(|host| (*host).to_owned()).collect())
         .ok_or_else(|| {
             io::Error::other(format!(
-                "Unknown network profile '{name}'; available profiles: minimal, developer, claude-code, codex, opencode"
+                "Unknown network profile '{name}'; available profiles: minimal, developer, claude-code, codex, opencode, enterprise"
             ))
         })
 }

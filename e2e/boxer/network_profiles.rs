@@ -62,7 +62,7 @@ fn network_profiles_expand_to_exact_hosts_and_require_the_proxy() {
         .unwrap();
     assert!(profiles.status.success());
     let profiles: Value = serde_json::from_slice(&profiles.stdout).unwrap();
-    assert_eq!(profiles.as_array().unwrap().len(), 5);
+    assert_eq!(profiles.as_array().unwrap().len(), 6);
     let codex = Command::new(binary("boxer"))
         .args([
             "--isolated",
@@ -83,6 +83,30 @@ fn network_profiles_expand_to_exact_hosts_and_require_the_proxy() {
             .unwrap()
             .iter()
             .any(|host| { host == "fulcio.sigstore.dev:443" || host == "doc.rust-lang.org:443" })
+    );
+    let enterprise = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--network-profile",
+            "enterprise",
+            "--print-policy",
+        ])
+        .output()
+        .unwrap();
+    assert!(enterprise.status.success());
+    let enterprise: Value = serde_json::from_slice(&enterprise.stdout).unwrap();
+    assert!(
+        enterprise["policy"]["hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|host| {
+                host == "*.googleapis.com:443"
+                    || host == "*.openai.azure.com:443"
+                    || host == "*.bedrock-runtime.amazonaws.com:443"
+            })
     );
 }
 
