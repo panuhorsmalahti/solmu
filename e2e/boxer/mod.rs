@@ -9,6 +9,8 @@ mod environment;
 mod explain;
 #[cfg(target_os = "linux")]
 mod learn;
+#[cfg(target_os = "macos")]
+mod learn_macos;
 mod network;
 mod network_profiles;
 mod permissions;

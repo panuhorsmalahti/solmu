@@ -115,9 +115,11 @@ this dry run.
 
 On Linux, `boxer learn` traces a real command with `strace` and reports paths
 opened for reading or writing, plus outbound and listening network endpoints.
-Install `strace` with your Linux package manager first. The command runs normally
-without applying a sandbox; use the report as a starting point for a policy.
-Trace output is temporary and removed when the command finishes.
+Install `strace` with your Linux package manager first. On macOS, it uses
+`fs_usage` to discover filesystem access; run `sudo -v` first to authorize the
+trace. macOS network endpoints are not reported yet. On both platforms, the
+command runs without applying a sandbox; use the report as a starting point
+for a policy. Trace output is temporary and removed when the command finishes.
 
 ```sh
 boxer learn --timeout 60 -- solmu
@@ -126,16 +128,16 @@ boxer learn --policy boxer-policy.json -- solmu
 boxer learn --profile local-agent -- solmu
 ```
 
-JSON output separates read, write, and read/write paths and includes numeric
-network addresses and ports, with counts for repeated connections or listeners.
-When the trace sees a matching UDP DNS answer, outbound endpoints also include
-the queried hostname. Paths are deduplicated. DNS-over-HTTPS, encrypted DNS,
-and answers that were resolved before tracing cannot be correlated. The report
-only includes successful traced operations. `--timeout` stops the traced process
-group and returns status 124 when the limit is reached. This feature currently
-requires Linux; other platforms report that it is unavailable. With `--json`,
-the report is written to stdout and the command's captured output is replayed
-to stderr so the JSON remains parseable.
+On Linux, JSON output separates read, write, and read/write paths and includes
+numeric network addresses and ports, with counts for repeated connections or
+listeners. When the trace sees a matching UDP DNS answer, outbound endpoints
+also include the queried hostname. Paths are deduplicated. DNS-over-HTTPS,
+encrypted DNS, and answers that were resolved before tracing cannot be
+correlated. Linux reports successful traced operations. `--timeout` stops the traced
+process group and returns status 124 when the limit is reached. Policy
+comparison with `--policy` or `--profile` is currently available on Linux only.
+With `--json`, the report is written to stdout and the command's captured
+output is replayed to stderr so the JSON remains parseable.
 
 Pass `--policy FILE` or `--profile NAME` to include filesystem access that the
 resolved policy does not grant. A profile name is loaded from

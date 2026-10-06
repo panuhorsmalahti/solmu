@@ -6,6 +6,9 @@ mod credential;
 mod explain;
 #[cfg(target_os = "linux")]
 mod learn;
+#[cfg(target_os = "macos")]
+#[path = "learn_macos.rs"]
+mod learn;
 mod network;
 mod policy;
 mod policy_cli;
@@ -151,9 +154,11 @@ fn run() -> io::Result<i32> {
     if raw_arguments.first().is_some_and(|arg| arg == "learn") {
         #[cfg(target_os = "linux")]
         return learn::command(&raw_arguments);
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "macos")]
+        return learn::command(&raw_arguments);
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         return Err(io::Error::other(
-            "Boxer learn is currently supported on Linux and requires strace",
+            "Boxer learn is currently supported on Linux and macOS",
         ));
     }
     if raw_arguments
@@ -244,7 +249,7 @@ fn run() -> io::Result<i32> {
                 "boxer why --path PATH [--op read|write] or --host HOST[:PORT] [--op connect] [policy options]: explain resolved filesystem or network policy without launching a program."
             );
             println!(
-                "boxer learn [--json] [--timeout SECONDS] [--policy FILE | --profile NAME] -- PROGRAM [ARGS...]: trace Linux access and optionally compare it with a policy (requires strace)."
+                "boxer learn [--json] [--timeout SECONDS] [--policy FILE | --profile NAME] -- PROGRAM [ARGS...]: discover filesystem access and Linux network access (Linux requires strace; macOS requires sudo access to fs_usage; policy comparison is Linux-only)."
             );
             println!(
                 "--trust-key PUBLIC_KEY --verify FILE: verify signed files before launch; repeat --verify for multiple files."
