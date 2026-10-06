@@ -33,9 +33,13 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
     match args.get(1).and_then(|arg| arg.to_str()) {
         Some("help" | "--help" | "-h") if args.len() == 2 => {
             println!(
-                "Boxer trust\n\nUsage:\n  boxer trust keygen --private-key FILE --public-key FILE\n  boxer trust sign --key PRIVATE_KEY FILE\n  boxer trust verify --key PUBLIC_KEY FILE\n\nSignatures use Ed25519 and are stored beside each file as FILE.boxer.sig."
+                "Boxer trust\n\nUsage:\n  boxer trust keygen [--private-key FILE --public-key FILE]\n  boxer trust sign FILE | sign --key PRIVATE_KEY FILE\n  boxer trust verify FILE | verify --key PUBLIC_KEY FILE\n\nDefault keys are stored under the Boxer config directory. Signatures use Ed25519 and are stored beside each file as FILE.boxer.sig."
             );
             Ok(0)
+        }
+        Some("keygen") if args.len() == 2 => {
+            let (private, public) = default_key_paths()?;
+            keygen(&private, &public)
         }
         Some("keygen")
             if args.len() == 6 && args[2] == "--private-key" && args[4] == "--public-key" =>
@@ -45,13 +49,52 @@ pub fn command(args: &[OsString]) -> io::Result<i32> {
         Some("sign") if args.len() == 5 && args[2] == "--key" => {
             sign(Path::new(&args[3]), Path::new(&args[4]))
         }
+        Some("sign") if args.len() == 3 => {
+            let (private, _) = default_key_paths()?;
+            sign(&private, Path::new(&args[2]))
+        }
         Some("verify") if args.len() == 5 && args[2] == "--key" => {
             verify(Path::new(&args[3]), Path::new(&args[4])).map(|_| 0)
+        }
+        Some("verify") if args.len() == 3 => {
+            let (_, public) = default_key_paths()?;
+            verify(&public, Path::new(&args[2])).map(|_| 0)
         }
         _ => Err(io::Error::other(
             "Usage: boxer trust keygen --private-key FILE --public-key FILE | sign --key PRIVATE_KEY FILE | verify --key PUBLIC_KEY FILE",
         )),
     }
+}
+
+pub fn default_key_paths() -> io::Result<(PathBuf, PathBuf)> {
+    let directory = if let Some(path) = std::env::var_os("BOXER_TRUST_DIR") {
+        PathBuf::from(path)
+    } else if cfg!(windows) {
+        std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .ok_or_else(|| io::Error::other("Cannot determine the Boxer trust directory"))?
+            .join("Solmu")
+            .join("Boxer")
+            .join("trust")
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .map(|home| home.join(".config"))
+            })
+            .ok_or_else(|| io::Error::other("Cannot determine the Boxer trust directory"))?
+            .join("boxer")
+            .join("trust")
+    };
+    Ok((directory.join("default.pk8"), directory.join("default.pub")))
+}
+
+pub fn discover_policy(workspace: &Path) -> Option<PathBuf> {
+    let path = workspace.join("boxer-trust.json");
+    path.is_file().then_some(path)
 }
 
 pub fn verify_files(public_key_path: &Path, files: &[PathBuf]) -> io::Result<()> {

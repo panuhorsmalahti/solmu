@@ -664,15 +664,32 @@ fn run() -> io::Result<i32> {
         return Err(io::Error::other("Workspace must be a directory"));
     }
     resolved.resolve(&workspace)?;
+    if trust_policy.is_none()
+        && verify_files.is_empty()
+        && !why_command
+        && !check_policy
+        && !print_policy
+    {
+        trust_policy = trust::discover_policy(&workspace);
+    }
     if !verify_files.is_empty() || trust_policy.is_some() {
         if why_command || check_policy || print_policy {
             return Err(io::Error::other(
                 "Signature verification requires a normal Boxer launch",
             ));
         }
-        let key = trust_key.as_deref().ok_or_else(|| {
-            io::Error::other("Signature verification requires --trust-key PUBLIC_KEY")
-        })?;
+        let default_key;
+        let key = if let Some(key) = trust_key.as_deref() {
+            key
+        } else {
+            default_key = trust::default_key_paths()?.1;
+            if !default_key.is_file() {
+                return Err(io::Error::other(
+                    "Signature verification needs a trust key; run `boxer trust keygen` or pass --trust-key PUBLIC_KEY",
+                ));
+            }
+            &default_key
+        };
         if trust_policy.is_some() && !verify_files.is_empty() {
             return Err(io::Error::other(
                 "Choose --trust-policy or repeated --verify flags",

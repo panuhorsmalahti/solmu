@@ -155,8 +155,17 @@ that policy applied.
 
 ## Verify trusted instruction files
 
-Boxer can verify signed instruction files before starting an agent. Create a
-keypair once and keep the private key private:
+Boxer verifies signed instruction files before starting an agent. Create a
+default keypair once and keep the private key private:
+
+```sh
+boxer trust keygen
+boxer trust sign AGENTS.md
+boxer trust verify AGENTS.md
+```
+
+The default key lives under the Boxer configuration directory (override it for
+automation with `BOXER_TRUST_DIR`). For custom key locations, use:
 
 ```sh
 boxer trust keygen --private-key ~/.boxer/keys/instructions.pk8 --public-key trusted-instructions.pub
@@ -180,13 +189,20 @@ and sign the policy itself as well as each listed file:
 {"version":1,"files":["AGENTS.md",".claude/CLAUDE.md"]}
 ```
 
+Save this signed policy as `boxer-trust.json` in the workspace. Boxer discovers
+it automatically and verifies it and every listed file before launch:
+
 ```sh
 boxer trust sign --key ~/.boxer/keys/instructions.pk8 AGENTS.md
 boxer trust sign --key ~/.boxer/keys/instructions.pk8 .claude/CLAUDE.md
 boxer trust sign --key ~/.boxer/keys/instructions.pk8 boxer-trust.json
-boxer --trust-key trusted-instructions.pub --trust-policy boxer-trust.json \
-  --profile solmu --cwd /path/to/project -- solmu
+boxer --trust-key trusted-instructions.pub --profile solmu \
+  --cwd /path/to/project -- solmu
 ```
+
+Automatic discovery uses the default public key. To use a custom public key,
+pass `--trust-key PUBLIC_KEY`; an explicit `--trust-policy FILE` is also
+available when the policy has another name or location.
 
 Boxer verifies the policy signature first, then requires valid signatures for
 every listed file before launching the agent. The policy and listed files must
@@ -195,11 +211,10 @@ from the workspace. Alternatively, repeat `--verify FILE` for explicit per-run
 file checks. The private key is created with owner-only permissions on Unix.
 Protect and back it up securely; losing it means you cannot sign future updates.
 
-This is explicit Ed25519 file-signature verification anchored to the public key
-you provide. Boxer does not yet provide automatic trust-policy discovery,
-publisher identity or revocation rules, or Sigstore/CI provenance verification.
-The signature is checked before process launch; it does not make the file
-immutable against later changes by other processes.
+Signatures use Ed25519 and are checked before process launch. Boxer does not
+yet provide publisher identity or revocation rules, or Sigstore/CI provenance
+verification. Verification does not make files immutable against later changes
+by other processes.
 
 ## Limit access to a project
 
