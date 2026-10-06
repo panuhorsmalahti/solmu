@@ -125,6 +125,10 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
             prune(dry_run, older_than, keep)
         }
         Some("attach") if arguments.len() == 2 + offset => attach(text(arguments, 1 + offset)?),
+        Some("pause" | "resume") if arguments.len() == 2 + offset => {
+            let action = if action == Some("pause") { b'P' } else { b'U' };
+            control(text(arguments, 1 + offset)?, action)
+        }
         Some("detach") if arguments.len() == 2 + offset => {
             control(text(arguments, 1 + offset)?, b'D')
         }
@@ -134,7 +138,7 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
 
 fn session_usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer ps [--all] [--json] | boxer attach <id> | boxer detach <id> | boxer inspect <id> [--json] | boxer logs <id> | boxer stop <id> [--timeout SECONDS | --force] | boxer prune [--dry-run] [--older-than DAYS] [--keep COUNT]",
+        "Usage: boxer ps [--all] [--json] | boxer attach <id> | boxer detach <id> | boxer pause <id> | boxer resume <id> | boxer inspect <id> [--json] | boxer logs <id> | boxer stop <id> [--timeout SECONDS | --force] | boxer prune [--dry-run] [--older-than DAYS] [--keep COUNT]",
     )
 }
 
@@ -353,6 +357,11 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
                                 }),
                         );
                         if let Some(pid) = child.process_id() {
+                            if !stop_force
+                                && read(&root, &id).is_ok_and(|session| session.status == "paused")
+                            {
+                                signal_child_group(pid, libc::SIGCONT);
+                            }
                             signal_child_group(
                                 pid,
                                 if stop_force {
@@ -364,6 +373,21 @@ pub fn daemon(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
                         }
                         if !stop_force {
                             let _ = writer.write_all(&[3]);
+                        }
+                    }
+                    b'P' | b'U' => {
+                        let mut session = read(&root, &id)?;
+                        if let Some(pid) = child.process_id() {
+                            let (expected, next, signal) = if message[0] == b'P' {
+                                ("running", "paused", libc::SIGSTOP)
+                            } else {
+                                ("paused", "running", libc::SIGCONT)
+                            };
+                            if session.status == expected {
+                                signal_child_group(pid, signal);
+                                session.status = next.into();
+                                save(&root, &session)?;
+                            }
                         }
                     }
                     _ => {}
@@ -480,7 +504,7 @@ fn list(show_all: bool, json: bool) -> io::Result<i32> {
     let mut sessions = Vec::new();
     for mut session in all(&root)? {
         refresh_status(&mut session);
-        if !show_all && session.status != "running" {
+        if !show_all && !is_active(&session) {
             save(&root, &session)?;
             continue;
         }
@@ -544,7 +568,7 @@ fn stop(id: &str, force: bool, timeout: Option<u32>) -> io::Result<i32> {
     let root = root()?;
     let mut session = read(&root, id)?;
     refresh_status(&mut session);
-    if session.status == "running" {
+    if is_active(&session) {
         if !is_live_session(session.pid) {
             session.status = "finished".into();
             save(&root, &session)?;
@@ -557,27 +581,27 @@ fn stop(id: &str, force: bool, timeout: Option<u32>) -> io::Result<i32> {
         for _ in 0..wait_seconds * 10 {
             thread::sleep(Duration::from_millis(100));
             session = read(&root, id)?;
-            if session.status != "running" {
+            if !is_active(&session) {
                 break;
             }
         }
-        if session.status == "running" {
+        if is_active(&session) {
             if !force {
                 control_with_value(id, b'F', 0)?;
                 for _ in 0..30 {
                     thread::sleep(Duration::from_millis(100));
                     session = read(&root, id)?;
-                    if session.status != "running" {
+                    if !is_active(&session) {
                         break;
                     }
                 }
             }
-            if session.status == "running" && !is_live_session(session.pid) {
+            if is_active(&session) && !is_live_session(session.pid) {
                 session.status = "finished".into();
                 session.attached = false;
                 save(&root, &session)?;
             }
-            if session.status == "running" {
+            if is_active(&session) {
                 return Err(io::Error::other(format!(
                     "Boxer session {id} did not stop after the force request"
                 )));
@@ -607,17 +631,14 @@ fn prune(dry_run: bool, older_than: Option<usize>, keep: Option<usize>) -> io::R
     let mut sessions = all(&root)?;
     for session in &mut sessions {
         refresh_status(session);
-        if session.status != "running" {
+        if !is_active(session) {
             save(&root, session)?;
         }
     }
-    let running = sessions
-        .iter()
-        .filter(|session| session.status == "running")
-        .count();
+    let running = sessions.iter().filter(|session| is_active(session)).count();
     let finished: Vec<_> = sessions
         .iter()
-        .filter(|session| session.status != "running")
+        .filter(|session| !is_active(session))
         .collect();
     let keep_finished = keep.map(|count| count.saturating_sub(running));
     let keep_ids: HashSet<_> = keep_finished
@@ -633,10 +654,7 @@ fn prune(dry_run: bool, older_than: Option<usize>, keep: Option<usize>) -> io::R
     let now = now_ms()?;
     let cutoff = older_than.map(|days| (days as u128).saturating_mul(86_400_000));
     let mut candidates = Vec::new();
-    for session in sessions
-        .iter()
-        .filter(|session| session.status != "running")
-    {
+    for session in sessions.iter().filter(|session| !is_active(session)) {
         let older = cutoff.is_some_and(|age| now.saturating_sub(session.created_unix_ms) >= age);
         let beyond_keep = keep.is_some() && !keep_ids.contains(session.id.as_str());
         let selected = match (older_than, keep) {
@@ -674,8 +692,12 @@ fn parse_prune_value(value: &std::ffi::OsStr, maximum: usize) -> io::Result<usiz
         .ok_or_else(session_usage)
 }
 
+fn is_active(session: &Session) -> bool {
+    matches!(session.status.as_str(), "running" | "paused")
+}
+
 fn refresh_status(session: &mut Session) {
-    if session.status == "running" && !is_live_session(session.pid) {
+    if is_active(session) && !is_live_session(session.pid) {
         session.status = "finished".into();
         session.attached = false;
     }
@@ -683,7 +705,7 @@ fn refresh_status(session: &mut Session) {
 
 fn update_attachment(root: &std::path::Path, id: &str, attached: bool) -> io::Result<()> {
     let mut session = read(root, id)?;
-    if session.status == "running" && session.attached != attached {
+    if is_active(&session) && session.attached != attached {
         session.attached = attached;
         save(root, &session)?;
     }
@@ -848,7 +870,7 @@ fn attach(id: &str) -> io::Result<i32> {
     let parsed = Uuid::parse_str(id).map_err(|_| io::Error::other("Invalid session ID"))?;
     let root = root()?;
     let session = read(&root, &parsed.hyphenated().to_string())?;
-    if session.status != "running" {
+    if !is_active(&session) {
         return Err(io::Error::other("Session is not running"));
     }
     let _terminal = RawTerminal::enter()?;

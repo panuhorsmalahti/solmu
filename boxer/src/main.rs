@@ -66,7 +66,7 @@ fn main() {
         }
     } else if arguments.first().is_some_and(|arg| {
         [
-            "sessions", "ps", "attach", "detach", "inspect", "stop", "prune",
+            "sessions", "ps", "attach", "detach", "pause", "resume", "inspect", "stop", "prune",
         ]
         .iter()
         .any(|command| arg == command)
@@ -312,7 +312,7 @@ fn run() -> io::Result<i32> {
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|verify` reviews the local audit trail."
             );
             println!(
-                "--detached: start a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach (Linux/macOS). Manage sessions with `boxer ps|inspect|stop|prune`."
+                "--detached: start a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach (Linux/macOS). Manage sessions with `boxer ps|inspect|pause|resume|stop|prune`."
             );
             return Ok(0);
         } else if argument == "--version" {

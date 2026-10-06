@@ -35,6 +35,8 @@ boxer ps --json
 boxer attach <session-id>
 # Press Ctrl-] followed by d to detach and leave the session running.
 boxer detach <session-id>
+boxer pause <session-id>
+boxer resume <session-id>
 boxer inspect <session-id>
 boxer sessions logs <session-id>
 boxer stop <session-id>
@@ -49,6 +51,8 @@ boxer prune --keep 20
 By default, `boxer ps` lists running sessions. Add `--all` to include sessions
 that have stopped or exited. Use `--json` to script the list, or
 `boxer inspect <session-id> --json` to retrieve one session's details.
+Use `boxer pause` to suspend the session's agent process group and `boxer resume`
+to continue it.
 Stopping a session allows up to five seconds for a graceful exit. Set
 `--timeout SECONDS` to change that wait, or use `--force` to terminate it
 immediately. `boxer prune` removes all finished session records by default.

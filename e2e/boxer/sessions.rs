@@ -40,6 +40,28 @@ fn assert_output(
     }
 }
 
+fn wait_for_status(directory: &std::path::Path, id: &str, status: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        let inspect = Command::new(binary("boxer"))
+            .args(["inspect", id, "--json"])
+            .env("BOXER_SESSIONS_DIR", directory)
+            .output()
+            .unwrap();
+        if inspect.status.success()
+            && serde_json::from_slice::<serde_json::Value>(&inspect.stdout)
+                .is_ok_and(|session| session["status"] == status)
+        {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Boxer session {id} did not reach status {status}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
 #[test]
 fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
     let directory = tempfile::tempdir().unwrap();
@@ -262,6 +284,20 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         .lines()
         .find_map(|line| line.strip_prefix("Detached Boxer session: "))
         .unwrap();
+    let pause = Command::new(binary("boxer"))
+        .args(["pause", force_id])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(pause.status.success());
+    wait_for_status(directory.path(), force_id, "paused");
+    let resume = Command::new(binary("boxer"))
+        .args(["resume", force_id])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(resume.status.success());
+    wait_for_status(directory.path(), force_id, "running");
     let force_stop = Command::new(binary("boxer"))
         .args(["stop", force_id, "--force"])
         .env("BOXER_SESSIONS_DIR", directory.path())

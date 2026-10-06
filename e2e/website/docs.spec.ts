@@ -106,6 +106,8 @@ test('Boxer guide uses default backend settings and describes explicit Linux net
   await expect(page.locator('article')).toContainText('Ctrl-] followed by d')
   await expect(page.locator('article')).toContainText('boxer ps --all')
   await expect(page.locator('article')).toContainText('boxer ps --json')
+  await expect(page.locator('article')).toContainText('boxer pause <session-id>')
+  await expect(page.locator('article')).toContainText('boxer resume <session-id>')
   await expect(page.locator('article')).toContainText('boxer stop <session-id> --timeout 15')
   await expect(page.locator('article')).toContainText('boxer stop <session-id> --force')
   await expect(page.locator('article')).toContainText('boxer prune --dry-run')
