@@ -257,7 +257,8 @@ fn detached_sessions_can_reattach_interactively_detach_stop_and_prune() {
         .output()
         .unwrap();
     assert!(force_start.status.success());
-    let force_id = String::from_utf8_lossy(&force_start.stdout)
+    let force_start_text = String::from_utf8_lossy(&force_start.stdout);
+    let force_id = force_start_text
         .lines()
         .find_map(|line| line.strip_prefix("Detached Boxer session: "))
         .unwrap();
