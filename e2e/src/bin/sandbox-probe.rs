@@ -9,7 +9,7 @@ fn main() {
         .first()
         .is_some_and(|value| value == "--credential-fixture")
     {
-        print!("cmd-secret-fixture\n");
+        println!("cmd-secret-fixture");
         return;
     }
     #[cfg(target_os = "linux")]

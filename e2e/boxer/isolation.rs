@@ -62,35 +62,34 @@ fn abstract_unix_socket_scope_blocks_host_sockets_when_landlock_v6_is_available(
 #[test]
 fn signal_scope_blocks_host_processes_when_landlock_v6_is_available() {
     let workspace = tempfile::tempdir().unwrap();
-    for mode in ["--workspace"] {
-        let mut target = Command::new("sleep").arg("30").spawn().unwrap();
-        let output = Command::new(binary("boxer"))
-            .args([mode, "--scope-signal", "--cwd"])
-            .arg(workspace.path())
-            .arg("--")
-            .arg(binary("sandbox-probe"))
-            .arg("--signal-check")
-            .arg(target.id().to_string())
-            .output()
-            .unwrap();
-        if !output.status.success()
-            && String::from_utf8_lossy(&output.stderr)
-                .to_ascii_lowercase()
-                .contains("scope")
-        {
-            let _ = target.kill();
-            let _ = target.wait();
-            return;
-        }
+    let mode = "--workspace";
+    let mut target = Command::new("sleep").arg("30").spawn().unwrap();
+    let output = Command::new(binary("boxer"))
+        .args([mode, "--scope-signal", "--cwd"])
+        .arg(workspace.path())
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("--signal-check")
+        .arg(target.id().to_string())
+        .output()
+        .unwrap();
+    if !output.status.success()
+        && String::from_utf8_lossy(&output.stderr)
+            .to_ascii_lowercase()
+            .contains("scope")
+    {
         let _ = target.kill();
         let _ = target.wait();
-        assert!(
-            output.status.success(),
-            "{mode}: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(String::from_utf8_lossy(&output.stdout).contains("signal isolation verified"));
+        return;
     }
+    let _ = target.kill();
+    let _ = target.wait();
+    assert!(
+        output.status.success(),
+        "{mode}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("signal isolation verified"));
 }
 
 #[cfg(target_os = "linux")]
