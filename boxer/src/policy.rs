@@ -545,7 +545,7 @@ impl CredentialProvider {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", test))]
     pub fn name(self) -> &'static str {
         match self {
             Self::Openai => "openai",
@@ -556,7 +556,7 @@ impl CredentialProvider {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", test))]
     pub fn route(self) -> &'static str {
         self.name()
     }
