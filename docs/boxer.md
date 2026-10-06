@@ -471,8 +471,9 @@ boxer --isolated --network proxy --network-profile developer \
 You can add exact destinations with `--allow-host`; policy-file `hosts` are also
 combined with the selected profile. These are fixed host lists, not endpoint
 filters. Package registries may use additional CDN hosts, which you can add
-explicitly. Profiles require Linux isolated proxy mode and do not configure
-credential injection.
+explicitly. These profiles configure allowed hostnames, not credentials; use
+`--credential` separately when the agent should receive a proxy session token
+instead of the real provider key.
 
 For a backend that calls OpenAI, stop the regular backend, then run:
 
@@ -534,9 +535,11 @@ Anonymous Unix stream pairs remain available for local runtime IPC.
 macOS and Windows currently reject routed policies before launching a program.
 Permissive networking remains the default on every platform.
 
-Provider keys are still forwarded to the agent, and `.env` files within shared
-paths remain readable. Network routing does not yet provide credential injection
-or protection for secrets in the workspace.
+Ordinary network routes do not hide provider keys: environment variables you
+forward still reach the agent, and `.env` files within shared paths remain
+readable. Use `--credential openai` or `--credential anthropic` on Linux for
+provider-key proxy injection. This does not protect other secrets stored in the
+workspace.
 
 ## Linux isolation
 
