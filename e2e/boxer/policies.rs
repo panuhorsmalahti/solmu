@@ -39,6 +39,8 @@ fn resolved_policies_show_permissions_and_never_launch_or_disclose_environment_v
     let value = plan(workspace.path(), &["--profile", "solmu"]);
     assert_eq!(value["policy"]["mode"], "workspace");
     assert_eq!(value["environment"]["inherit"], false);
+    let allow_cwd = plan(workspace.path(), &["--allow-cwd"]);
+    assert_eq!(allow_cwd["policy"]["mode"], "workspace");
     assert!(
         value["environment"]["forwarded_names"]
             .as_array()

@@ -7,6 +7,10 @@ client. Name another program after `--` to launch it instead.
 `--cwd PATH` chooses the workspace. Terminal input/output
 and the program's exit status are preserved.
 
+Use `--workspace` (or `--allow-cwd`) to restrict file access to the selected
+workspace on Linux and macOS. `--allow-cwd` is a familiar spelling for users
+coming from other sandbox tools.
+
 ## Default permissions
 
 Filesystem access and **all network requests are allowed** by default, subject
