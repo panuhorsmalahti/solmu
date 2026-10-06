@@ -54,3 +54,52 @@ fn environment_credentials_can_be_declared_in_a_policy_file() {
     assert_eq!(output["policy"]["env_credentials"][0], "OPENAI_API_KEY");
     assert!(!String::from_utf8_lossy(&process.stdout).contains("test-secret"));
 }
+
+#[test]
+fn credential_proxy_requires_isolated_routed_networking() {
+    let output = run(&["--credential", "openai", "--", "unused-program"]);
+    assert_eq!(output.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Credential proxying"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn credential_proxy_policy_adds_provider_route_without_forwarding_real_key() {
+    let workspace = tempfile::tempdir().unwrap();
+    let output = Command::new(binary("boxer"))
+        .args([
+            "--isolated",
+            "--network",
+            "proxy",
+            "--credential",
+            "openai",
+            "--cwd",
+        ])
+        .arg(workspace.path())
+        .args(["--print-policy", "--", "unused-program"])
+        .env("OPENAI_API_KEY", "real-secret-fixture")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["policy"]["credentials"][0], "openai");
+    assert!(
+        result["policy"]["hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|host| { host == "api.openai.com:443" })
+    );
+    assert!(
+        !result["environment"]["forwarded_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|name| name == "OPENAI_API_KEY")
+    );
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("real-secret-fixture"));
+}

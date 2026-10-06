@@ -63,6 +63,47 @@ pub enum RuntimeGroup {
     Go,
 }
 
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum CredentialProvider {
+    Openai,
+    Anthropic,
+}
+
+impl CredentialProvider {
+    pub fn parse(name: &str) -> io::Result<Self> {
+        match name {
+            "openai" => Ok(Self::Openai),
+            "anthropic" => Ok(Self::Anthropic),
+            _ => Err(io::Error::other(
+                "Unknown credential provider; available providers: openai, anthropic",
+            )),
+        }
+    }
+
+    pub fn key_env(self) -> &'static str {
+        match self {
+            Self::Openai => "OPENAI_API_KEY",
+            Self::Anthropic => "ANTHROPIC_API_KEY",
+        }
+    }
+
+    pub fn host(self) -> &'static str {
+        match self {
+            Self::Openai => "api.openai.com:443",
+            Self::Anthropic => "api.anthropic.com:443",
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn route(self) -> &'static str {
+        match self {
+            Self::Openai => "openai",
+            Self::Anthropic => "anthropic",
+        }
+    }
+}
+
 impl RuntimeGroup {
     pub fn parse(name: &str) -> io::Result<Self> {
         match name {
@@ -160,6 +201,7 @@ pub struct Policy {
     pub pass_env: Vec<String>,
     pub env_credentials: Vec<String>,
     pub runtime_groups: Vec<RuntimeGroup>,
+    pub credentials: Vec<CredentialProvider>,
     pub cpus: Option<u32>,
     pub memory_mib: Option<u32>,
     pub pids: Option<u32>,
@@ -223,6 +265,42 @@ impl Policy {
                 return Err(io::Error::other("Network profiles require --network proxy"));
             }
             self.hosts.extend(crate::network::profile_hosts(profile)?);
+        }
+        if !self.credentials.is_empty() {
+            if !cfg!(target_os = "linux") {
+                return Err(io::Error::other(
+                    "Credential proxying is currently supported on Linux",
+                ));
+            }
+            if !self.isolated || self.network != Network::Proxy {
+                return Err(io::Error::other(
+                    "Credential proxying requires Linux --isolated --network proxy",
+                ));
+            }
+            let mut providers = std::collections::HashSet::new();
+            for provider in &self.credentials {
+                if !providers.insert(*provider) {
+                    return Err(io::Error::other(
+                        "A credential provider was specified more than once",
+                    ));
+                }
+                if self
+                    .env_credentials
+                    .iter()
+                    .any(|name| name.eq_ignore_ascii_case(provider.key_env()))
+                {
+                    return Err(io::Error::other(format!(
+                        "Use either --credential or --env-credential for {}",
+                        provider.key_env()
+                    )));
+                }
+                self.hosts.push(provider.host().to_owned());
+            }
+            if self.solmu && self.credentials.len() != 1 {
+                return Err(io::Error::other(
+                    "The Solmu profile accepts one brokered provider at a time",
+                ));
+            }
         }
         if self.network == Network::Proxy && !self.isolated {
             return Err(io::Error::other(
@@ -390,6 +468,9 @@ impl Policy {
                     command.env(name, value);
                 }
             }
+        }
+        for provider in &self.credentials {
+            command.env_remove(provider.key_env());
         }
         if self.solmu {
             let workspace = command

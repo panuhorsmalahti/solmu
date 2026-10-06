@@ -7,7 +7,7 @@ mod policy;
 mod policy_cli;
 mod rollback;
 mod trust;
-use policy::{AgentProfile, Mode, Network, Policy, RuntimeGroup};
+use policy::{AgentProfile, CredentialProvider, Mode, Network, Policy, RuntimeGroup};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 
@@ -209,6 +209,9 @@ fn run() -> io::Result<i32> {
                 "--runtime-group node|python|rust|go: read access to detected toolchain files (repeatable; requires --workspace or --isolated)."
             );
             println!(
+                "--credential openai|anthropic: proxy a key from the OS credential store so the agent receives only a per-session token (requires --isolated --network proxy)."
+            );
+            println!(
                 "boxer trust keygen|sign|verify: create an Ed25519 key, sign a file, or verify its signature."
             );
             println!(
@@ -296,6 +299,13 @@ fn run() -> io::Result<i32> {
                     .next()
                     .and_then(|value| value.into_string().ok())
                     .ok_or_else(|| io::Error::other("--runtime-group requires a group name"))?,
+            )?);
+        } else if argument == "--credential" {
+            policy.credentials.push(CredentialProvider::parse(
+                &arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| io::Error::other("--credential requires a provider name"))?,
             )?);
         } else if argument == "--print-policy" {
             print_policy = true;
@@ -429,6 +439,7 @@ fn run() -> io::Result<i32> {
     resolved.pass_env.extend(policy.pass_env);
     resolved.env_credentials.extend(policy.env_credentials);
     resolved.runtime_groups.extend(policy.runtime_groups);
+    resolved.credentials.extend(policy.credentials);
     resolved.cpus = policy.cpus.or(resolved.cpus);
     resolved.memory_mib = policy.memory_mib.or(resolved.memory_mib);
     resolved.pids = policy.pids.or(resolved.pids);

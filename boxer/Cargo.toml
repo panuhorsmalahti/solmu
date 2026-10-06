@@ -25,7 +25,10 @@ zeroize = "1"
 landlock = "0.4.7"
 libc = "0.2"
 keyring = { version = "3.6.3", default-features = false, features = ["crypto-rust", "sync-secret-service"] }
-tokio = { version = "1", features = ["rt", "net", "time"] }
+tokio = { version = "1", features = ["rt", "net", "time", "io-util", "sync"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

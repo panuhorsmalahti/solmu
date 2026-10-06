@@ -116,6 +116,10 @@ with `--env-credential NAME`. Boxer uses the OS credential store and prompts
 without echoing the value. The value is available to the agent process. See the
 [credential guide](../docs/boxer.md#store-credentials-for-an-agent).
 
+On Linux, `--credential openai|anthropic` keeps the stored provider key outside
+the agent and uses a local proxy. It requires `--isolated --network proxy`.
+See the [credential guide](../docs/boxer.md#store-credentials-for-an-agent).
+
 Use `--runtime-group node|python|rust|go` with `--workspace` or `--isolated` to
 grant read access to detected toolchains. See the
 [runtime group guide](../docs/boxer.md#give-access-to-an-installed-toolchain).

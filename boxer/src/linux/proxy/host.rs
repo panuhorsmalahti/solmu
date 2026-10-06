@@ -116,7 +116,7 @@ impl Drop for Host {
     }
 }
 
-async fn connect(target: &Target, local: bool) -> io::Result<TcpStream> {
+pub(super) async fn connect(target: &Target, local: bool) -> io::Result<TcpStream> {
     tokio::time::timeout(Duration::from_secs(5), async {
         let addresses = tokio::net::lookup_host((target.host.as_str(), target.port))
             .await?

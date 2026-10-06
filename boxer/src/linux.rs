@@ -106,7 +106,7 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     Err(command.exec())
 }
 
-fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
+fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
     let directory = command
         .get_current_dir()
         .map(std::path::PathBuf::from)
@@ -174,6 +174,42 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
         .arg("--ro-bind")
         .arg(executable)
         .arg("/opt/solmu/agent");
+    let mut credential_broker = None;
+    if !policy.credentials.is_empty() {
+        let mut reserved_ports = policy.publish.clone();
+        reserved_ports.extend(
+            policy
+                .local
+                .iter()
+                .map(|route| crate::network::Target::parse(route, true).map(|target| target.port))
+                .collect::<io::Result<Vec<_>>>()?,
+        );
+        let (broker, session_tokens) =
+            proxy::credential::Broker::start(&policy.credentials, &reserved_ports)?;
+        let port = broker.port();
+        policy.local.push(format!("127.0.0.1:{port}"));
+        for (provider, token) in session_tokens {
+            command.env(provider.key_env(), token);
+            let base = if provider == crate::policy::CredentialProvider::Openai {
+                format!("http://127.0.0.1:{port}/openai/v1/")
+            } else {
+                format!("http://127.0.0.1:{port}/anthropic/")
+            };
+            if policy.solmu {
+                command.env("LLM_ENDPOINT", base);
+            } else if provider == crate::policy::CredentialProvider::Openai {
+                command
+                    .env_remove("CODEX_API_KEY")
+                    .env_remove("CODEX_ACCESS_TOKEN")
+                    .env("OPENAI_BASE_URL", base);
+            } else {
+                command
+                    .env_remove("ANTHROPIC_AUTH_TOKEN")
+                    .env("ANTHROPIC_BASE_URL", base);
+            }
+        }
+        credential_broker = Some(broker);
+    }
     // Host networking is shared only when the policy allows it.
     let group = cgroup::Group::create(&policy)?;
     group.validate_workspace(&directory)?;
@@ -292,6 +328,7 @@ fn isolated(command: Command, policy: Policy) -> io::Result<i32> {
     if cancelled != 0 {
         return Ok(128 + cancelled);
     }
+    drop(credential_broker);
     Ok(status
         .code()
         .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))

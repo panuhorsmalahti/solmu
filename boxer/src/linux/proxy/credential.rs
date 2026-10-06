@@ -1,0 +1,509 @@
+use crate::{credential, network::Target, policy::CredentialProvider};
+use ring::rand::{SecureRandom, SystemRandom};
+use rustls::{ClientConfig, RootCertStore, pki_types::ServerName};
+use std::{
+    collections::HashMap,
+    io,
+    net::TcpListener,
+    sync::Arc,
+    thread::{self, JoinHandle},
+    time::Duration,
+};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    sync::oneshot,
+};
+use tokio_rustls::TlsConnector;
+use zeroize::Zeroizing;
+
+const MAX_HEADER: usize = 16_384;
+const MAX_CONTENT_LENGTH: u64 = 32 * 1024 * 1024;
+const HEADER_TIMEOUT: Duration = Duration::from_secs(15);
+
+struct Credential {
+    provider: CredentialProvider,
+    secret: Zeroizing<String>,
+    token: Zeroizing<String>,
+}
+
+pub struct Broker {
+    port: u16,
+    shutdown: Option<oneshot::Sender<()>>,
+    thread: Option<JoinHandle<io::Result<()>>>,
+}
+
+impl Broker {
+    pub fn start(
+        providers: &[CredentialProvider],
+        reserved_ports: &[u16],
+    ) -> io::Result<(Self, Vec<(CredentialProvider, String)>)> {
+        let names: Vec<_> = providers
+            .iter()
+            .map(|provider| provider.key_env().to_owned())
+            .collect();
+        let values = credential::load(&names)?;
+        let mut credentials = HashMap::new();
+        let mut session_tokens = Vec::new();
+        for (provider, (_, secret)) in providers.iter().zip(values) {
+            let token = session_token()?;
+            let entry = Credential {
+                provider: *provider,
+                secret,
+                token: Zeroizing::new(token.clone()),
+            };
+            credentials.insert(provider.route().to_owned(), Arc::new(entry));
+            session_tokens.push((*provider, token));
+        }
+
+        let mut listener = None;
+        for _ in 0..64 {
+            let candidate = TcpListener::bind("127.0.0.1:0")?;
+            if !reserved_ports.contains(&candidate.local_addr()?.port()) {
+                listener = Some(candidate);
+                break;
+            }
+        }
+        let listener = listener
+            .ok_or_else(|| io::Error::other("Could not allocate a free credential proxy port"))?;
+        listener.set_nonblocking(true)?;
+        let port = listener.local_addr()?.port();
+        let (shutdown, mut stop) = oneshot::channel();
+        let (ready, started) = std::sync::mpsc::sync_channel(1);
+        let thread = thread::Builder::new()
+            .name("boxer-credential-proxy".into())
+            .spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?;
+                runtime.block_on(async move {
+                    let listener = match tokio::net::TcpListener::from_std(listener) {
+                        Ok(listener) => {
+                            let _ = ready.send(Ok(()));
+                            listener
+                        }
+                        Err(error) => {
+                            let _ =
+                                ready.send(Err(io::Error::new(error.kind(), error.to_string())));
+                            return Err(error);
+                        }
+                    };
+                    loop {
+                        tokio::select! {
+                            _ = &mut stop => break,
+                            accepted = listener.accept() => {
+                                let (stream, _) = accepted?;
+                                let credentials = credentials.clone();
+                                tokio::spawn(async move {
+                                    let _ = serve(stream, credentials).await;
+                                });
+                            }
+                        }
+                    }
+                    Ok(())
+                })
+            })?;
+        started
+            .recv()
+            .map_err(|_| io::Error::other("Credential proxy failed to start"))??;
+        Ok((
+            Self {
+                port,
+                shutdown: Some(shutdown),
+                thread: Some(thread),
+            },
+            session_tokens,
+        ))
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+}
+
+impl Drop for Broker {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+fn session_token() -> io::Result<String> {
+    let mut bytes = [0; 32];
+    SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| io::Error::other("Could not create a credential proxy session"))?;
+    Ok(hex::encode(bytes))
+}
+
+async fn serve(
+    mut client: TcpStream,
+    credentials: HashMap<String, Arc<Credential>>,
+) -> io::Result<()> {
+    client.set_nodelay(true)?;
+    let header =
+        match tokio::time::timeout(HEADER_TIMEOUT, read_header(&mut client, MAX_HEADER)).await {
+            Err(_) => return response(&mut client, 408, "Request header timed out").await,
+            Ok(Ok(header)) => header,
+            Ok(Err(_)) => return response(&mut client, 400, "Invalid request").await,
+        };
+    let request = match parse_request(&header, &credentials) {
+        Ok(request) => request,
+        Err(RequestError::Unauthorized) => {
+            return response(&mut client, 407, "Credential proxy authentication required").await;
+        }
+        Err(RequestError::Invalid) => return response(&mut client, 400, "Invalid request").await,
+    };
+    if request.expect_continue {
+        client.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").await?;
+    }
+    let target = Target::parse(request.credential.provider.host(), false)?;
+    let mut socket = match super::host::connect(&target, false).await {
+        Ok(socket) => socket,
+        Err(_) => return response(&mut client, 502, "Provider connection failed").await,
+    };
+    socket.set_nonblocking(true)?;
+    let socket = TcpStream::from_std(socket)?;
+    let connector = match tls_connector() {
+        Ok(connector) => connector,
+        Err(_) => return response(&mut client, 502, "Provider connection failed").await,
+    };
+    let tls = match connector.connect(request.server_name, socket).await {
+        Ok(tls) => tls,
+        Err(_) => return response(&mut client, 502, "Provider connection failed").await,
+    };
+    let (mut remote_reader, mut remote_writer) = tokio::io::split(tls);
+    remote_writer
+        .write_all(request.upstream_header.as_bytes())
+        .await?;
+    let (mut client_reader, mut client_writer) = tokio::io::split(client);
+
+    let upload = async {
+        let mut limited = client_reader.take(request.body_limit);
+        let result = tokio::io::copy(&mut limited, &mut remote_writer).await;
+        let _ = remote_writer.shutdown().await;
+        result.map(|_| ())
+    };
+    let download = async {
+        let response_header = read_header(&mut remote_reader, MAX_HEADER).await?;
+        let response_header = close_response_connection(&response_header)?;
+        client_writer.write_all(&response_header).await?;
+        client_writer.flush().await?;
+        tokio::io::copy(&mut remote_reader, &mut client_writer).await?;
+        let _ = client_writer.shutdown().await;
+        Ok::<_, io::Error>(())
+    };
+    let _ = tokio::join!(upload, download);
+    Ok(())
+}
+
+struct Request {
+    credential: Arc<Credential>,
+    server_name: ServerName<'static>,
+    upstream_header: Zeroizing<String>,
+    body_limit: u64,
+    expect_continue: bool,
+}
+
+enum RequestError {
+    Invalid,
+    Unauthorized,
+}
+
+fn parse_request(
+    header: &[u8],
+    credentials: &HashMap<String, Arc<Credential>>,
+) -> Result<Request, RequestError> {
+    let text = std::str::from_utf8(header).map_err(|_| RequestError::Invalid)?;
+    let mut lines = text.split("\r\n");
+    let mut request_line = lines.next().ok_or(RequestError::Invalid)?.split(' ');
+    let method = request_line.next().ok_or(RequestError::Invalid)?;
+    let path = request_line.next().ok_or(RequestError::Invalid)?;
+    let version = request_line.next().ok_or(RequestError::Invalid)?;
+    if request_line.next().is_some()
+        || !matches!(method, "GET" | "POST")
+        || version != "HTTP/1.1"
+        || !path.starts_with('/')
+        || path
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte == b' ')
+    {
+        return Err(RequestError::Invalid);
+    }
+    let (route, upstream_path) = path[1..].split_once('/').ok_or(RequestError::Invalid)?;
+    let credential = credentials
+        .get(route)
+        .cloned()
+        .ok_or(RequestError::Invalid)?;
+    let upstream_path = format!("/{upstream_path}");
+    let mut headers = Vec::new();
+    let mut supplied_token = None;
+    let mut content_length = None;
+    let mut chunked = false;
+    let mut expect_continue = false;
+    for line in lines.take_while(|line| !line.is_empty()) {
+        let (name, value) = line.split_once(':').ok_or(RequestError::Invalid)?;
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+            || value
+                .bytes()
+                .any(|byte| (byte.is_ascii_control() && byte != b'\t') || byte == 127)
+        {
+            return Err(RequestError::Invalid);
+        }
+        let value = value.trim();
+        if name.eq_ignore_ascii_case("content-length") {
+            let length = value.parse::<u64>().map_err(|_| RequestError::Invalid)?;
+            if length > MAX_CONTENT_LENGTH {
+                return Err(RequestError::Invalid);
+            }
+            if content_length.replace(length).is_some() {
+                return Err(RequestError::Invalid);
+            }
+            headers.push((name.to_owned(), value.to_owned()));
+        } else if name.eq_ignore_ascii_case("transfer-encoding") {
+            if chunked || !value.eq_ignore_ascii_case("chunked") {
+                return Err(RequestError::Invalid);
+            }
+            chunked = true;
+            headers.push((name.to_owned(), value.to_owned()));
+        } else if name.eq_ignore_ascii_case("expect") {
+            if expect_continue || !value.eq_ignore_ascii_case("100-continue") {
+                return Err(RequestError::Invalid);
+            }
+            expect_continue = true;
+        } else if name.eq_ignore_ascii_case("authorization")
+            || name.eq_ignore_ascii_case("x-api-key")
+            || name.eq_ignore_ascii_case("anthropic-auth-token")
+        {
+            if supplied_token.replace(value.to_owned()).is_some() {
+                return Err(RequestError::Unauthorized);
+            }
+        } else if ![
+            "host",
+            "connection",
+            "proxy-connection",
+            "proxy-authorization",
+            "expect",
+        ]
+        .iter()
+        .any(|skip| name.eq_ignore_ascii_case(skip))
+        {
+            headers.push((name.to_owned(), value.to_owned()));
+        }
+    }
+    if chunked && content_length.is_some() {
+        return Err(RequestError::Invalid);
+    }
+    let supplied_token = supplied_token.ok_or(RequestError::Unauthorized)?;
+    let supplied_token = match credential.provider {
+        CredentialProvider::Openai => {
+            let (scheme, token) = supplied_token
+                .split_once(' ')
+                .ok_or(RequestError::Unauthorized)?;
+            if !scheme.eq_ignore_ascii_case("Bearer") || token.is_empty() {
+                return Err(RequestError::Unauthorized);
+            }
+            token
+        }
+        CredentialProvider::Anthropic => supplied_token.as_str(),
+    };
+    if ring::constant_time::verify_slices_are_equal(
+        supplied_token.as_bytes(),
+        credential.token.as_bytes(),
+    )
+    .is_err()
+    {
+        return Err(RequestError::Unauthorized);
+    }
+
+    let host = credential.provider.host().trim_end_matches(":443");
+    let mut upstream_header = format!("{method} {upstream_path} {version}\r\nHost: {host}\r\n");
+    for (name, value) in headers {
+        upstream_header.push_str(&name);
+        upstream_header.push_str(": ");
+        upstream_header.push_str(&value);
+        upstream_header.push_str("\r\n");
+    }
+    match credential.provider {
+        CredentialProvider::Openai => {
+            upstream_header.push_str("Authorization: Bearer ");
+            upstream_header.push_str(&credential.secret);
+            upstream_header.push_str("\r\n");
+        }
+        CredentialProvider::Anthropic => {
+            upstream_header.push_str("x-api-key: ");
+            upstream_header.push_str(&credential.secret);
+            upstream_header.push_str("\r\n");
+        }
+    }
+    upstream_header.push_str("Connection: close\r\n\r\n");
+    let server_name = ServerName::try_from(host.to_owned()).map_err(|_| RequestError::Invalid)?;
+    if method == "POST" && content_length.is_none() && !chunked {
+        return Err(RequestError::Invalid);
+    }
+    let body_limit = content_length.unwrap_or_else(|| if chunked { MAX_CONTENT_LENGTH } else { 0 });
+    Ok(Request {
+        credential,
+        server_name,
+        upstream_header: Zeroizing::new(upstream_header),
+        body_limit,
+        expect_continue,
+    })
+}
+
+fn tls_connector() -> io::Result<TlsConnector> {
+    let native = rustls_native_certs::load_native_certs();
+    let mut roots = RootCertStore::empty();
+    for certificate in native.certs {
+        roots.add(certificate).map_err(io::Error::other)?;
+    }
+    if roots.is_empty() {
+        return Err(io::Error::other("No trusted TLS certificates were found"));
+    }
+    let config = ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    Ok(TlsConnector::from(Arc::new(config)))
+}
+
+async fn read_header(reader: &mut (impl AsyncRead + Unpin), limit: usize) -> io::Result<Vec<u8>> {
+    let mut header = Vec::new();
+    while !header.ends_with(b"\r\n\r\n") {
+        if header.len() == limit {
+            return Err(io::Error::other("HTTP header exceeds the size limit"));
+        }
+        let mut byte = [0];
+        reader.read_exact(&mut byte).await?;
+        header.push(byte[0]);
+    }
+    Ok(header)
+}
+
+fn close_response_connection(header: &[u8]) -> io::Result<Vec<u8>> {
+    let text = std::str::from_utf8(header).map_err(io::Error::other)?;
+    let mut lines = text.split("\r\n");
+    let status = lines
+        .next()
+        .ok_or_else(|| io::Error::other("Invalid upstream response"))?;
+    let mut output = format!("{status}\r\n");
+    for line in lines.take_while(|line| !line.is_empty()) {
+        let (name, _) = line
+            .split_once(':')
+            .ok_or_else(|| io::Error::other("Invalid upstream response header"))?;
+        if !name.eq_ignore_ascii_case("connection")
+            && !name.eq_ignore_ascii_case("keep-alive")
+            && !name.eq_ignore_ascii_case("proxy-connection")
+        {
+            output.push_str(line);
+            output.push_str("\r\n");
+        }
+    }
+    output.push_str("Connection: close\r\n\r\n");
+    Ok(output.into_bytes())
+}
+
+async fn response(client: &mut TcpStream, status: u16, message: &str) -> io::Result<()> {
+    let body = message.as_bytes();
+    client
+        .write_all(
+            format!(
+                "HTTP/1.1 {status} {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                match status {
+                    408 => "Request Timeout",
+                    407 => "Proxy Authentication Required",
+                    502 => "Bad Gateway",
+                    _ => "Bad Request",
+                },
+                body.len()
+            )
+            .as_bytes(),
+        )
+        .await?;
+    client.write_all(body).await?;
+    client.shutdown().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn credentials(provider: CredentialProvider) -> HashMap<String, Arc<Credential>> {
+        HashMap::from([(
+            provider.route().to_owned(),
+            Arc::new(Credential {
+                provider,
+                secret: Zeroizing::new("real-secret".to_owned()),
+                token: Zeroizing::new("session-token".to_owned()),
+            }),
+        )])
+    }
+
+    #[test]
+    fn openai_proxy_replaces_phantom_token_and_pins_upstream_host() {
+        let request = parse_request(
+            b"POST /openai/v1/chat/completions?stream=true HTTP/1.1\r\nAuthorization: Bearer session-token\r\nHost: 127.0.0.1\r\nContent-Length: 2\r\n\r\n",
+            &credentials(CredentialProvider::Openai),
+        )
+        .unwrap();
+        assert!(request.upstream_header.contains("Host: api.openai.com\r\n"));
+        assert!(
+            request
+                .upstream_header
+                .contains("Authorization: Bearer real-secret\r\n")
+        );
+        assert!(
+            request
+                .upstream_header
+                .contains("/v1/chat/completions?stream=true")
+        );
+        assert!(!request.upstream_header.contains("session-token"));
+    }
+
+    #[test]
+    fn invalid_or_missing_session_token_is_rejected() {
+        let result = parse_request(
+            b"POST /openai/v1/chat/completions HTTP/1.1\r\nAuthorization: Bearer wrong\r\n\r\n",
+            &credentials(CredentialProvider::Openai),
+        );
+        assert!(matches!(result, Err(RequestError::Unauthorized)));
+    }
+
+    #[test]
+    fn bearer_scheme_is_case_insensitive_and_transfer_encoding_is_unique() {
+        let request = parse_request(
+            b"POST /openai/v1/chat/completions HTTP/1.1\r\nAuthorization: bEaReR session-token\r\nContent-Length: 0\r\n\r\n",
+            &credentials(CredentialProvider::Openai),
+        );
+        assert!(request.is_ok());
+
+        let duplicate = parse_request(
+            b"POST /openai/v1/chat/completions HTTP/1.1\r\nAuthorization: Bearer session-token\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n",
+            &credentials(CredentialProvider::Openai),
+        );
+        assert!(matches!(duplicate, Err(RequestError::Invalid)));
+    }
+
+    #[test]
+    fn post_requires_framed_body_and_get_without_body_does_not_wait_for_eof() {
+        let credentials = credentials(CredentialProvider::Openai);
+        let missing_length = parse_request(
+            b"POST /openai/v1/chat/completions HTTP/1.1\r\nAuthorization: Bearer session-token\r\n\r\n",
+            &credentials,
+        );
+        assert!(matches!(missing_length, Err(RequestError::Invalid)));
+
+        let get = parse_request(
+            b"GET /openai/v1/models HTTP/1.1\r\nAuthorization: Bearer session-token\r\n\r\n",
+            &credentials,
+        )
+        .unwrap();
+        assert_eq!(get.body_limit, 0);
+    }
+}

@@ -117,6 +117,7 @@ fn schema() -> io::Result<i32> {
             "pass_env": {"type": "array", "items": {"type": "string"}},
             "env_credentials": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
             "runtime_groups": {"type": "array", "uniqueItems": true, "items": {"enum": ["node", "python", "rust", "go"]}},
+            "credentials": {"type": "array", "uniqueItems": true, "items": {"enum": ["openai", "anthropic"]}},
             "cpus": {"type": "integer", "minimum": 1},
             "memory_mib": {"type": "integer", "minimum": 1},
             "pids": {"type": "integer", "minimum": 1},

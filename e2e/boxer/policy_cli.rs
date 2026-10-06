@@ -179,6 +179,7 @@ fn policy_schema_describes_the_supported_policy_fields() {
         "pass_env",
         "env_credentials",
         "runtime_groups",
+        "credentials",
         "cpus",
         "memory_mib",
         "pids",

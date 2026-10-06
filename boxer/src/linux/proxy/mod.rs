@@ -1,3 +1,4 @@
+pub mod credential;
 mod guest;
 mod host;
 mod ipc;

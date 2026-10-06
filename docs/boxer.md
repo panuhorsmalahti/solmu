@@ -121,9 +121,26 @@ macOS, Credential Manager on Windows, and Secret Service on Linux). On Linux,
 a Secret Service provider must be available to the user session.
 
 This makes the value easier to manage and avoids exposing it in Boxer command
-arguments. It is still present in the agent's environment and available to that
-agent and its child processes; use a credential proxy when the agent must not
-read the credential itself.
+arguments. The value is still present in the agent's environment and available
+to that agent and its child processes.
+
+For Linux launches, use `--credential` to keep the real provider key outside
+the agent process. Boxer sends provider requests through a local proxy, gives
+the agent a random session token, and adds the real key to the upstream HTTPS
+request:
+
+```sh
+boxer credential set OPENAI_API_KEY
+boxer --profile solmu --isolated --network proxy --credential openai \
+  --cwd /path/to/project -- solmu
+```
+
+The matching provider host is allowed automatically. Use
+`--credential anthropic` with a stored `ANTHROPIC_API_KEY` for Anthropic. This
+requires Linux isolated mode with routed networking; other network destinations
+still need explicit routes. The local broker verifies the session token and
+does not print the stored key. The agent can make requests through the broker,
+but the key itself is not in its environment.
 
 ### Give access to an installed toolchain
 
@@ -366,8 +383,9 @@ mode and resource options override file values, and `--read-only` and
 The required fields are `version: 1` and `mode`, which is `unrestricted`,
 `workspace`, or `isolated`. Optional fields are `read_only`, `read`, `write`,
 `network` (`allow`, `deny`, or `proxy`), `network_profile`, `hosts`, `local`, `publish`, `clean_env`,
-`pass_env`, `env_credentials`, `runtime_groups`, `cpus`, `memory_mib`, `pids`,
-and `cgroup_root`. Runtime groups are `node`, `python`, `rust`, and `go`.
+`pass_env`, `env_credentials`, `credentials`, `runtime_groups`, `cpus`,
+`memory_mib`, `pids`, and `cgroup_root`. Proxy credentials are `openai` and
+`anthropic`; runtime groups are `node`, `python`, `rust`, and `go`.
 Unknown or duplicate fields, invalid values, missing grant paths, and files over 1 MB are
 rejected before launch. Resource controls require `isolated` mode.
 
