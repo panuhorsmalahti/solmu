@@ -83,6 +83,8 @@ All Solmu conversation commands work inside panes, including `/stop` and `/exit`
 
 Run `muxer --help` or read the [muxer guide](../docs/muxer.md) for workspace
 selection, configuration, shortcuts, and session lifetime.
+Install shell completions with `muxer completion bash|zsh|fish|powershell`;
+the guide has commands for saving them to each shell's startup location.
 For source builds, see [development](../docs/development.md).
 
 ![Solmu client screenshot](../docs/screenshots/muxer.png)

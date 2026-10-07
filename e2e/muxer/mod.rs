@@ -324,6 +324,7 @@ mod tasks;
 mod tools;
 
 mod commands;
+mod completions;
 mod mcp;
 mod plugins;
 mod skills;

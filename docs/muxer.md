@@ -257,3 +257,26 @@ Use `/tasks` in a Solmu pane to browse [scheduled tasks](tasks.md). `/task`
 creates and manages them.
 
 ![Tasks in a Muxer pane](screenshots/muxer-tasks.png)
+
+## Shell completions
+
+Muxer can generate completion scripts for Bash, Zsh, Fish, and PowerShell:
+
+```sh
+muxer completion bash > ~/.local/share/bash-completion/completions/muxer
+muxer completion zsh > ~/.zfunc/_muxer
+muxer completion fish > ~/.config/fish/completions/muxer.fish
+```
+
+Add `~/.zfunc` to Zsh's `fpath` before `compinit` if it is not already there.
+Fish loads the saved file automatically. For Bash, reload your shell or source
+the generated file.
+
+In PowerShell, append the generated registration to your profile:
+
+```powershell
+muxer completion powershell | Out-File -Append -Encoding utf8 $PROFILE
+```
+
+Restart the shell after installing its completion script. Completion suggests
+Muxer's top-level commands and the available actions for each command group.

@@ -273,6 +273,7 @@ pub fn key_bytes(keys: &[String]) -> Result<Vec<u8>, String> {
 }
 
 pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
+  muxer completion bash|zsh|fish|powershell
   muxer status | api snapshot
   muxer api request '{\"method\":\"snapshot\"}'
   muxer space list|get ID|focus ID|rename ID NAME|close ID
@@ -791,6 +792,19 @@ pub fn cli(values: Vec<OsString>) -> bool {
     let Some(group) = values.first().and_then(|v| v.to_str()) else {
         return false;
     };
+    if group == "completion" {
+        let Some(shell) = values.get(1).and_then(|value| value.to_str()) else {
+            failure("Usage: muxer completion bash|zsh|fish|powershell", 2);
+        };
+        if values.len() != 2 {
+            failure("Usage: muxer completion bash|zsh|fish|powershell", 2);
+        }
+        match completion(shell) {
+            Ok(script) => print!("{script}"),
+            Err(error) => failure(error, 2),
+        }
+        return true;
+    }
     if !matches!(
         group,
         "space" | "tab" | "pane" | "api" | "status" | "events" | "agent" | "terminal"
@@ -840,6 +854,100 @@ pub fn cli(values: Vec<OsString>) -> bool {
     }
     true
 }
+
+fn completion(shell: &str) -> Result<&'static str, &'static str> {
+    match shell {
+        "bash" => Ok(BASH_COMPLETION),
+        "zsh" => Ok(ZSH_COMPLETION),
+        "fish" => Ok(FISH_COMPLETION),
+        "powershell" | "pwsh" => Ok(POWERSHELL_COMPLETION),
+        _ => Err("Choose bash, zsh, fish, or powershell"),
+    }
+}
+
+const BASH_COMPLETION: &str = r#"_muxer_completions() {
+  local cur group action candidates
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  group="${COMP_WORDS[1]}"
+  action="${COMP_WORDS[2]}"
+  case "$group:$action" in
+    space:*) candidates="list get create focus rename close" ;;
+    tab:*) candidates="list get create focus rename close" ;;
+    pane:*) candidates="list get split focus rename close swap zoom resize restart read send-text send-keys wait wait-output" ;;
+    agent:*) candidates="list get read focus rename send-keys prompt wait turn stop" ;;
+    terminal:*) candidates="attach session" ;;
+    server:*) candidates="start status stop" ;;
+    session:*) candidates="list attach" ;;
+    events:*) candidates="--pane --timeout --count --json" ;;
+    status:*) candidates="server" ;;
+    api:*) candidates="snapshot request" ;;
+    completion:*) candidates="bash zsh fish powershell" ;;
+    *) candidates="space tab pane api status events agent terminal session server completion --help --version --default-config --session --cwd --foreground" ;;
+  esac
+  COMPREPLY=( $(compgen -W "$candidates" -- "$cur") )
+}
+complete -F _muxer_completions muxer
+"#;
+
+const ZSH_COMPLETION: &str = r#"#compdef muxer
+local -a commands
+commands=(space tab pane api status events agent terminal session server completion)
+if (( CURRENT == 2 )); then
+  _describe 'command' commands
+else
+  case "$words[2]" in
+    space|tab) _values 'action' list get create focus rename close ;;
+    pane) _values 'action' list get split focus rename close swap zoom resize restart read send-text send-keys wait wait-output ;;
+    agent) _values 'action' list get read focus rename send-keys prompt wait turn stop ;;
+    terminal) _values 'action' attach session ;;
+    server) _values 'action' start status stop ;;
+    session) _values 'action' list attach ;;
+    status) _values 'action' server ;;
+    api) _values 'action' snapshot request ;;
+    completion) _values 'shell' bash zsh fish powershell ;;
+  esac
+fi
+"#;
+
+const FISH_COMPLETION: &str = r#"complete -c muxer -f -n '__fish_use_subcommand' -a 'space tab pane api status events agent terminal session server completion'
+complete -c muxer -f -n '__fish_seen_subcommand_from space' -a 'list get create focus rename close'
+complete -c muxer -f -n '__fish_seen_subcommand_from tab' -a 'list get create focus rename close'
+complete -c muxer -f -n '__fish_seen_subcommand_from pane' -a 'list get split focus rename close swap zoom resize restart read send-text send-keys wait wait-output'
+complete -c muxer -f -n '__fish_seen_subcommand_from agent' -a 'list get read focus rename send-keys prompt wait turn stop'
+complete -c muxer -f -n '__fish_seen_subcommand_from terminal' -a 'attach session'
+complete -c muxer -f -n '__fish_seen_subcommand_from server' -a 'start status stop'
+complete -c muxer -f -n '__fish_seen_subcommand_from session' -a 'list attach'
+complete -c muxer -f -n '__fish_seen_subcommand_from status' -a 'server'
+complete -c muxer -f -n '__fish_seen_subcommand_from api' -a 'snapshot request'
+complete -c muxer -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
+"#;
+
+const POWERSHELL_COMPLETION: &str = r#"Register-ArgumentCompleter -Native -CommandName muxer -ScriptBlock {
+  param($wordToComplete, $commandAst, $cursorPosition)
+  $words = @($commandAst.CommandElements | ForEach-Object { $_.ToString() })
+  $candidates = switch ($words.Count) {
+    1 { 'space tab pane api status events agent terminal session server completion --help --version --default-config --session --cwd --foreground' }
+    default {
+      switch ($words[1]) {
+        { $_ -in 'space', 'tab' } { 'list get create focus rename close' }
+        'pane' { 'list get split focus rename close swap zoom resize restart read send-text send-keys wait wait-output' }
+        'agent' { 'list get read focus rename send-keys prompt wait turn stop' }
+        'terminal' { 'attach session' }
+        'server' { 'start status stop' }
+        'session' { 'list attach' }
+        'status' { 'server' }
+        'api' { 'snapshot request' }
+        'completion' { 'bash zsh fish powershell' }
+        default { '' }
+      }
+    }
+  }
+  $candidates -split ' ' | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+    [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+  }
+}
+"#;
+
 pub fn success(result: Value) -> Value {
     json!({"ok": true, "result": result})
 }
