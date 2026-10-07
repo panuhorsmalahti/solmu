@@ -309,7 +309,7 @@ fn executable_identity(pid: libc::pid_t, path: &[u8]) -> Option<ExecutableIdenti
     } else {
         PathBuf::from(format!("/proc/{pid}/cwd")).join(requested)
     };
-    let metadata = fs::metadata(fs::canonicalize(&remote).ok()?)
+    let metadata = fs::metadata(&remote)
         .or_else(|_| {
             if requested.is_absolute() {
                 fs::metadata(requested)
