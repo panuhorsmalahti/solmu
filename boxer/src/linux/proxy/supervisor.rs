@@ -311,7 +311,7 @@ fn root() -> io::Result<PathBuf> {
         }
     }
     private_directory(&root)?;
-    Ok(root.canonicalize()?)
+    root.canonicalize()
 }
 
 fn directory(id: &str) -> io::Result<PathBuf> {
