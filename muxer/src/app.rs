@@ -101,7 +101,7 @@ struct SavedPane {
 }
 impl Snapshot {
     pub fn validate(&self) -> Result<(), Box<dyn Error>> {
-        if !matches!(self.version, 1 | 2 | 3) {
+        if !matches!(self.version, 1..=3) {
             return Err("Saved session requires a different Muxer version".into());
         }
         if self.spaces.len() > 8 || self.panes.len() > 512 {
@@ -2351,15 +2351,14 @@ fn space_title(space: &Space) -> String {
             .clone()
             .unwrap_or_else(|| format!("{repository} · {}", worktree.branch));
     }
-    let title = space.name.clone().unwrap_or_else(|| {
+    space.name.clone().unwrap_or_else(|| {
         space
             .directory
             .file_name()
             .unwrap_or(space.directory.as_os_str())
             .to_string_lossy()
             .into_owned()
-    });
-    title
+    })
 }
 fn display_directory(path: &Path) -> String {
     let value = path.to_string_lossy();
