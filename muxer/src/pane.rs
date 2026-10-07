@@ -138,7 +138,7 @@ impl Pane {
         if launch.solmu()
             && let Some(thread) = &thread
         {
-            command.arg("--thread");
+            command.arg("--resume");
             command.arg(thread);
         }
         command.cwd(process_directory(&directory));

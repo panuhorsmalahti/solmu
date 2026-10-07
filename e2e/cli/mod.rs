@@ -19,7 +19,7 @@ impl Terminal {
     fn start_in(backend: &Backend, isolated: bool) -> Self {
         Self::start_with_options(backend, isolated, None)
     }
-    fn start_with_thread(backend: &Backend, thread: &str) -> Self {
+    fn start_with_resume(backend: &Backend, thread: &str) -> Self {
         Self::start_with_options(backend, false, Some(thread))
     }
     fn start_with_options(backend: &Backend, isolated: bool, thread: Option<&str>) -> Self {
@@ -61,8 +61,10 @@ impl Terminal {
             command.arg(binary("solmu"));
         }
         if let Some(thread) = thread {
-            command.arg("--thread");
-            command.arg(thread);
+            command.arg("--resume");
+            if !thread.is_empty() {
+                command.arg(thread);
+            }
         }
         command.cwd(backend.directory.path());
         command.env("SOLMU_BACKEND_URL", &backend.url);

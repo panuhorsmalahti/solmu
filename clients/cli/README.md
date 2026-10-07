@@ -31,8 +31,9 @@ solmu
 The default backend is `http://127.0.0.1:3000`. Set `SOLMU_BACKEND_URL` in `.env`
 or your shell to connect elsewhere. Provider keys belong to the backend.
 
-Use `solmu --thread <id>` to reopen a conversation without creating another.
-Find IDs with `/threads`.
+Use `solmu --resume <id>` to reopen a conversation without creating another.
+Run `solmu --resume` to choose a conversation by name with Up and Down. Find IDs
+with `/threads`.
 `solmu --help` shows startup options; `--version` shows the installed version.
 
 ## Use

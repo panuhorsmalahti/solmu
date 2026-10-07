@@ -7,7 +7,8 @@ With the backend already running, run the installed `solmu` command from the
 folder you want to work in. See [installation](../clients/cli/README.md#install).
 The CLI connects to `SOLMU_BACKEND_URL`, defaulting to `http://127.0.0.1:3000`,
 and creates a new conversation by default. To reopen a saved conversation at
-startup, use `solmu --thread <id>`. This does not create another thread.
+startup, use `solmu --resume <id>`. To choose by conversation name, run
+`solmu --resume`, move with Up/Down, then press Enter. Esc starts a new conversation.
 `solmu --help` shows startup options.
 
 Type a message and press Enter to receive a streamed reply. Conversations and

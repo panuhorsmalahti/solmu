@@ -52,6 +52,7 @@ Set `SOLMU_CAPTURE_SCREENSHOTS=1` when running Rust and browser e2e tests to
 refresh the README screenshots in `docs/screenshots/`.
 The CLI test records its real terminal cells into `artifacts/cli.html`;
 run `node scripts/capture-cli.mjs` to render it into `docs/screenshots/cli.png`.
+The CLI startup chooser is also covered by its startup E2E test.
 Muxer tests capture `artifacts/muxer.html`; run
 `node scripts/capture-cli.mjs muxer` for `docs/screenshots/muxer.png`.
 The native prompt queue test captures `artifacts/muxer-automation.html`;

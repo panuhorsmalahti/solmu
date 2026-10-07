@@ -148,7 +148,7 @@ test('Docs is linked from the website and every Markdown guide is published', as
   const source = await readFile(join(repository, 'docs/cli.md'), 'utf8')
   expect(source).toContain('# Terminal client')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Terminal client')
-  await expect(page.locator('article')).toContainText('solmu --thread')
+  await expect(page.locator('article')).toContainText('solmu --resume')
   const image = page.locator('article img[alt="Solmu client screenshot"]')
   await expect(image).toHaveAttribute('src', '../../screenshots/cli.png')
   await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)

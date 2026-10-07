@@ -44,12 +44,12 @@ const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut thread = None;
-    let mut args = std::env::args().skip(1);
+    let mut args = std::env::args().skip(1).peekable();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" | "-h" => {
                 println!(
-                    "Solmu CLI\n\nUsage: solmu [--thread ID]\n\nBy default, create a conversation in the current directory.\n--thread ID opens an existing conversation without creating another.\nSOLMU_BACKEND_URL defaults to http://127.0.0.1:3000.\nUse /help for conversation commands; Ctrl+L redraws the terminal."
+                    "Solmu CLI\n\nUsage: solmu [--resume [ID]]\n\nBy default, create a conversation in the current directory.\n--resume ID opens an existing conversation; --resume opens a conversation chooser.\nSOLMU_BACKEND_URL defaults to http://127.0.0.1:3000.\nUse /help for conversation commands; Ctrl+L redraws the terminal."
                 );
                 return Ok(());
             }
@@ -57,12 +57,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 println!("Solmu CLI {}", env!("CARGO_PKG_VERSION"));
                 return Ok(());
             }
-            "--thread" => {
-                let id = args.next().ok_or("--thread requires a conversation ID")?;
-                if id.len() != 36 || !id.chars().all(|ch| ch.is_ascii_hexdigit() || ch == '-') {
-                    return Err("Invalid conversation ID".into());
+            "--resume" => {
+                if let Some(id) = args.next_if(|arg| !arg.starts_with('-')) {
+                    if id.len() != 36 || !id.chars().all(|ch| ch.is_ascii_hexdigit() || ch == '-') {
+                        return Err("Invalid conversation ID".into());
+                    }
+                    thread = Some(id);
+                } else {
+                    thread = Some(String::new());
                 }
-                thread = Some(id);
             }
             _ => return Err("Unknown option; use solmu --help".into()),
         }
@@ -154,8 +157,10 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
         let (settings_sender, mut settings_receiver) = mpsc::unbounded_channel();
         let mut page: Option<settings::Page> = None;
         let (sender, mut receiver) = mpsc::unbounded_channel();
-        let mut startup_thread = thread.clone();
-        let initial = thread.map(Action::Open).unwrap_or_else(|| Action::New("New conversation".into()));
+        let mut startup_thread = thread.clone().filter(|id| !id.is_empty());
+        let mut chooser = thread.as_ref().is_some_and(String::is_empty);
+        let mut chooser_selection = 0usize;
+        let initial = if chooser { Action::List } else { thread.map(Action::Open).unwrap_or_else(|| Action::New("New conversation".into())) };
         let mut active = launch(&mut session, initial, &sender, &mut runtime);
         let mut events = EventStream::new();
         let mut input = String::new();
@@ -196,7 +201,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                     reported_metadata = metadata;
                 }
             }
-            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame, &session.skills, &session.mcp, &session.plugins); } else { draw(frame, &session, &input, show_threads, scroll, spinner, (connected, task_notice.as_deref())); draw_commands(frame, &input, command_selection); })?;
+            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame, &session.skills, &session.mcp, &session.plugins); } else { draw(frame, &session, &input, show_threads, scroll, spinner, (connected, task_notice.as_deref()), chooser, chooser_selection); draw_commands(frame, &input, command_selection); })?;
             let can_submit = !session.busy;
             tokio::select! {
                 Some(command) = bridge.receiver.recv() => {
@@ -239,6 +244,9 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                     if matches!(update, Update::Opened(_, _)) { startup_thread = None; }
                     runtime.update(&update);
                     session.apply(update);
+                    if chooser {
+                        chooser_selection = chooser_selection.min(session.threads.len().saturating_sub(1));
+                    }
                     if !session.busy && pending_refresh { pending_refresh = false; active = launch(&mut session, Action::Refresh, &sender, &mut runtime); }
                 },
                 event = async {
@@ -253,6 +261,25 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                         continue;
                     }
                     if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c' | 'd')) { break; }
+                    if chooser {
+                        if session.busy { continue; }
+                        match key.code {
+                            KeyCode::Up if !session.threads.is_empty() => chooser_selection = chooser_selection.saturating_sub(1),
+                            KeyCode::Down if !session.threads.is_empty() => chooser_selection = (chooser_selection + 1).min(session.threads.len() - 1),
+                            KeyCode::Enter if !session.threads.is_empty() => {
+                                chooser = false;
+                                let id = session.threads[chooser_selection].id.clone();
+                                startup_thread = Some(id.clone());
+                                active = launch(&mut session, Action::Open(id), &sender, &mut runtime);
+                            }
+                            KeyCode::Enter | KeyCode::Esc => {
+                                chooser = false;
+                                active = launch(&mut session, Action::New("New conversation".into()), &sender, &mut runtime);
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
                     if let Some(current_page) = &mut page {
                         if session.busy && key.code == KeyCode::Enter && matches!(current_page, settings::Page::Models { .. }) { pending_enter = Some(Event::Key(key)); continue; }
                         match current_page.key(key) {
@@ -379,6 +406,8 @@ fn draw(
     scroll: u16,
     spinner: usize,
     status: (bool, Option<&str>),
+    chooser: bool,
+    chooser_selection: usize,
 ) {
     let (connected, task_notice) = status;
     let embedded = std::env::var_os("SOLMU_MUXER").is_some();
@@ -437,7 +466,34 @@ fn draw(
         header,
     );
     let mut lines = Vec::new();
-    if show_threads {
+    if chooser {
+        lines.push(Line::from(
+            "Resume a conversation · Up/Down to choose · Enter to open · Esc for new"
+                .cyan()
+                .bold(),
+        ));
+        for (index, thread) in session.threads.iter().enumerate() {
+            let line = format!(
+                "{}  {}",
+                if index == chooser_selection {
+                    "›"
+                } else {
+                    " "
+                },
+                thread.title
+            );
+            lines.push(if index == chooser_selection {
+                Line::from(line.cyan().bold())
+            } else {
+                Line::from(line)
+            });
+        }
+        if session.threads.is_empty() {
+            lines.push(Line::from(
+                "No saved conversations. Press Enter to start a new one.",
+            ));
+        }
+    } else if show_threads {
         lines.push(Line::from(
             "Conversations · /open <id> to continue".cyan().bold(),
         ));
