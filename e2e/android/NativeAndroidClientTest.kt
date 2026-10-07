@@ -75,6 +75,7 @@ class NativeAndroidClientTest {
                     }
                     path == "/api/v1/models" -> jsonResponse("""{"provider":"OpenAI","default_model":"gpt-6-sol","models":[{"id":"gpt-6-sol","name":"GPT 6 Sol"}]}""")
                     path == "/api/v1/audit" -> jsonResponse("""{"items":[],"next_cursor":null,"cache_24h":{"requests":2,"input_tokens":100,"output_tokens":20,"cached_input_tokens":40,"cache_creation_input_tokens":5,"hit_rate_percent":40.0}}""")
+                    path == "/api/v1/memories" -> jsonResponse("""{"items":[{"id":"memory-android","content":"My cat is named Miso","created_at":"2026-10-07T00:00:00Z","updated_at":"2026-10-07T00:00:00Z"}],"limit":30,"offset":0,"has_more":false}""")
                     path == "/api/v1/tasks" && request.method == "GET" -> jsonResponse("""{"items":${if (taskCreated.get()) "[${task()}]" else "[]"},"limit":10,"offset":0}""")
                     path == "/api/v1/tasks" && request.method == "POST" -> { taskCreated.set(true); jsonResponse(task()) }
                     path == "/api/v1/webhooks" && request.method == "GET" -> jsonResponse("""${if (webhookCreated.get()) "[${webhook()}]" else "[]"}""")
@@ -134,6 +135,12 @@ class NativeAndroidClientTest {
         compose.onNodeWithText("Create task").performScrollTo().performClick()
         compose.waitUntil(conditionDescription = "the scheduled task is created", timeoutMillis = 30_000) { taskCreated.get() }
 
+        compose.onNodeWithTag("nav-More").performClick()
+        compose.onNodeWithText("Memories").performClick()
+        compose.onNodeWithText("My cat is named Miso").assertIsDisplayed()
+        compose.onNodeWithText("Saved 2026-10-07T00:00:00Z").assertIsDisplayed()
+        val memoryScreenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        FileOutputStream(File(context.filesDir, "android-memories-e2e.png")).use { assertTrue(memoryScreenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
         compose.onNodeWithTag("nav-More").performClick()
         compose.onNodeWithText("Webhooks").performClick()
         compose.onAllNodes(hasSetTextAction()).get(0).performScrollTo().performTextInput("Android webhook")

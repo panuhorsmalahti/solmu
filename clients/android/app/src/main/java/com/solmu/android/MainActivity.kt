@@ -207,6 +207,10 @@ private class SolmuModel(
     var auditCursor by mutableStateOf<Long?>(null)
     var auditCache by mutableStateOf<JSONObject?>(null)
     var auditLoading by mutableStateOf(false)
+    var memories by mutableStateOf<List<JSONObject>>(emptyList())
+    var memoryOffset by mutableIntStateOf(0)
+    var memoryHasMore by mutableStateOf(true)
+    var memoriesLoading by mutableStateOf(false)
     var tasks by mutableStateOf<List<JSONObject>>(emptyList())
     var webhooks by mutableStateOf<List<JSONObject>>(emptyList())
     var notice by mutableStateOf("")
@@ -242,6 +246,7 @@ private class SolmuModel(
             loadCatalog()
             if (current != null) loadThread(current!!.id, preserveDraft = true)
             if (page == "Audit") loadAudit(reset = true)
+            if (page == "Memories") loadMemories(reset = true)
             if (page == "Tasks") loadTasks()
             if (page == "Webhooks") loadWebhooks()
             if (page == "Skills") loadSkills()
@@ -263,6 +268,7 @@ private class SolmuModel(
             "skills_changed" -> if (page == "Skills") loadSkills()
             "mcp_changed" -> if (page == "MCP") loadMcp()
             "plugins_changed" -> if (page == "Plugins") loadPlugins()
+            "memories_changed" -> if (page == "Memories") loadMemories(reset = true)
         }
     }
 
@@ -402,6 +408,18 @@ private class SolmuModel(
     suspend fun loadPlugins() { current?.let { plugins = api.get("/threads/${it.id}/plugins") } }
     suspend fun loadTasks() { tasks = api.list("/tasks?limit=100") }
     suspend fun loadWebhooks() { webhooks = api.list("/webhooks") }
+    suspend fun loadMemories(reset: Boolean = false) {
+        if (memoriesLoading || (!reset && !memoryHasMore)) return
+        memoriesLoading = true
+        try {
+            val offset = if (reset) 0 else memoryOffset
+            val page = api.get("/memories?limit=30&offset=$offset")
+            val incoming = page.array("items")
+            memories = if (reset) incoming else memories + incoming
+            memoryOffset = offset + incoming.size
+            memoryHasMore = page.bool("has_more")
+        } finally { memoriesLoading = false }
+    }
 
     suspend fun loadAudit(reset: Boolean = false) {
         if (auditLoading || (!reset && auditCursor == null && audit.isNotEmpty())) return
@@ -437,7 +455,7 @@ private fun SolmuApplication(server: String, onChangeServer: () -> Unit) {
             NavigationBar(containerColor = Color.White) {
                 bottomDestinations.forEach { destination ->
                     NavigationBarItem(
-                        selected = model.page == destination || (model.page in listOf("Webhooks", "Skills", "MCP", "Plugins") && destination == "More"),
+                selected = model.page == destination || (model.page in listOf("Webhooks", "Skills", "MCP", "Plugins", "Memories") && destination == "More"),
                         onClick = { if (destination == "Chat" && model.page != "Chat") model.page = "Chat" else model.page = destination },
                         modifier = Modifier.testTag("nav-$destination"),
                         icon = { Text(when (destination) { "Chat" -> "◌"; "Profile" -> "○"; "Audit" -> "≡"; "Tasks" -> "◷"; else -> "···" }, fontSize = 20.sp) },
@@ -456,6 +474,7 @@ private fun SolmuApplication(server: String, onChangeServer: () -> Unit) {
                 "Chat" -> ConversationScreen(model)
                 "Profile" -> ProfileScreen(model)
                 "Audit" -> AuditScreen(model)
+                "Memories" -> MemoriesScreen(model)
                 "Tasks" -> TasksScreen(model)
                 "More" -> MoreScreen(model)
                 "Webhooks" -> WebhooksScreen(model)
@@ -780,6 +799,40 @@ private fun AuditCard(entry: JSONObject) {
 }
 
 @Composable
+private fun MemoriesScreen(model: SolmuModel) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(Unit) { runCatching { model.loadMemories(reset = true) }.onFailure { model.error = it.message.orEmpty() } }
+    LaunchedEffect(listState, model.memories.size, model.memoryHasMore, model.memoriesLoading) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
+            if (last >= model.memories.size - 3 && model.memoryHasMore && !model.memoriesLoading) runCatching { model.loadMemories() }.onFailure { model.error = it.message.orEmpty() }
+        }
+    }
+    LaunchedEffect(listState, model.memories.size, model.memoryHasMore, model.memoriesLoading) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
+            if (last >= model.memories.size - 3 && model.memoryHasMore && !model.memoriesLoading) runCatching { model.loadMemories() }.onFailure { model.error = it.message.orEmpty() }
+        }
+    }
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp), state = listState, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 20.dp)) {
+        item {
+            Text("WHAT SOLMU REMEMBERS", color = SolmuGreen, fontSize = 10.sp, letterSpacing = 1.4.sp)
+            Text("Memories", fontFamily = FontFamily.Serif, fontSize = 38.sp)
+            Text("Saved facts that can be recalled in any conversation when relevant.", color = SolmuMuted, lineHeight = 21.sp)
+        }
+        if (model.memories.isEmpty() && !model.memoriesLoading) item { Text("No saved memories yet.", color = SolmuMuted) }
+        items(model.memories, key = { it.string("id") }) { memory ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, SolmuBorder)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(memory.string("content"), lineHeight = 22.sp)
+                    Text("Saved ${memory.string("created_at")}", color = SolmuMuted, fontSize = 11.sp)
+                }
+            }
+        }
+        if (model.memoriesLoading) item { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+        if (!model.memoryHasMore && model.memories.isNotEmpty()) item { Text("You’re up to date.", color = SolmuMuted, fontSize = 12.sp) }
+    }
+}
+
+@Composable
 private fun TasksScreen(model: SolmuModel) {
     var name by remember { mutableStateOf("") }
     var prompt by remember { mutableStateOf("") }
@@ -905,8 +958,8 @@ private fun WebhookCard(model: SolmuModel, hook: JSONObject) {
 @Composable
 private fun MoreScreen(model: SolmuModel) {
     PageColumn(title = "More", subtitle = "Workspace status and agent settings.") {
-        listOf("Skills" to "Installed workspace instructions", "MCP" to "Connected servers and tools", "Plugins" to "Installed Agent Plugins", "Webhooks" to "External triggers").forEach { (name, description) ->
-            Card(Modifier.fillMaxWidth().clickable { model.page = name; model.launch { when (name) { "Skills" -> model.loadSkills(); "MCP" -> model.loadMcp(); "Plugins" -> model.loadPlugins(); "Webhooks" -> model.loadWebhooks() } } }, colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, SolmuBorder)) {
+        listOf("Memories" to "Saved facts recalled across conversations", "Skills" to "Installed workspace instructions", "MCP" to "Connected servers and tools", "Plugins" to "Installed Agent Plugins", "Webhooks" to "External triggers").forEach { (name, description) ->
+            Card(Modifier.fillMaxWidth().clickable { model.page = name; model.launch { when (name) { "Memories" -> model.loadMemories(reset = true); "Skills" -> model.loadSkills(); "MCP" -> model.loadMcp(); "Plugins" -> model.loadPlugins(); "Webhooks" -> model.loadWebhooks() } } }, colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, SolmuBorder)) {
                 Column(Modifier.padding(16.dp)) { Text(name, fontWeight = FontWeight.SemiBold, fontSize = 17.sp); Text(description, color = SolmuMuted, fontSize = 13.sp) }
             }
         }

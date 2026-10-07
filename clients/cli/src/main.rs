@@ -16,9 +16,29 @@ use tokio::sync::mpsc;
 mod settings;
 
 const COMMANDS: &[&str] = &[
-    "/new", "/threads", "/open", "/model", "/profile", "/audit", "/tasks", "/task", "/goal",
-    "/skills", "/mcp", "/plugins", "/rename", "/delete", "/status", "/export", "/copy", "/context",
-    "/compact", "/help", "/stop", "/exit",
+    "/new",
+    "/threads",
+    "/open",
+    "/model",
+    "/profile",
+    "/memories",
+    "/audit",
+    "/tasks",
+    "/task",
+    "/goal",
+    "/skills",
+    "/mcp",
+    "/plugins",
+    "/rename",
+    "/delete",
+    "/status",
+    "/export",
+    "/copy",
+    "/context",
+    "/compact",
+    "/help",
+    "/stop",
+    "/exit",
 ];
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -189,12 +209,14 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                         Connection::Disconnected => connected = false,
                         Connection::TasksChanged => { if page.as_ref().is_some_and(settings::Page::is_tasks) { settings::tasks(session.api.clone(), settings_sender.clone()); } },
                         Connection::GoalsChanged => {},
+                        Connection::MemoriesChanged => { if matches!(page, Some(settings::Page::Memories { .. })) { page = Some(settings::Page::memories()); settings::memories(session.api.clone(), 0, settings_sender.clone()); } },
                         Connection::Connected | Connection::Changed => {
                             connected = true;
                             if page.as_ref().is_some_and(settings::Page::is_tasks) { settings::tasks(session.api.clone(), settings_sender.clone()); }
                             if let Some(cursor) = page.as_ref().and_then(settings::Page::audit_cursor) {
                                 settings::audit(session.api.clone(), cursor, settings_sender.clone());
                             }
+                            if matches!(page, Some(settings::Page::Memories { .. })) { page = Some(settings::Page::memories()); settings::memories(session.api.clone(), 0, settings_sender.clone()); }
                             if session.busy { pending_refresh = true; } else { active = launch(&mut session, Action::Refresh, &sender, &mut runtime); }
                         }
                     }
@@ -238,6 +260,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             settings::Action::Save(text, model) => settings::save(session.api.clone(), text, model, settings_sender.clone()),
                             settings::Action::Model(model) => { page = None; active = launch(&mut session, Action::Model(model), &sender, &mut runtime); },
                             settings::Action::AuditLoad(before) => settings::audit(session.api.clone(), before, settings_sender.clone()),
+                            settings::Action::MemoriesLoad(offset) => settings::memories(session.api.clone(), offset, settings_sender.clone()),
                             settings::Action::None => {},
                         }
                         continue;
@@ -272,6 +295,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                             if text == "/stop" { stop(&mut session, &mut active, &sender, &mut runtime); input.clear(); continue; }
                             if text == "/audit" { input.clear(); page = Some(settings::Page::audit()); settings::audit(session.api.clone(), None, settings_sender.clone()); continue; }
                             if text == "/tasks" { input.clear(); page = Some(settings::Page::tasks()); settings::tasks(session.api.clone(), settings_sender.clone()); continue; }
+                            if text == "/memories" { input.clear(); page = Some(settings::Page::memories()); settings::memories(session.api.clone(), 0, settings_sender.clone()); continue; }
                             if text == "/goal" || text.starts_with("/goal ") {
                                 input.clear();
                                 let argument = text.strip_prefix("/goal").unwrap_or_default().trim();
@@ -328,7 +352,8 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                                 "/rename" if !argument.is_empty() => Action::Rename(argument.into()),
                                 "/delete" => { show_threads = true; Action::Delete },
                                 "/compact" if argument.is_empty() => Action::Compact,
-                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /audit · /tasks · /task · /goal [objective] · /skills · /mcp · /plugins · /status · /context · /compact · /export <path> · /copy · /delete · /stop · /exit".into()); continue; },
+                                "/memories" if argument.is_empty() => { page = Some(settings::Page::memories()); settings::memories(session.api.clone(), 0, settings_sender.clone()); continue; },
+                                "/help" => { session.error = Some("/new [title] · /threads · /open <id> · /rename <title> · /model [id|default] · /profile · /memories · /audit · /tasks · /task · /goal [objective] · /skills · /mcp · /plugins · /status · /context · /compact · /export <path> · /copy · /delete · /stop · /exit".into()); continue; },
                                 command if command.starts_with('/') => { session.error = Some("Unknown command or missing argument. Use /help.".into()); continue; },
                                 _ => { show_threads = false; Action::Send(text) },
                             };
@@ -609,6 +634,7 @@ fn draw_commands(frame: &mut Frame<'_>, input: &str, selected: usize) {
         "/open" => "Open a conversation by ID",
         "/model" => "Choose the model for this thread",
         "/profile" => "Edit Solmu's system prompt",
+        "/memories" => "Browse saved memories",
         "/skills" => "List workspace skills",
         "/mcp" => "Show MCP servers and tools",
         "/plugins" => "Show installed plugins",

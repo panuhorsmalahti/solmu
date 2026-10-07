@@ -62,6 +62,15 @@ final class SolmuClientUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["task-task-ios"].waitForExistence(timeout: 10))
 
         app.tabBars.buttons["More"].tap()
+        app.buttons["Memories"].tap()
+        XCTAssertTrue(app.staticTexts["My cat is named Miso"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Saved 2026-10-07T00:00:00Z"].exists)
+        let memoryScreenshot = XCTAttachment(screenshot: app.screenshot())
+        memoryScreenshot.name = "Solmu iOS Memories"
+        memoryScreenshot.lifetime = .keepAlways
+        add(memoryScreenshot)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["More"].tap()
         app.buttons["Webhooks"].tap()
         app.buttons["new-webhook"].tap()
         let webhookName = app.textFields["webhook-name"]

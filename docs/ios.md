@@ -24,10 +24,14 @@ selection, compaction, copy, export, status, context, and delete. Profile edits
 the shared prompt and optional default model. Audit pages through saved tool
 calls and shows the prompt-cache hit rate for the last 24 hours. Tasks creates,
 edits, runs, pauses, and removes one-shot or cron schedules. More includes
-webhook management and the current workspace's Skills, MCP servers, and
+webhook management and the current workspace's Memories, Skills, MCP servers, and
 Plugins. Backend events keep the open views current after changes and reconnects.
 Enter `/goal <objective>` in chat to start a persistent goal, or `/goal` to
 list saved goals. See [Goals](goals.md).
+
+Open **More → Memories** to browse saved facts, newest first. Older entries load
+as you scroll. See [Memories](memories.md).
+
 
 ## Build
 

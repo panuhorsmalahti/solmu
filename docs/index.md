@@ -32,6 +32,7 @@ for each workspace product: [Muxer](https://panuhorsmalahti.github.io/solmu/muxe
 ## Work with Solmu
 
 - [Profile](profile.md): edit the system prompt and default model.
+- [Memories](memories.md): save and browse facts recalled across conversations.
 - [Audit](audit.md): review tool calls and the prompt cache hit rate.
 - [Scheduled tasks](tasks.md): run Solmu once later or on a recurring schedule.
 - [Webhooks](webhooks.md): start conversations from GitHub or other authenticated events.

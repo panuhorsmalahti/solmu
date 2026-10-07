@@ -1,5 +1,7 @@
 export interface Thread { id: string; title: string; model: string | null; workspace: string | null }
 export interface Profile { system_prompt: string; model: string | null; backend_default_model: string | null; edited_at: string }
+export interface Memory { id: string; content: string; created_at: string; updated_at: string }
+export interface MemoryPage { items: Memory[]; limit: number; offset: number; has_more: boolean }
 export interface ModelCatalog { provider: string | null; default_model: string | null; models: { id: string; name: string }[] }
 export interface SkillCatalog { directory: string; items: { name: string; description: string; path: string; compatibility: string | null }[]; issues: { path: string; message: string }[] }
 export interface McpCatalog { workspace: string; files: string[]; servers: { name: string; source: string; transport: string; status: string; protocol_version: string | null; tools: { name: string; agent_name: string; description: string }[]; error: string | null }[]; issues: { path: string; message: string }[] }

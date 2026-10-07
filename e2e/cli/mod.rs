@@ -183,6 +183,7 @@ mod boxer;
 mod goals;
 mod input;
 mod mcp;
+mod memories;
 mod models;
 mod plugins;
 mod profile;

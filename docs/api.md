@@ -23,6 +23,9 @@ authentication is not implemented.
 | GET | `/api/v1/models` | Provider, effective `default_model`, and named `models` (`id`, `name`). |
 | GET | `/api/v1/tools` | Available tool definitions and their input schemas in `items`. |
 | GET | `/api/v1/audit` | Saved tool calls across all conversations, newest first. Cursor paging with `limit` (1–100, default 25) and optional positive `before`; returns `items`, `next_cursor`, and `cache_24h` token counts and hit rate. See [Audit](audit.md). |
+| GET | `/api/v1/memories?limit=30&offset=0` | Shared saved memories, newest first, with `has_more` for paging. |
+| POST | `/api/v1/memories` | Save `{ "content": "..." }`; returns the memory and timestamps. |
+| GET/PUT/DELETE | `/api/v1/memories/{id}` | Read, replace content, or delete a memory. |
 | GET / POST | `/api/v1/tasks` | List tasks or create one with `name`, `prompt`, `schedule_kind` (`once` or `cron`), `schedule`, and optional `workspace`. |
 | GET / PATCH / DELETE | `/api/v1/tasks/{id}` | Read, edit (`name`, `prompt`, `schedule_kind`, `schedule`, `enabled`), or remove a task. |
 | POST | `/api/v1/tasks/{id}/run` | Start a run now (201). |
@@ -91,7 +94,8 @@ The server sends `{ "type": "ready" }`, then
 `{ "type": "conversation_changed", "thread_id": "..." }` for thread changes,
 saved messages, completed replies, and generated names. Reload affected data
 after these notifications. A null thread ID means reload everything. Reconnect
-and reload after a lost connection; events are not replayed.
+and reload after a lost connection; events are not replayed. `memories_changed`
+means reload the currently open memory page.
 
 `{ "type": "profile_changed" }` means fetch the current Profile and model
 catalog again. Preserve unsaved edits. System prompt revisions are saved

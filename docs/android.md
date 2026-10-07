@@ -21,7 +21,7 @@ continues to accept connections only from the same computer.
 The conversation screen creates or resumes a thread, streams replies, and
 supports stop, compaction, model selection, rename, delete, copy, and export.
 The bottom navigation opens Profile, Audit, Tasks, and More. More includes
-Skills, MCP, Plugins, and Webhooks. The app updates conversation lists and
+Memories, Skills, MCP, Plugins, and Webhooks. The app updates conversation lists and
 other open pages automatically when the backend changes.
 
 Android supports the same saved conversations, per-thread models, editable
@@ -32,6 +32,10 @@ the guides for [Profile](profile.md), [Audit](audit.md), [Tasks](tasks.md),
 [skills](skills.md), [MCP](mcp.md), [plugins](plugins.md), and
 [webhooks](webhooks.md). In chat, use `/goal <objective>` to start a persistent
 goal, or `/goal` to list goals. See [Goals](goals.md).
+
+Open **More → Memories** to browse saved facts. Newer entries appear first and
+older entries load as you scroll. See [Memories](memories.md).
+
 
 ## Build
 

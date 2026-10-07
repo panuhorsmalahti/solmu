@@ -120,6 +120,7 @@ mod compaction;
 mod conversations;
 mod goals;
 mod mcp;
+mod memories;
 mod models;
 mod muxer_embedded;
 mod plugins;

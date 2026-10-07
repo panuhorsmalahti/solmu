@@ -22,6 +22,20 @@ pub struct Profile {
     pub edited_at: String,
 }
 #[derive(Debug, Clone, Deserialize)]
+pub struct Memory {
+    pub id: String,
+    pub content: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct MemoryPage {
+    pub items: Vec<Memory>,
+    pub limit: u32,
+    pub offset: u32,
+    pub has_more: bool,
+}
+#[derive(Debug, Clone, Deserialize)]
 pub struct ModelCatalog {
     pub provider: Option<String>,
     pub default_model: Option<String>,
@@ -347,6 +361,7 @@ impl Api {
                                 Some("profile_changed") => yield Connection::ProfileChanged,
                                 Some("tasks_changed") => yield Connection::TasksChanged,
                                 Some("goals_changed") => yield Connection::GoalsChanged,
+                                Some("memories_changed") => yield Connection::MemoriesChanged,
                                 _ => {},
                             }
                         }
@@ -393,6 +408,31 @@ impl Api {
     }
     pub async fn models(&self) -> Result<ModelCatalog, String> {
         self.json(Method::GET, "/models", None).await
+    }
+    pub async fn memories(&self, offset: u32, limit: u32) -> Result<MemoryPage, String> {
+        self.json(
+            Method::GET,
+            &format!("/memories?offset={offset}&limit={limit}"),
+            None,
+        )
+        .await
+    }
+    pub async fn write_memory(&self, content: &str) -> Result<Memory, String> {
+        self.json(Method::POST, "/memories", Some(json!({"content":content})))
+            .await
+    }
+    pub async fn update_memory(&self, id: &str, content: &str) -> Result<Memory, String> {
+        self.json(
+            Method::PUT,
+            &format!("/memories/{id}"),
+            Some(json!({"content":content})),
+        )
+        .await
+    }
+    pub async fn delete_memory(&self, id: &str) -> Result<(), String> {
+        self.request(Method::DELETE, &format!("/memories/{id}"), None, false)
+            .await
+            .map(|_| ())
     }
     pub async fn skills(&self, thread: &str) -> Result<SkillCatalog, String> {
         self.json(Method::GET, &format!("/threads/{thread}/skills"), None)
@@ -689,6 +729,7 @@ pub enum Connection {
     ProfileChanged,
     TasksChanged,
     GoalsChanged,
+    MemoriesChanged,
     Disconnected,
 }
 #[derive(Clone, Debug)]

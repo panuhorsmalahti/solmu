@@ -32,3 +32,6 @@ status, context, and delete. Use the bottom navigation for Profile, Audit,
 Tasks, and workspace settings.
 
 ![Solmu native Android client](../../docs/screenshots/android.png)
+
+Open **More → Memories** to browse saved facts in newest-first order. Older
+entries load as you scroll. See [the Memories guide](../../docs/memories.md).

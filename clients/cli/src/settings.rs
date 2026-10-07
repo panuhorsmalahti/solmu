@@ -6,8 +6,8 @@ use ratatui::{
     widgets::{Block, Paragraph, Wrap},
 };
 use solmu_client::{
-    Api, AuditPage, AuditRun, CacheSummary, McpCatalog, ModelCatalog, PluginCatalog, Profile,
-    ScheduledTask, SkillCatalog,
+    Api, AuditPage, AuditRun, CacheSummary, McpCatalog, Memory, MemoryPage, ModelCatalog,
+    PluginCatalog, Profile, ScheduledTask, SkillCatalog,
 };
 use tokio::sync::mpsc;
 
@@ -16,6 +16,13 @@ pub enum Page {
         items: Vec<ScheduledTask>,
         selected: usize,
         expanded: bool,
+        busy: bool,
+        error: String,
+    },
+    Memories {
+        items: Vec<Memory>,
+        offset: u32,
+        has_more: bool,
         busy: bool,
         error: String,
     },
@@ -64,6 +71,7 @@ pub enum Event {
     TasksLoaded(Result<Vec<ScheduledTask>, String>),
     TaskChanged(Result<String, String>),
     AuditLoaded(Result<AuditPage, String>),
+    MemoriesLoaded(Result<MemoryPage, String>),
     Loaded(Result<Profile, String>),
     Saved(Result<Profile, String>),
     Models(Result<ModelCatalog, String>),
@@ -74,11 +82,17 @@ pub enum Action {
     Save(String, Option<String>),
     Model(Option<String>),
     AuditLoad(Option<i64>),
+    MemoriesLoad(u32),
 }
 
 pub fn audit(api: Api, before: Option<i64>, sender: mpsc::UnboundedSender<Event>) {
     tokio::spawn(async move {
         let _ = sender.send(Event::AuditLoaded(api.audit(before, 20).await));
+    });
+}
+pub fn memories(api: Api, offset: u32, sender: mpsc::UnboundedSender<Event>) {
+    tokio::spawn(async move {
+        let _ = sender.send(Event::MemoriesLoaded(api.memories(offset, 30).await));
     });
 }
 pub fn tasks(api: Api, sender: mpsc::UnboundedSender<Event>) {
@@ -117,6 +131,15 @@ impl Page {
     }
     pub fn is_tasks(&self) -> bool {
         matches!(self, Self::Tasks { .. })
+    }
+    pub fn memories() -> Self {
+        Self::Memories {
+            items: Vec::new(),
+            offset: 0,
+            has_more: true,
+            busy: true,
+            error: String::new(),
+        }
     }
     pub fn audit() -> Self {
         Self::Audit {
@@ -248,6 +271,29 @@ impl Page {
             }
             return;
         }
+        if let (
+            Self::Memories {
+                items,
+                offset,
+                has_more,
+                busy,
+                error,
+            },
+            Event::MemoriesLoaded(result),
+        ) = (&mut *self, &event)
+        {
+            *busy = false;
+            match result {
+                Ok(page) => {
+                    *offset += page.items.len() as u32;
+                    *has_more = page.has_more;
+                    items.extend(page.items.clone());
+                    error.clear();
+                }
+                Err(message) => *error = message.clone(),
+            }
+            return;
+        }
         let saved = matches!(&event, Event::Saved(_));
         match (self, event) {
             (
@@ -334,6 +380,17 @@ impl Page {
                 KeyCode::Enter => *expanded = !*expanded,
                 _ => {}
             },
+            Self::Memories {
+                offset,
+                has_more,
+                busy,
+                ..
+            } => {
+                if key.code == KeyCode::PageDown && !*busy && *has_more {
+                    *busy = true;
+                    return Action::MemoriesLoad(*offset);
+                }
+            }
             Self::Audit {
                 items,
                 starts,
@@ -705,6 +762,49 @@ impl Page {
         .areas(frame.area());
         match self {
             Self::Tasks { .. } => unreachable!("tasks rendered above"),
+            Self::Memories {
+                items,
+                offset,
+                has_more,
+                busy,
+                error,
+            } => {
+                frame.render_widget(
+                    Paragraph::new(" SOLMU / MEMORIES\n\nSaved facts · newest first").green(),
+                    header,
+                );
+                let content = items
+                    .iter()
+                    .map(|item| format!("{}\nSaved {}\n", item.content, item.created_at))
+                    .collect::<Vec<_>>()
+                    .join("\n────────────\n\n");
+                frame.render_widget(
+                    Paragraph::new(if content.is_empty() && !busy {
+                        "No saved memories yet.".into()
+                    } else {
+                        content
+                    })
+                    .wrap(Wrap { trim: false }),
+                    body,
+                );
+                frame.render_widget(Paragraph::new(error.as_str()).red(), notice);
+                frame.render_widget(
+                    Paragraph::new(format!(
+                        "{} memories · {}{}",
+                        items.len(),
+                        if *busy { "Loading…" } else { "" },
+                        if *has_more {
+                            " · PgDn loads more"
+                        } else {
+                            " · End of list"
+                        }
+                    ))
+                    .dark_gray(),
+                    footer,
+                );
+                let _ = offset;
+                return;
+            }
             Self::Audit { .. } => unreachable!("audit was rendered above"),
             Self::Plugins { scroll } => {
                 frame.render_widget(

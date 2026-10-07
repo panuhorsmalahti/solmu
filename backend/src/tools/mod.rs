@@ -1,5 +1,6 @@
 mod files;
 mod goals;
+mod memories;
 mod scheduled;
 mod shell;
 
@@ -128,6 +129,7 @@ impl Registry {
         registry.register(Arc::new(shell::Bash));
         registry.register(Arc::new(scheduled::Tasks));
         registry.register(Arc::new(goals::Goals));
+        registry.register(Arc::new(memories::Memory));
         registry
     }
     pub fn register(&mut self, tool: Arc<dyn AgentTool>) {

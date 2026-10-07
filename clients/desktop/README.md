@@ -91,3 +91,10 @@ Choose **Plugins** to inspect installed [Agent Plugins](../../docs/plugins.md)
 and loading errors. The list updates automatically.
 
 ![Desktop plugins](../../docs/screenshots/desktop-plugins.png)
+
+## Memories
+
+Choose **Memories** in the sidebar or use `/memories` to browse, add, edit, and
+delete saved facts. See [the Memories guide](../../docs/memories.md).
+
+![Desktop Memories](../../docs/screenshots/desktop-memories.png)

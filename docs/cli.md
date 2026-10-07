@@ -61,6 +61,13 @@ The Audit header also shows the last 24 hours' prompt cache hit rate and token c
 
 ![CLI Audit](screenshots/cli-audit.png)
 
+## Memories
+
+Use `/memories` to browse shared saved facts, newest first. PageDown loads older
+entries. See [Memories](memories.md).
+
+![CLI Memories](screenshots/cli-memories.png)
+
 ## Scheduled tasks
 
 Use `/goal <objective>` to start a persistent multi-step goal, or `/goal` to

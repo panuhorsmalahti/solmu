@@ -34,3 +34,6 @@ Webhooks. Open pages update automatically as backend events arrive.
 ## Screenshot
 
 ![Solmu native iOS client](../../docs/screenshots/ios.png)
+
+Open **More → Memories** to browse saved facts in newest-first order. Older
+entries load as you scroll. See [the Memories guide](../../docs/memories.md).

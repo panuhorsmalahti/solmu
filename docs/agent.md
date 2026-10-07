@@ -17,6 +17,11 @@ manage conversations, stream replies, and use [tools](tools.md) to work in a
 [workspace](workspaces.md). Edit your preferences in [Profile](profile.md); upgrades
 preserve your saved prompt.
 
+The built-in `Memory` tool lets Solmu recall durable facts across conversations.
+It saves or deletes facts only when you ask or clearly expect it, and adds up to
+five matching memories to a reply's context. Browse or manage them in
+[Memories](memories.md).
+
 When you ask Solmu to schedule work, it can create or manage
 [scheduled tasks](tasks.md). Each run works in a saved conversation.
 

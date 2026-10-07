@@ -55,6 +55,14 @@ The Audit header also shows the last 24 hours' prompt cache hit rate and token c
 
 ![Desktop Audit](screenshots/desktop-audit.png)
 
+## Memories
+
+Choose **Memories** in the sidebar or type `/memories`. Add, edit, and delete
+saved facts; matching entries are included in relevant replies. See
+[Memories](memories.md).
+
+![Desktop Memories](screenshots/desktop-memories.png)
+
 ## Scheduled tasks
 
 Enter `/goal <objective>` in chat to start a persistent goal, or `/goal` to

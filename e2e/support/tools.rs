@@ -30,6 +30,11 @@ pub fn calls(body: &Value) -> Option<Vec<Value>> {
             json!({"name":"Bash","arguments":{"command":"sleep 20"}}),
         ]);
     }
+    if text == "MEMORY_WRITE" {
+        return Some(vec![
+            json!({"name":"Memory","arguments":{"action":"write","content":"The user likes cats"}}),
+        ]);
+    }
     if text == "TOOLS" || text == "Inspect this workspace" {
         return Some(vec![
             json!({"name":"Write","arguments":{"path":"hello.txt","content":"Hello tools\n"}}),

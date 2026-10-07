@@ -12,11 +12,14 @@ decides which tools to call. Use a model that supports tool calling.
 | Edit | Replaces exact text; ambiguous matches need more context or `replace_all`. |
 | Glob | Finds files with patterns such as `**/*.rs`. |
 | Grep | Searches UTF-8 files with a regular expression. |
+| Memory | Searches, reads, saves, updates, or deletes shared facts. |
 
 CLI, desktop, web, and Muxer show each tool's name, state, arguments, and result.
 In the web client, click a tool row to expand its details. Tool activity is saved
 with the conversation and remains available after reopening it or restarting
 the backend. Failures are returned to the model so it can adjust its approach.
+Saved memories live in SQLite and matching facts are included in later requests.
+See [Memories](memories.md) to browse them.
 Open [Audit](audit.md) to review all saved calls across conversations in one
 ordered list, with expandable arguments and results.
 

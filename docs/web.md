@@ -76,6 +76,15 @@ The page also shows the last 24 hours' prompt cache hit rate and token counts.
 
 ![Web Audit](screenshots/web-audit.png)
 
+## Memories
+
+Choose **Memories** in the sidebar or open `/memories` to browse, add, edit, and
+delete saved facts. The list loads older entries as you scroll and updates when
+another client changes a memory. See [Memories](memories.md).
+
+![Web Memories](screenshots/web-memories.png)
+
+
 ## Scheduled tasks
 
 Enter `/goal <objective>` in chat to start a persistent goal, or `/goal` to

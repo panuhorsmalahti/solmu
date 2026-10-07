@@ -50,6 +50,7 @@ Typing `/` shows the command list. Use Up/Down to choose and Enter to select.
 | `/threads` | List saved conversations with their IDs. |
 | `/open <id>` | Open a saved conversation and its history. |
 | `/profile` | Edit the shared system prompt and optional default model; see its last edit time. |
+| `/memories` | Browse saved memories, newest first; PageDown loads older entries. |
 | `/model [id\|default]` | Pick a thread model, set an ID, or restore the default. |
 | `/rename <title>` | Rename the current conversation. |
 | `/delete` | Delete the current conversation and its messages. |
@@ -82,6 +83,13 @@ Run `/audit` to inspect the [tool call timeline](../../docs/audit.md). Enter
 expands a call; PageUp and PageDown browse older pages.
 
 ![CLI Audit](../../docs/screenshots/cli-audit.png)
+
+## Memories
+
+Use `/memories` to browse saved facts in newest-first order. PageDown loads older
+entries. See [the Memories guide](../../docs/memories.md).
+
+![CLI Memories](../../docs/screenshots/cli-memories.png)
 
 ## Scheduled tasks
 

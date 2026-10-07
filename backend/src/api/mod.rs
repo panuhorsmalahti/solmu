@@ -2,6 +2,7 @@ pub mod error;
 mod events;
 mod goals;
 mod mcp;
+mod memories;
 mod messages;
 mod models;
 mod plugins;
@@ -51,6 +52,16 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/tools", get(tools::definitions))
         .route("/api/v1/audit", get(tools::audit))
+        .route(
+            "/api/v1/memories",
+            get(memories::list).post(memories::create),
+        )
+        .route(
+            "/api/v1/memories/{id}",
+            get(memories::get)
+                .put(memories::update)
+                .delete(memories::delete),
+        )
         .route("/api/v1/goals", get(goals::list).post(goals::create))
         .route("/api/v1/goals/{id}", axum::routing::patch(goals::update))
         .route(

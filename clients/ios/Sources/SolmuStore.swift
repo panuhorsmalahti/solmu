@@ -80,6 +80,9 @@ final class SolmuStore: ObservableObject {
     @Published var audit: [SolmuJSON] = []
     @Published var auditCursor: String?
     @Published var auditCache: SolmuJSON = [:]
+    @Published var memories: [SolmuJSON] = []
+    @Published var memoryOffset = 0
+    @Published var memoryHasMore = true
     @Published var tasks: [SolmuJSON] = []
     @Published var webhooks: [SolmuJSON] = []
     @Published var skills: SolmuJSON = [:]
@@ -97,6 +100,7 @@ final class SolmuStore: ObservableObject {
     private var eventTask: Task<Void, Never>?
     private var replyTask: Task<Void, Never>?
     private var auditLoading = false
+    private var memoriesLoading = false
     private var testMode: Bool
 
     init(baseURL: String, testMode: Bool = ProcessInfo.processInfo.arguments.contains("--uitesting")) {
@@ -319,6 +323,18 @@ final class SolmuStore: ObservableObject {
         auditCache = result["cache_24h"] as? SolmuJSON ?? [:]
     }
 
+    func loadMemories(reset: Bool = false) async throws {
+        guard !memoriesLoading, reset || memoryHasMore else { return }
+        memoriesLoading = true
+        defer { memoriesLoading = false }
+        let offset = reset ? 0 : memoryOffset
+        let page = try await request("GET", "/memories?limit=30&offset=\(offset)")
+        let incoming = page.array("items")
+        if reset { memories = incoming } else { memories.append(contentsOf: incoming.filter { item in !memories.contains(where: { $0.stableID == item.stableID }) }) }
+        memoryOffset = offset + incoming.count
+        memoryHasMore = page.bool("has_more")
+    }
+
     func refreshLiveData() async {
         do {
             try await loadThreads()
@@ -430,6 +446,7 @@ final class SolmuStore: ObservableObject {
                 if let id = current?.string("id") { try await loadThread(id, preserveDraft: true) }
             case "profile_changed": try await loadProfile(preserveDraft: true)
             case "tasks_changed": try await loadTasks()
+            case "memories_changed": if memoriesLoading == false { try await loadMemories(reset: true) }
             case "webhooks_changed": try await loadWebhooks()
             case "skills_changed": try await loadSkills()
             case "mcp_changed": try await loadMCP()
@@ -481,6 +498,7 @@ final class SolmuStore: ObservableObject {
             case ("PUT", "/profile"): profilePrompt = body.string("system_prompt"); return json(["system_prompt": profilePrompt, "model": body["model"] ?? NSNull(), "backend_default_model": "gpt-6-sol", "edited_at": "2026-10-03T00:00:00Z"])
             case ("GET", "/models"): return json(["default_model": "gpt-6-sol", "models": [["id": "gpt-6-sol", "name": "GPT 6 Sol"]]])
             case ("GET", "/audit"): return json(["items": [["id": "audit-ios", "name": "Read", "status": "completed", "thread_title": thread.string("title"), "created_at": "2026-10-03T00:00:00Z", "arguments": ["path": "README.md"], "result": "# Solmu"]], "next_cursor": NSNull(), "cache_24h": ["input_tokens": 100, "output_tokens": 20, "cached_input_tokens": 40, "cache_creation_input_tokens": 5, "hit_rate_percent": 40.0]])
+            case ("GET", "/memories"): return json(["items": [["id": "memory-ios", "content": "My cat is named Miso", "created_at": "2026-10-07T00:00:00Z", "updated_at": "2026-10-07T00:00:00Z"]], "limit": 30, "offset": 0, "has_more": false])
             case ("GET", "/tasks"): return json(["items": task.map { [$0] } ?? []])
             case ("GET", "/goals"): return json(["items": goal.map { [$0] } ?? []])
             case ("POST", "/goals"):

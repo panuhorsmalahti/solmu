@@ -488,12 +488,38 @@ struct MoreView: View {
         List {
             Section { Text("Workspace status and agent settings.").foregroundStyle(SolmuPalette.muted) }
             Section("Workspace") {
+                NavigationLink { MemoriesView(store: store) } label: { Label("Memories", systemImage: "brain.head.profile") }
                 NavigationLink { WorkspaceCatalogView(store: store, kind: "Skills") } label: { Label("Skills", systemImage: "sparkles") }
                 NavigationLink { WorkspaceCatalogView(store: store, kind: "MCP") } label: { Label("MCP", systemImage: "point.3.connected.trianglepath.dotted") }
                 NavigationLink { WorkspaceCatalogView(store: store, kind: "Plugins") } label: { Label("Plugins", systemImage: "puzzlepiece.extension") }
                 NavigationLink { WebhooksView(store: store) } label: { Label("Webhooks", systemImage: "arrow.trianglehead.2.clockwise") }
             }
         }.scrollContentBackground(.hidden).background(SolmuPalette.paper).navigationTitle("More")
+    }
+}
+
+struct MemoriesView: View {
+    @ObservedObject var store: SolmuStore
+    var body: some View {
+        List {
+            Section { Text("Saved facts that Solmu can recall across conversations when they match what you ask.").foregroundStyle(SolmuPalette.muted) }
+            Section("Saved memories · newest first") {
+                if store.memories.isEmpty { ContentUnavailableView("No saved memories yet", systemImage: "brain.head.profile") }
+                ForEach(store.memories.indices, id: \.self) { index in
+                    let memory = store.memories[index]
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(memory.string("content")).textSelection(.enabled)
+                        Text("Saved \(memory.string("created_at"))").font(.caption).foregroundStyle(SolmuPalette.muted)
+                    }
+                    .padding(.vertical, 5)
+                    .onAppear { if index >= store.memories.count - 4 && store.memoryHasMore { Task { do { try await store.loadMemories() } catch { store.error = error.localizedDescription } } } }
+                }
+                if !store.memoryHasMore && !store.memories.isEmpty { Text("You’re up to date.").font(.caption).foregroundStyle(SolmuPalette.muted) }
+            }
+        }
+        .scrollContentBackground(.hidden).background(SolmuPalette.paper)
+        .navigationTitle("Memories")
+        .task { do { try await store.loadMemories(reset: true) } catch { store.error = error.localizedDescription } }
     }
 }
 

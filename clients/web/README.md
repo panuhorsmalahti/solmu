@@ -103,3 +103,11 @@ Configure a GitHub signature or bearer secret, enable an endpoint, and let
 authenticated events start agent conversations. See [webhook setup](../../docs/webhooks.md).
 
 ![Web webhook settings](../../docs/screenshots/web-webhooks.png)
+
+## Memories
+
+Open **Memories** in the sidebar or visit `/memories` to browse, add, edit, and
+delete facts Solmu can recall across conversations. See
+[the Memories guide](../../docs/memories.md).
+
+![Web Memories](../../docs/screenshots/web-memories.png)

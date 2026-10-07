@@ -13,6 +13,7 @@ Licensed under [MIT](LICENSE).
 - See changes across clients instantly and stop responses anytime.
 - Link directly to conversations in the web client.
 - Customize the shared system prompt and default model in Profile.
+- Save durable memories that the agent can recall in relevant conversations. See [Memories](docs/memories.md).
 - Inspect every saved tool call and the last 24 hours' prompt cache hit rate in Audit. See [Audit](docs/audit.md).
 - Schedule Solmu to run once later or on a recurring cron schedule, with a saved conversation and run history for each task. See [Tasks](docs/tasks.md).
 - Track multi-step work as persistent goals. Start one with `/goal <objective>` or ask Solmu to keep working toward an objective. See [Goals](docs/goals.md).

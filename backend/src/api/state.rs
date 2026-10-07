@@ -99,6 +99,13 @@ impl AppState {
         });
     }
 
+    pub fn memories_changed(&self) {
+        let _ = self.events.send(Change {
+            kind: "memories_changed",
+            thread_id: None,
+        });
+    }
+
     pub fn webhooks_changed(&self) {
         let _ = self.events.send(Change {
             kind: "webhooks_changed",
