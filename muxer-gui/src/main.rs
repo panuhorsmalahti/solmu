@@ -76,6 +76,7 @@ enum Message {
     CreateSpace(SpaceType),
     WorktreeBranchChanged(String),
     CreateWorktree,
+    OpenWorktree,
     NewTab,
     Split,
     SelectPane(u64),
@@ -247,6 +248,31 @@ impl MuxerGui {
                         .map(|_| ())
                     },
                     "Worktree created".into(),
+                )
+            }
+            Message::OpenWorktree => {
+                let branch = self.worktree_branch.trim().to_owned();
+                let Some(space) = self.snapshot["active_space"].as_u64() else {
+                    self.notice = "Select a project space first".into();
+                    return Task::none();
+                };
+                if branch.is_empty() {
+                    self.notice = "Enter a worktree branch".into();
+                    return Task::none();
+                }
+                self.terminal_focused = false;
+                self.show_space_types = false;
+                self.worktree_branch.clear();
+                let session = self.session.clone();
+                perform(
+                    move || {
+                        request(
+                            &session,
+                            json!({"method":"worktree_open","params":{"space":space,"branch":branch,"focus":true}}),
+                        )
+                        .map(|_| ())
+                    },
+                    "Worktree opened".into(),
                 )
             }
             Message::NewTab => {
@@ -577,6 +603,11 @@ impl MuxerGui {
                             .padding([8, 10]),
                         button(text("Create worktree").size(12))
                             .on_press(Message::CreateWorktree)
+                            .style(appearance::ghost)
+                            .padding([7, 10])
+                            .width(Length::Fill),
+                        button(text("Open worktree").size(12))
+                            .on_press(Message::OpenWorktree)
                             .style(appearance::ghost)
                             .padding([7, 10])
                             .width(Length::Fill),

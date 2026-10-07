@@ -224,6 +224,111 @@ impl App {
                 append(&mut path, &mut branch, &mut head, &mut detached);
                 Ok(json!({"worktrees": worktrees}))
             }
+            Request::WorktreeOpen {
+                space,
+                branch,
+                path,
+                focus,
+            } => {
+                let source_id = space.unwrap_or(self.spaces[self.space].id);
+                let source_index = self
+                    .spaces
+                    .iter()
+                    .position(|space| space.id == source_id)
+                    .ok_or("Source space does not exist")?;
+                let source_directory = self.spaces[source_index].directory.clone();
+                let output = git_output(&source_directory, &["worktree", "list", "--porcelain"])?;
+                if !output.status.success() {
+                    return Err("The selected space is not inside a Git repository".into());
+                }
+                let mut entries: Vec<(PathBuf, Option<String>)> = Vec::new();
+                let mut entry_path = None;
+                let mut entry_branch = None;
+                for line in String::from_utf8_lossy(&output.stdout).lines() {
+                    if line.is_empty() {
+                        if let Some(path) = entry_path.take() {
+                            entries.push((path, entry_branch.take()));
+                        }
+                    } else if let Some(value) = line.strip_prefix("worktree ") {
+                        entry_path = Some(PathBuf::from(value));
+                    } else if let Some(value) = line.strip_prefix("branch refs/heads/") {
+                        entry_branch = Some(value.to_owned());
+                    }
+                }
+                if let Some(path) = entry_path.take() {
+                    entries.push((path, entry_branch.take()));
+                }
+                let requested_path = path
+                    .as_ref()
+                    .map(|path| {
+                        path.canonicalize()
+                            .map_err(|_| "Worktree path does not exist")
+                    })
+                    .transpose()?;
+                let Some((target, target_branch)) =
+                    entries.iter().find(|(entry_path, entry_branch)| {
+                        branch
+                            .as_ref()
+                            .is_some_and(|branch| entry_branch.as_ref() == Some(branch))
+                            || requested_path.as_ref().is_some_and(|requested| {
+                                entry_path
+                                    .canonicalize()
+                                    .unwrap_or_else(|_| entry_path.clone())
+                                    == *requested
+                            })
+                    })
+                else {
+                    return Err("No registered worktree matches that branch or path".into());
+                };
+                let target = target.canonicalize()?;
+                let primary_root = entries
+                    .first()
+                    .map(|(path, _)| path.canonicalize().unwrap_or_else(|_| path.clone()))
+                    .ok_or("The Git repository has no worktrees")?;
+                if target == primary_root {
+                    return Err("The primary repository is already open as its own space".into());
+                }
+                let opened_index = self
+                    .spaces
+                    .iter()
+                    .position(|space| space.directory == target);
+                let (space_id, opened) = if let Some(index) = opened_index {
+                    let id = self.spaces[index].id;
+                    if *focus {
+                        self.automation_focus(Kind::Space, id)?;
+                    }
+                    (id, false)
+                } else {
+                    self.add_space(target.clone())?;
+                    let index = self.space;
+                    let repo_name = primary_root
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    let branch_label = target_branch.as_deref().unwrap_or("detached");
+                    self.spaces[index].name = Some(format!("{repo_name} · {branch_label}"));
+                    self.spaces[index].worktree = Some(super::WorktreeInfo {
+                        repo_root: primary_root.clone(),
+                        branch: branch_label.to_owned(),
+                        primary: false,
+                    });
+                    if let Some(index) = self
+                        .spaces
+                        .iter()
+                        .position(|space| space.directory == primary_root)
+                    {
+                        self.spaces[index].worktree = Some(super::WorktreeInfo {
+                            repo_root: primary_root,
+                            branch: entries[0].1.clone().unwrap_or_default(),
+                            primary: true,
+                        });
+                    }
+                    (self.spaces[index].id, true)
+                };
+                Ok(
+                    json!({"opened": opened, "space": self.automation_record(Kind::Space, space_id)?}),
+                )
+            }
             Request::AgentList => Ok(
                 json!({"items":self.panes.iter().filter(|pane| pane.exited.is_none() && pane.launch.solmu()).map(|pane| self.automation_record(Kind::Pane, pane.id).unwrap()).collect::<Vec<_>>()}),
             ),

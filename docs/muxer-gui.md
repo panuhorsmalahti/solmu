@@ -34,9 +34,10 @@ and use shell shortcuts. Press **Ctrl+C** (or **Cmd+C** on macOS) to close its
 terminal pane. You can run command-line clients such as Claude Code from that
 shell.
 
-Use **+**, enter a branch name, and choose **Create worktree** to create a Git
-checkout from the selected project's repository. The new worktree opens as a
-separate Solmu space. See [Git worktrees](muxer-worktrees.md).
+Use **+** and enter a branch name. **Create worktree** creates a Git checkout
+from the selected project's repository; **Open worktree** reopens that branch
+as a separate Solmu space, focusing its existing space when it is already open.
+See [Git worktrees](muxer-worktrees.md).
 
 Muxer GUI owns the session lock while open. Close it before opening that
 session in the terminal Muxer app; the session layout and metadata are saved

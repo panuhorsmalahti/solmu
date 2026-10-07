@@ -124,6 +124,16 @@ pub enum Request {
         #[serde(default)]
         space: Option<u64>,
     },
+    WorktreeOpen {
+        #[serde(default)]
+        space: Option<u64>,
+        #[serde(default)]
+        branch: Option<String>,
+        #[serde(default)]
+        path: Option<PathBuf>,
+        #[serde(default)]
+        focus: bool,
+    },
     CreateTab {
         #[serde(default)]
         launch: Option<crate::launch::Launch>,
@@ -255,6 +265,7 @@ impl Request {
                 | Self::Zoom { .. }
                 | Self::CreateSpace { focus: true, .. }
                 | Self::WorktreeCreate { focus: true, .. }
+                | Self::WorktreeOpen { focus: true, .. }
                 | Self::CreateTab { focus: true, .. }
                 | Self::SplitPane { focus: true, .. }
         )
@@ -291,7 +302,7 @@ pub fn key_bytes(keys: &[String]) -> Result<Vec<u8>, String> {
 
 pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
   muxer completion bash|zsh|fish|powershell
-  muxer worktree list [--space ID] | create --branch NAME [--space ID] [--base REF] [--path PATH] [--focus]
+  muxer worktree list [--space ID] | open (--branch NAME | --path PATH) [--space ID] [--focus] | create --branch NAME [--space ID] [--base REF] [--path PATH] [--focus]
   muxer status | api snapshot
   muxer api request '{\"method\":\"snapshot\"}'
   muxer space list|get ID|focus ID|rename ID NAME|close ID
@@ -449,6 +460,23 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
         if action == "list" {
             return Ok(Request::WorktreeList {
                 space: args.optional_id("--space")?,
+            });
+        }
+        if action == "open" {
+            let branch = args.take("--branch")?;
+            let path = args
+                .take("--path")?
+                .map(PathBuf::from)
+                .map(|path| std::path::absolute(path).map_err(|error| error.to_string()))
+                .transpose()?;
+            if branch.is_some() == path.is_some() {
+                return Err("Choose exactly one of --branch or --path".into());
+            }
+            return Ok(Request::WorktreeOpen {
+                space: args.optional_id("--space")?,
+                branch,
+                path,
+                focus: args.flag("--focus"),
             });
         }
         if action != "create" {

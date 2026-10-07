@@ -53,7 +53,8 @@ policies. Changes apply automatically, including edits to `config.toml`.
 Read [Muxer settings](../docs/muxer-configuration.md) for examples.
 Create Git branch checkouts as new spaces with **+ Worktree** or
 **Ctrl+b Shift+G**. Use `muxer worktree list` to inspect registered checkouts
-and see which ones are open. See the [worktree guide](../docs/muxer-worktrees.md).
+and which ones are open, and `muxer worktree open --branch NAME` to reopen one
+as a space. See the [worktree guide](../docs/muxer-worktrees.md).
 Scripts can inspect sessions, create and arrange panes, send terminal input,
 and read live screens through the [local automation commands](../docs/muxer-automation.md).
 Event streams report live changes; waits observe pane states or matching output.

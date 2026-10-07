@@ -169,6 +169,31 @@ PY
 done
 [ "$worktree" = "$((before + 1)):terminal:False" ] || { echo "GUI did not create a worktree space (state=$worktree)" >&2; exit 1; }
 before=$((before + 1))
+worktree_space=$(python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+print(next(item["id"] for item in data["spaces"] if (item.get("worktree") or {}).get("branch") == "gui-e2e-worktree"))
+PY
+)
+xdotool mousemove --window "$window" 240 131 click 1
+sleep 0.3
+xdotool mousemove --window "$window" 95 232 click 1
+xdotool type --clearmodifiers 'gui-e2e-worktree'
+xdotool mousemove --window "$window" 90 318 click 1
+for _ in $(seq 1 30); do
+  opened=$(python3 - "$snapshot" "$worktree_space" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+matches = [item for item in data["spaces"] if (item.get("worktree") or {}).get("branch") == "gui-e2e-worktree"]
+print(f'{len(data["spaces"])}:{len(matches)}:{data["active"]}:{sys.argv[2]}')
+PY
+)
+  [ "$opened" = "$before:1:$worktree_space:$worktree_space" ] && break
+  sleep 0.5
+done
+[ "$opened" = "$before:1:$worktree_space:$worktree_space" ] || { echo "GUI did not reopen the existing worktree space (state=$opened)" >&2; exit 1; }
+xdotool mousemove --window "$window" 240 131 click 1
+sleep 0.3
 xdotool mousemove --window "$window" 75 168 click 1
 sleep 0.3
 created=''

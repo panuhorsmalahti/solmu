@@ -33,6 +33,16 @@ The response includes each checkout path, branch, commit, whether it is the
 primary checkout, and the open space ID when present. `--space` defaults to the
 selected space.
 
+Open a checkout that is not currently in the sidebar by branch or path:
+
+```sh
+muxer worktree open --branch feature/review --space 1 --focus
+muxer worktree open --path /worktrees/solmu/review --space 1
+```
+
+Opening an already open worktree returns its existing space. Opening a closed
+worktree creates a Solmu space for it; use `--focus` to select it immediately.
+
 Create a branch checkout:
 
 ```sh

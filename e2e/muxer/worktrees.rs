@@ -217,3 +217,72 @@ async fn worktree_branch_prompt_creates_a_space_in_the_terminal_ui() {
     );
     tui.exit().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn worktree_open_reuses_existing_spaces_and_finds_paths_or_branches() {
+    let backend = Backend::start().await;
+    let repo = backend.directory.path().join("open-project");
+    repository(&repo);
+    assert!(git(&repo, &["branch", "review-branch"]).status.success());
+    let checkout = backend.directory.path().join("external-checkout");
+    assert!(
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                checkout.to_str().unwrap(),
+                "review-branch"
+            ]
+        )
+        .status
+        .success()
+    );
+    let session = Session {
+        backend: &backend,
+        name: "worktree-open",
+    };
+    assert!(session.command(&["server", "start"]).status.success());
+    let source = command(
+        &session,
+        &[
+            "space",
+            "create",
+            "--cwd",
+            repo.to_str().unwrap(),
+            "--name",
+            "Project",
+        ],
+    );
+    let source_id = source["space"]["id"].as_u64().unwrap().to_string();
+
+    let opened = command(
+        &session,
+        &[
+            "worktree",
+            "open",
+            "--space",
+            &source_id,
+            "--branch",
+            "review-branch",
+        ],
+    );
+    assert_eq!(opened["opened"], true);
+    let space_id = opened["space"]["id"].as_u64().unwrap().to_string();
+    assert_eq!(opened["space"]["worktree"]["branch"], "review-branch");
+    assert_eq!(opened["space"]["worktree"]["primary"], false);
+    let reopened = command(
+        &session,
+        &[
+            "worktree",
+            "open",
+            "--space",
+            &source_id,
+            "--path",
+            checkout.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(reopened["opened"], false);
+    assert_eq!(reopened["space"]["id"], space_id.parse::<u64>().unwrap());
+    assert!(session.command(&["server", "stop"]).status.success());
+}
