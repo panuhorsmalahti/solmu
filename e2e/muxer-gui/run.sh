@@ -106,7 +106,10 @@ print(space["selected"])
 PY
 )
 [ "$active_tab" = "$second_tab" ] || { echo 'Top tab strip did not focus the new tab' >&2; exit 1; }
-xdotool mousemove --window "$window" 440 38 click 1
+xdotool mousemove --window "$window" 420 38 click 3
+sleep 0.3
+import -window "$window" docs/screenshots/muxer-gui-tab-context-menu.png
+xdotool mousemove --window "$window" 450 58 click 1
 for _ in $(seq 1 30); do
   count=$(python3 - "$snapshot" <<'PY'
 import json, sys

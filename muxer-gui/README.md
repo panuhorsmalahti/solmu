@@ -54,7 +54,8 @@ folder. Click **+** beside **Spaces** and choose **Solmu** or **Terminal**.
 The left sidebar stays visible in both Solmu and Terminal spaces. Solmu spaces
 show Solmu's shared native desktop interface; Terminal spaces show an
 interactive shell or another command-line client such as Claude Code. Right-
-click a space in the sidebar to delete it. Worktree spaces also have a
+click a space in the sidebar to delete it, or right-click a tab to close it
+from its context menu. Worktree spaces also have a
 **Remove worktree checkout** action, which keeps the branch and refuses dirty
 checkouts.
 
@@ -67,3 +68,5 @@ Read the [Muxer GUI guide](../docs/muxer-gui.md) and the [Muxer guide](../docs/m
 ![Creating a worktree from Muxer GUI](../docs/screenshots/muxer-gui-worktrees.png)
 
 ![Removing a worktree checkout from Muxer GUI](../docs/screenshots/muxer-gui-remove-worktree.png)
+
+![Closing a tab from its context menu in Muxer GUI](../docs/screenshots/muxer-gui-tab-context-menu.png)

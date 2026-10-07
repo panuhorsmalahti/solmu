@@ -38,6 +38,7 @@ struct MuxerGui {
     show_space_types: bool,
     worktree_branch: String,
     context_space: Option<u64>,
+    context_tab: Option<u64>,
     cursor_position: Point,
     desktops: HashMap<u64, Desktop>,
 }
@@ -73,6 +74,7 @@ enum Message {
     TerminalKey(KeyboardEvent),
     ToggleSpaceMenu,
     SpaceContextMenu(u64),
+    TabContextMenu(u64),
     CursorMoved(Point),
     DismissContextMenu,
     DeleteSpace(u64),
@@ -110,6 +112,7 @@ impl MuxerGui {
             show_space_types: false,
             worktree_branch: String::new(),
             context_space: None,
+            context_tab: None,
             cursor_position: Point::ORIGIN,
             desktops: HashMap::new(),
         };
@@ -126,6 +129,12 @@ impl MuxerGui {
             }
             Message::SpaceContextMenu(id) => {
                 self.context_space = Some(id);
+                self.context_tab = None;
+                Task::none()
+            }
+            Message::TabContextMenu(id) => {
+                self.context_space = None;
+                self.context_tab = Some(id);
                 Task::none()
             }
             Message::CursorMoved(position) => {
@@ -134,6 +143,7 @@ impl MuxerGui {
             }
             Message::DismissContextMenu => {
                 self.context_space = None;
+                self.context_tab = None;
                 Task::none()
             }
             Message::DeleteSpace(id) => {
@@ -340,6 +350,7 @@ impl MuxerGui {
             Message::FocusSpace(id) => {
                 self.terminal_focused = false;
                 self.context_space = None;
+                self.context_tab = None;
                 self.show_space_types = false;
                 let session = self.session.clone();
                 perform(
@@ -355,6 +366,7 @@ impl MuxerGui {
             }
             Message::FocusTab(id) => {
                 self.terminal_focused = false;
+                self.context_tab = None;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -369,6 +381,7 @@ impl MuxerGui {
             }
             Message::CloseTab(id) => {
                 self.terminal_focused = false;
+                self.context_tab = None;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -438,6 +451,15 @@ impl MuxerGui {
                             .is_some_and(|id| !space_ids.contains(&id))
                         {
                             self.context_space = None;
+                        }
+                        let tab_ids: std::collections::HashSet<_> = self.snapshot["tabs"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|tab| tab["id"].as_u64())
+                            .collect();
+                        if self.context_tab.is_some_and(|id| !tab_ids.contains(&id)) {
+                            self.context_tab = None;
                         }
                         let selected = self
                             .selected_pane
@@ -778,39 +800,42 @@ impl MuxerGui {
             let tab_selected = Some(tab_id) == active_tab;
             let tab_name = tab["name"].as_str().unwrap_or("Tab").to_string();
             tab_panel = tab_panel.push(
-                container(
-                    row![
-                        button(text(tab_name).size(12))
-                            .on_press(Message::FocusTab(tab_id))
-                            .style(move |theme, state| {
-                                appearance::navigation(theme, state, tab_selected)
-                            })
-                            .padding([9, 12]),
-                        button(text("x").size(11))
-                            .on_press(Message::CloseTab(tab_id))
-                            .style(appearance::ghost)
-                            .padding([7, 9]),
-                    ]
-                    .align_y(Alignment::Center)
-                    .spacing(1),
-                )
-                .style(move |_| container::Style {
-                    background: Some(if tab_selected {
-                        appearance::SURFACE.into()
-                    } else {
-                        appearance::SIDEBAR.into()
-                    }),
-                    border: iced::Border {
-                        radius: iced::border::Radius {
-                            top_left: 9.0,
-                            top_right: 9.0,
-                            bottom_left: 3.0,
-                            bottom_right: 3.0,
+                mouse_area(
+                    container(
+                        row![
+                            button(text(tab_name).size(12))
+                                .on_press(Message::FocusTab(tab_id))
+                                .style(move |theme, state| {
+                                    appearance::navigation(theme, state, tab_selected)
+                                })
+                                .padding([9, 12]),
+                            button(text("x").size(11))
+                                .on_press(Message::CloseTab(tab_id))
+                                .style(appearance::ghost)
+                                .padding([7, 9]),
+                        ]
+                        .align_y(Alignment::Center)
+                        .spacing(1),
+                    )
+                    .style(move |_| container::Style {
+                        background: Some(if tab_selected {
+                            appearance::SURFACE.into()
+                        } else {
+                            appearance::SIDEBAR.into()
+                        }),
+                        border: iced::Border {
+                            radius: iced::border::Radius {
+                                top_left: 9.0,
+                                top_right: 9.0,
+                                bottom_left: 3.0,
+                                bottom_right: 3.0,
+                            },
+                            ..Default::default()
                         },
                         ..Default::default()
-                    },
-                    ..Default::default()
-                }),
+                    }),
+                )
+                .on_right_press(Message::TabContextMenu(tab_id)),
             );
         }
         tab_panel = tab_panel
@@ -1019,6 +1044,35 @@ impl MuxerGui {
                 .push(mouse_area(base).on_press(Message::DismissContextMenu))
                 .push(popup_layer)
                 .into()
+        } else if let Some(id) = self.context_tab {
+            if !tabs.iter().any(|tab| tab["id"].as_u64() == Some(id)) {
+                return base.into();
+            }
+            let actions = column![
+                button(text("Close tab").size(12))
+                    .on_press(Message::CloseTab(id))
+                    .style(appearance::ghost)
+                    .padding([8, 12])
+                    .width(Length::Fill)
+            ];
+            let popup = container(actions.padding(4))
+                .width(Length::Fixed(160.0))
+                .style(appearance::panel);
+            let popup_layer = container(popup)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(iced::Padding {
+                    top: self.cursor_position.y.clamp(8.0, 760.0 - 60.0),
+                    right: 0.0,
+                    bottom: 0.0,
+                    left: self.cursor_position.x.clamp(8.0, 1180.0 - 176.0),
+                })
+                .align_x(Alignment::Start)
+                .align_y(Alignment::Start);
+            Stack::new()
+                .push(mouse_area(base).on_press(Message::DismissContextMenu))
+                .push(popup_layer)
+                .into()
         } else {
             base.into()
         }
@@ -1046,7 +1100,7 @@ fn subscription(state: &MuxerGui) -> Subscription<Message> {
     if state.active_space_type() == SpaceType::Terminal && state.terminal_focused {
         subscriptions.push(keyboard::listen().map(Message::TerminalKey));
     }
-    if state.context_space.is_some() {
+    if state.context_space.is_some() || state.context_tab.is_some() {
         subscriptions.push(iced::event::listen_with(|event, _, _| match event {
             iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
                 Some(Message::CursorMoved(position))
