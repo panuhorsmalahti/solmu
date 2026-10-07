@@ -455,7 +455,7 @@ impl MuxerGui {
             }
             Message::ClosePane(id) => {
                 self.context_pane = None;
-                self.terminal_focused = false;
+                self.terminal_focused = self.active_space_type() == SpaceType::Terminal;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -472,6 +472,9 @@ impl MuxerGui {
                 match result {
                     Ok(snapshot) => {
                         self.snapshot = snapshot;
+                        if self.active_space_type() != SpaceType::Terminal {
+                            self.terminal_focused = false;
+                        }
                         let spaces = self.snapshot["spaces"].as_array().map_or(0, Vec::len);
                         let panes = self.snapshot["panes"].as_array().map_or(0, Vec::len);
                         self.notice = format!("Workspace ready · {spaces} spaces · {panes} panes");
