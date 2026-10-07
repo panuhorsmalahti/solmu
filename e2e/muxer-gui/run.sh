@@ -141,7 +141,11 @@ PY
   [ "$pane_count" = 2 ] && break
   sleep 0.3
 done
-[ "$pane_count" = 2 ] || { echo 'Pane context menu did not split the terminal right' >&2; exit 1; }
+if [ "$pane_count" != 2 ]; then
+  import -window "$window" docs/screenshots/muxer-gui-pane-context-after.png
+  echo "Pane context menu did not split the terminal right (pane_count=$pane_count)" >&2
+  exit 1
+fi
 sleep 0.3
 xdotool mousemove --window "$window" 500 300
 sleep 0.2

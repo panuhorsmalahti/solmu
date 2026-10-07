@@ -87,7 +87,8 @@ enum Message {
     OpenWorktree,
     NewTab,
     Split,
-    SplitDown,
+    ContextSplitRight(u64),
+    ContextSplitDown(u64),
     SelectPane(u64),
     FocusSpace(u64),
     FocusTab(u64),
@@ -361,23 +362,25 @@ impl MuxerGui {
                     Task::none()
                 }
             }
-            Message::SplitDown => {
+            Message::ContextSplitRight(pane) => {
                 self.context_pane = None;
-                if let Some(pane) = self
-                    .selected_pane
-                    .or_else(|| self.snapshot["active_pane"].as_u64())
-                {
-                    let (session, launch) =
-                        (self.session.clone(), self.active_space_type().launch());
-                    perform(
-                        move || {
-                            request(&session, json!({"method":"split_pane","params":{"pane":pane,"axis":"down","launch":launch,"focus":true}})).map(|_| ())
-                        },
-                        "Pane split".into(),
-                    )
-                } else {
-                    Task::none()
-                }
+                let (session, launch) = (self.session.clone(), self.active_space_type().launch());
+                perform(
+                    move || {
+                        request(&session, json!({"method":"split_pane","params":{"pane":pane,"axis":"right","launch":launch,"focus":true}})).map(|_| ())
+                    },
+                    "Pane split".into(),
+                )
+            }
+            Message::ContextSplitDown(pane) => {
+                self.context_pane = None;
+                let (session, launch) = (self.session.clone(), self.active_space_type().launch());
+                perform(
+                    move || {
+                        request(&session, json!({"method":"split_pane","params":{"pane":pane,"axis":"down","launch":launch,"focus":true}})).map(|_| ())
+                    },
+                    "Pane split".into(),
+                )
             }
             Message::FocusSpace(id) => {
                 self.terminal_focused = false;
@@ -1124,12 +1127,12 @@ impl MuxerGui {
             }
             let actions = column![
                 button(text("Split right").size(12))
-                    .on_press(Message::Split)
+                    .on_press(Message::ContextSplitRight(id))
                     .style(appearance::ghost)
                     .padding([8, 12])
                     .width(Length::Fill),
                 button(text("Split down").size(12))
-                    .on_press(Message::SplitDown)
+                    .on_press(Message::ContextSplitDown(id))
                     .style(appearance::ghost)
                     .padding([8, 12])
                     .width(Length::Fill),
