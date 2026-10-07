@@ -1042,13 +1042,16 @@ impl MuxerGui {
             .padding([16, 24])
             .width(Length::Fill)
             .height(Length::Fill);
-        let base = row![
-            container(scrollable(sidebar).height(Length::Fill))
-                .height(Length::Fill)
-                .style(appearance::sidebar),
-            content
-        ]
-        .height(Length::Fill);
+        let base = mouse_area(
+            row![
+                container(scrollable(sidebar).height(Length::Fill))
+                    .height(Length::Fill)
+                    .style(appearance::sidebar),
+                content
+            ]
+            .height(Length::Fill),
+        )
+        .on_move(Message::CursorMoved);
         if let Some(id) = self.context_space {
             let Some(space) = spaces.iter().find(|space| space["id"].as_u64() == Some(id)) else {
                 return base.into();
@@ -1203,20 +1206,10 @@ fn subscription(state: &MuxerGui) -> Subscription<Message> {
     if state.context_space.is_some() || state.context_tab.is_some() || state.context_pane.is_some()
     {
         subscriptions.push(iced::event::listen_with(|event, _, _| match event {
-            iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
-                Some(Message::CursorMoved(position))
-            }
             iced::Event::Keyboard(KeyboardEvent::KeyPressed {
                 key: Key::Named(Named::Escape),
                 ..
             }) => Some(Message::DismissContextMenu),
-            _ => None,
-        }));
-    } else {
-        subscriptions.push(iced::event::listen_with(|event, _, _| match event {
-            iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
-                Some(Message::CursorMoved(position))
-            }
             _ => None,
         }));
     }
