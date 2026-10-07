@@ -163,7 +163,6 @@ PY
   sleep 0.3
 done
 if [ "$pane_count" != 1 ]; then
-  import -window "$window" docs/screenshots/muxer-gui-pane-close-after.png
   echo "Pane context menu did not close the focused pane (pane_count=$pane_count)" >&2
   exit 1
 fi
@@ -182,7 +181,6 @@ xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
 if [ ! -s "$marker" ] || ! grep -q SOLMU_MUXER_GUI_E2E "$marker"; then
-  import -window "$window" docs/screenshots/muxer-gui-terminal-input-after.png
   echo 'GUI input did not reach its terminal pane' >&2
   exit 1
 fi
