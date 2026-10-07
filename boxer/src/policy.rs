@@ -180,7 +180,7 @@ impl EndpointRule {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub fn matches(&self, provider: &str, method: &str, path: &str) -> bool {
         if self.provider != provider || (self.method != "*" && self.method != method) {
             return false;
