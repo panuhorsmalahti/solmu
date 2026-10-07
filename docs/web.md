@@ -78,9 +78,10 @@ The page also shows the last 24 hours' prompt cache hit rate and token counts.
 
 ## Memories
 
-Choose **Memories** in the sidebar or open `/memories` to browse, add, edit, and
-delete saved facts. The list loads older entries as you scroll and updates when
-another client changes a memory. See [Memories](memories.md).
+Choose **Memories** in the sidebar or open `/memories` to browse saved facts,
+newest first. The read-only list loads older entries as you scroll and updates
+when Solmu changes a memory. Ask Solmu to remember or change a fact. See
+[Memories](memories.md).
 
 ![Web Memories](screenshots/web-memories.png)
 

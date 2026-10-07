@@ -94,7 +94,8 @@ and loading errors. The list updates automatically.
 
 ## Memories
 
-Choose **Memories** in the sidebar or use `/memories` to browse, add, edit, and
-delete saved facts. See [the Memories guide](../../docs/memories.md).
+Choose **Memories** in the sidebar or use `/memories` to browse saved facts,
+newest first. Ask Solmu to remember or change a fact. See
+[the Memories guide](../../docs/memories.md).
 
 ![Desktop Memories](../../docs/screenshots/desktop-memories.png)

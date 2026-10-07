@@ -417,23 +417,6 @@ impl Api {
         )
         .await
     }
-    pub async fn write_memory(&self, content: &str) -> Result<Memory, String> {
-        self.json(Method::POST, "/memories", Some(json!({"content":content})))
-            .await
-    }
-    pub async fn update_memory(&self, id: &str, content: &str) -> Result<Memory, String> {
-        self.json(
-            Method::PUT,
-            &format!("/memories/{id}"),
-            Some(json!({"content":content})),
-        )
-        .await
-    }
-    pub async fn delete_memory(&self, id: &str) -> Result<(), String> {
-        self.request(Method::DELETE, &format!("/memories/{id}"), None, false)
-            .await
-            .map(|_| ())
-    }
     pub async fn skills(&self, thread: &str) -> Result<SkillCatalog, String> {
         self.json(Method::GET, &format!("/threads/{thread}/skills"), None)
             .await

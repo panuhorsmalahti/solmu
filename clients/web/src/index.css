@@ -97,11 +97,8 @@ button:disabled { cursor:default; }
 .memories-page { width: min(820px, 100%); margin: 0 auto; padding: 44px 32px 72px; }
 .memories-page h1 { margin: 8px 0 6px; font-size: 42px; letter-spacing: -.04em; }
 .memories-page > p { color: var(--muted); }
-.memory-editor { margin: 28px 0; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--secondary); }
-.memory-actions { display: flex; gap: 8px; margin-top: 10px; }
 .memory-list { display: grid; gap: 12px; margin: 22px 0; }
 .memory-card { padding: 18px 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
 .memory-card > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memory-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; color: var(--muted); font-size: 12px; }
-.memory-meta > div { display: flex; gap: 4px; }
 .memory-empty, .memory-loading { color: var(--muted); padding: 20px 0; }

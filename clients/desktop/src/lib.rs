@@ -45,9 +45,6 @@ pub struct Desktop {
     tasks_open: bool,
     memories_open: bool,
     memories: Vec<Memory>,
-    memory_draft: String,
-    memory_editor: text_editor::Content,
-    memory_editing: Option<String>,
     memory_offset: u32,
     memory_has_more: bool,
     memory_busy: bool,
@@ -76,7 +73,7 @@ const CHAT_COMMANDS: &[(&str, &str)] = &[
     ("/open", "Open a conversation by ID"),
     ("/model", "Choose or set this thread's model"),
     ("/profile", "Edit Solmu's profile"),
-    ("/memories", "Browse and manage saved memories"),
+    ("/memories", "Browse saved memories"),
     ("/audit", "Review tool calls"),
     ("/tasks", "View scheduled tasks"),
     ("/task", "Create or manage a scheduled task"),
@@ -124,13 +121,6 @@ pub enum Event {
     CloseAudit,
     OpenMemories,
     MemoriesLoaded(Result<MemoryPage, String>),
-    MemoryDraft(String),
-    MemoryDraftEdited(text_editor::Action),
-    MemoryEdit(String),
-    MemorySave,
-    MemorySaved(Result<Memory, String>),
-    MemoryDelete(String),
-    MemoryDeleted(Result<String, String>),
     MemoryMore,
     AuditToggle(String),
     OpenTasks,
@@ -284,9 +274,6 @@ impl Desktop {
             tasks_open: false,
             memories_open: false,
             memories: Vec::new(),
-            memory_draft: String::new(),
-            memory_editor: text_editor::Content::new(),
-            memory_editing: None,
             memory_offset: 0,
             memory_has_more: true,
             memory_busy: false,
@@ -646,9 +633,6 @@ impl Desktop {
                 self.skills_open = false;
                 self.mcp_open = false;
                 self.plugins_open = false;
-                self.memory_editing = None;
-                self.memory_draft.clear();
-                self.memory_editor = text_editor::Content::new();
                 self.load_memories(true)
             }
             Event::MemoriesLoaded(result) => {
@@ -658,80 +642,6 @@ impl Desktop {
                         self.memory_offset += page.items.len() as u32;
                         self.memory_has_more = page.has_more;
                         self.memories.extend(page.items);
-                        self.memory_error.clear();
-                    }
-                    Err(error) => self.memory_error = error,
-                }
-                Task::none()
-            }
-            Event::MemoryDraft(value) => {
-                self.memory_draft = value.clone();
-                self.memory_editor = text_editor::Content::with_text(&value);
-                Task::none()
-            }
-            Event::MemoryDraftEdited(action) => {
-                self.memory_editor.perform(action);
-                self.memory_draft = self.memory_editor.text();
-                Task::none()
-            }
-            Event::MemoryEdit(id) => {
-                if let Some(memory) = self.memories.iter().find(|memory| memory.id == id) {
-                    self.memory_editing = Some(id);
-                    self.memory_draft = memory.content.clone();
-                    self.memory_editor = text_editor::Content::with_text(&memory.content);
-                }
-                Task::none()
-            }
-            Event::MemorySave => {
-                if self.memory_busy || self.memory_draft.trim().is_empty() {
-                    return Task::none();
-                }
-                self.memory_busy = true;
-                let api = self.session.api.clone();
-                let content = self.memory_draft.clone();
-                let editing = self.memory_editing.clone();
-                Task::perform(
-                    async move {
-                        match editing {
-                            Some(id) => api.update_memory(&id, &content).await,
-                            None => api.write_memory(&content).await,
-                        }
-                    },
-                    Event::MemorySaved,
-                )
-            }
-            Event::MemorySaved(result) => {
-                self.memory_busy = false;
-                match result {
-                    Ok(memory) => {
-                        if let Some(existing) =
-                            self.memories.iter_mut().find(|item| item.id == memory.id)
-                        {
-                            *existing = memory.clone();
-                        } else {
-                            self.memories.insert(0, memory);
-                        }
-                        self.memory_draft.clear();
-                        self.memory_editing = None;
-                        self.memory_error.clear();
-                    }
-                    Err(error) => self.memory_error = error,
-                }
-                Task::none()
-            }
-            Event::MemoryDelete(id) => {
-                self.memory_busy = true;
-                let api = self.session.api.clone();
-                Task::perform(
-                    async move { api.delete_memory(&id).await.map(|_| id) },
-                    Event::MemoryDeleted,
-                )
-            }
-            Event::MemoryDeleted(result) => {
-                self.memory_busy = false;
-                match result {
-                    Ok(id) => {
-                        self.memories.retain(|memory| memory.id != id);
                         self.memory_error.clear();
                     }
                     Err(error) => self.memory_error = error,
@@ -957,10 +867,7 @@ impl Desktop {
                     }
                     Connection::GoalsChanged => {}
                     Connection::MemoriesChanged => {
-                        if self.memories_open
-                            && self.memory_draft.is_empty()
-                            && self.memory_editing.is_none()
-                        {
+                        if self.memories_open {
                             return self.load_memories(true);
                         }
                     }
@@ -1238,41 +1145,17 @@ impl Desktop {
         .style(appearance::sidebar);
 
         if self.memories_open {
-            let editor = column![
-                text(if self.memory_editing.is_some() {
-                    "Edit memory"
-                } else {
-                    "Save a memory"
-                })
-                .size(21),
-                text_editor(&self.memory_editor)
-                    .on_action(Event::MemoryDraftEdited)
-                    .height(Length::Fixed(105.0)),
-                row![
-                    button(if self.memory_editing.is_some() {
-                        "Save changes"
-                    } else {
-                        "Add memory"
-                    })
-                    .on_press_maybe(
-                        (!self.memory_busy && !self.memory_draft.trim().is_empty())
-                            .then_some(Event::MemorySave)
-                    ),
-                    button("Cancel")
-                        .style(appearance::ghost)
-                        .on_press(Event::MemoryDraft(String::new())),
-                ]
-                .spacing(10),
-                text(&self.memory_error).size(13),
-                text("Saved memories · newest first").size(22),
-            ]
-            .spacing(10);
             let mut content = column![
-                button("Back to conversation").style(appearance::ghost).on_press(Event::CloseAudit),
+                button("Back to conversation")
+                    .style(appearance::ghost)
+                    .on_press(Event::CloseAudit),
                 text("Memories").size(36),
-                text("Facts saved across conversations. Relevant memories are added to the agent context automatically.").size(14).color(appearance::MUTED),
-                container(editor).padding(18).width(Length::Fill).style(|theme| appearance::message(theme, false)),
-            ].spacing(16);
+                text("Facts Solmu can recall in relevant conversations · newest first")
+                    .size(14)
+                    .color(appearance::MUTED),
+                text(&self.memory_error).size(13).color(appearance::MUTED),
+            ]
+            .spacing(16);
             if self.memories.is_empty() && !self.memory_busy {
                 content = content.push(text("No saved memories yet.").size(15));
             }
@@ -1284,15 +1167,6 @@ impl Desktop {
                             text(format!("Saved {}", memory.created_at))
                                 .size(11)
                                 .color(appearance::MUTED),
-                            row![
-                                button("Edit")
-                                    .style(appearance::ghost)
-                                    .on_press(Event::MemoryEdit(memory.id.clone())),
-                                button("Delete")
-                                    .style(appearance::danger)
-                                    .on_press(Event::MemoryDelete(memory.id.clone()))
-                            ]
-                            .spacing(8),
                         ]
                         .spacing(9),
                     )

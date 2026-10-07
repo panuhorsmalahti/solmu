@@ -57,8 +57,8 @@ The Audit header also shows the last 24 hours' prompt cache hit rate and token c
 
 ## Memories
 
-Choose **Memories** in the sidebar or type `/memories`. Add, edit, and delete
-saved facts; matching entries are included in relevant replies. See
+Choose **Memories** in the sidebar or type `/memories` to browse saved facts,
+newest first. The page is read-only; ask Solmu to remember or change a fact. See
 [Memories](memories.md).
 
 ![Desktop Memories](screenshots/desktop-memories.png)

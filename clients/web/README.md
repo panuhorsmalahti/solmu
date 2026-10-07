@@ -106,8 +106,9 @@ authenticated events start agent conversations. See [webhook setup](../../docs/w
 
 ## Memories
 
-Open **Memories** in the sidebar or visit `/memories` to browse, add, edit, and
-delete facts Solmu can recall across conversations. See
+Open **Memories** in the sidebar or visit `/memories` to browse facts Solmu can
+recall across conversations, newest first. Ask Solmu to remember or change a
+fact. See
 [the Memories guide](../../docs/memories.md).
 
 ![Web Memories](../../docs/screenshots/web-memories.png)

@@ -24,8 +24,7 @@ authentication is not implemented.
 | GET | `/api/v1/tools` | Available tool definitions and their input schemas in `items`. |
 | GET | `/api/v1/audit` | Saved tool calls across all conversations, newest first. Cursor paging with `limit` (1–100, default 25) and optional positive `before`; returns `items`, `next_cursor`, and `cache_24h` token counts and hit rate. See [Audit](audit.md). |
 | GET | `/api/v1/memories?limit=30&offset=0` | Shared saved memories, newest first, with `has_more` for paging. |
-| POST | `/api/v1/memories` | Save `{ "content": "..." }`; returns the memory and timestamps. |
-| GET/PUT/DELETE | `/api/v1/memories/{id}` | Read, replace content, or delete a memory. |
+| GET | `/api/v1/memories/{id}` | Read one saved memory. The agent's `Memory` tool handles all changes. |
 | GET / POST | `/api/v1/tasks` | List tasks or create one with `name`, `prompt`, `schedule_kind` (`once` or `cron`), `schedule`, and optional `workspace`. |
 | GET / PATCH / DELETE | `/api/v1/tasks/{id}` | Read, edit (`name`, `prompt`, `schedule_kind`, `schedule`, `enabled`), or remove a task. |
 | POST | `/api/v1/tasks/{id}/run` | Start a run now (201). |

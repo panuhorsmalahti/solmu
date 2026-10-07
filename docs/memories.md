@@ -12,13 +12,14 @@ as asking about cats when a saved fact mentions your cat. It does not send every
 memory with every request. Memory text is treated as user-provided facts, not
 instructions.
 
-## Browse and manage
+## Browse memories
 
-The **Memories** page lists entries from newest to oldest and loads another page
-as you scroll. Each entry shows when it was first saved; editing also updates its
-last-modified timestamp. You can add, edit, and delete entries from web and
-desktop. CLI, Android, and iOS provide a read-only memory list. The list updates
-when another client changes memories.
+The **Memories** page is a read-only list, newest first. It loads more entries as
+you scroll and shows when each one was saved. The list updates when Solmu adds
+or changes a memory during a conversation.
+
+Only the agent manages memories through its `Memory` tool. Ask Solmu to remember
+a fact; it can then search, read, update, or delete memories when appropriate.
 
 - **Web:** open **Memories** in the sidebar or visit `/memories`.
 - **Desktop:** choose **Memories** in the sidebar, or enter `/memories`.
@@ -26,9 +27,9 @@ when another client changes memories.
 - **Android and iOS:** open **More → Memories**.
 - **Muxer:** enter `/memories` in a Solmu pane.
 
-Memories are shared for the backend installation. Deleting a memory removes it
-from future prompts. Existing conversation messages and summaries are not
-rewritten.
+Memories are shared for the backend installation. When Solmu deletes or updates
+a memory, future prompts use the new memory state. Existing conversation
+messages and summaries are not rewritten.
 
 ## Screenshots
 
