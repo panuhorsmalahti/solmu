@@ -131,6 +131,9 @@ xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
 [ -s "$marker" ] && grep -q SOLMU_MUXER_GUI_E2E "$marker" || { echo 'GUI input did not reach its terminal pane' >&2; exit 1; }
+import -window "$window" docs/screenshots/muxer-gui.png
+single_pane_color=$(convert docs/screenshots/muxer-gui.png -format '%[pixel:p{100,310}]' info:)
+[ "$single_pane_color" != 'srgb(224,233,223)' ] || { echo 'A single pane should not appear as a selectable sidebar item' >&2; exit 1; }
 
 # Open the + menu, capture its choices, and select Terminal.
 initial_space=$(python3 - "$snapshot" <<'PY'
@@ -147,8 +150,6 @@ xdotool mousemove --window "$window" 240 131 click 1
 sleep 0.3
 import -window "$window" docs/screenshots/muxer-gui.png
 import -window "$window" docs/screenshots/muxer-gui-worktrees.png
-single_pane_color=$(convert docs/screenshots/muxer-gui.png -format '%[pixel:p{100,310}]' info:)
-[ "$single_pane_color" != 'srgb(224,233,223)' ] || { echo 'A single pane should not appear as a selectable sidebar item' >&2; exit 1; }
 
 # Create a Git worktree from the selected project through the + menu.
 xdotool mousemove --window "$window" 95 232 click 1
