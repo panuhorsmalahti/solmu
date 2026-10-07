@@ -1,10 +1,10 @@
 use iced::{
-    Alignment, Element, Length, Subscription, Task, Theme,
+    Alignment, Element, Length, Point, Subscription, Task, Theme,
     keyboard::{
         self, Event as KeyboardEvent,
         key::{Key, Named},
     },
-    widget::{button, column, container, mouse_area, row, scrollable, text, text_input},
+    widget::{Stack, button, column, container, mouse_area, row, scrollable, text, text_input},
 };
 use serde_json::{Value, json};
 use solmu_client::{Action, Api};
@@ -38,6 +38,7 @@ struct MuxerGui {
     show_space_types: bool,
     worktree_branch: String,
     context_space: Option<u64>,
+    cursor_position: Point,
     desktops: HashMap<u64, Desktop>,
 }
 
@@ -72,6 +73,8 @@ enum Message {
     TerminalKey(KeyboardEvent),
     ToggleSpaceMenu,
     SpaceContextMenu(u64),
+    CursorMoved(Point),
+    DismissContextMenu,
     DeleteSpace(u64),
     RemoveWorktree(u64),
     CreateSpace(SpaceType),
@@ -107,6 +110,7 @@ impl MuxerGui {
             show_space_types: false,
             worktree_branch: String::new(),
             context_space: None,
+            cursor_position: Point::ORIGIN,
             desktops: HashMap::new(),
         };
         let task = state.snapshot_task();
@@ -122,6 +126,14 @@ impl MuxerGui {
             }
             Message::SpaceContextMenu(id) => {
                 self.context_space = Some(id);
+                Task::none()
+            }
+            Message::CursorMoved(position) => {
+                self.cursor_position = position;
+                Task::none()
+            }
+            Message::DismissContextMenu => {
+                self.context_space = None;
                 Task::none()
             }
             Message::DeleteSpace(id) => {
@@ -636,7 +648,23 @@ impl MuxerGui {
         for space in &spaces {
             let id = space["id"].as_u64().unwrap_or_default();
             let selected = Some(id) == active_space;
-            let name = space["name"].as_str().unwrap_or("Workspace").to_string();
+            let name = space["name"]
+                .as_str()
+                .map(str::to_owned)
+                .or_else(|| {
+                    let worktree = &space["worktree"];
+                    (worktree["primary"] == false).then(|| {
+                        format!(
+                            "{} · {}",
+                            PathBuf::from(worktree["repo_root"].as_str().unwrap_or(""))
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy(),
+                            worktree["branch"].as_str().unwrap_or("worktree")
+                        )
+                    })
+                })
+                .unwrap_or_else(|| "Workspace".into());
             let cwd = space["cwd"].as_str().unwrap_or("").to_string();
             let kind = if space["kind"].as_str() == Some("solmu") {
                 "Solmu"
@@ -670,38 +698,6 @@ impl MuxerGui {
                 )
                 .on_right_press(Message::SpaceContextMenu(id)),
             );
-            if self.context_space == Some(id) {
-                let mut actions = column![
-                    button(
-                        text("Delete space")
-                            .size(11)
-                            .color(iced::Color::from_rgb8(190, 65, 65)),
-                    )
-                    .on_press(Message::DeleteSpace(id))
-                    .style(appearance::ghost)
-                    .padding([7, 10])
-                    .width(Length::Fill),
-                ]
-                .spacing(2);
-                if space["worktree"]["primary"] == false {
-                    actions = actions.push(
-                        button(
-                            text("Remove worktree checkout")
-                                .size(11)
-                                .color(iced::Color::from_rgb8(190, 65, 65)),
-                        )
-                        .on_press(Message::RemoveWorktree(id))
-                        .style(appearance::ghost)
-                        .padding([7, 10])
-                        .width(Length::Fill),
-                    );
-                }
-                spaces_section = spaces_section.push(
-                    container(actions.padding(4))
-                        .style(appearance::panel)
-                        .width(Length::Fill),
-                );
-            }
             if Some(id) == active_space
                 && let Some(tab_id) = active_tab
             {
@@ -964,14 +960,68 @@ impl MuxerGui {
             .padding([16, 24])
             .width(Length::Fill)
             .height(Length::Fill);
-        row![
+        let base = row![
             container(scrollable(sidebar).height(Length::Fill))
                 .height(Length::Fill)
                 .style(appearance::sidebar),
             content
         ]
-        .height(Length::Fill)
-        .into()
+        .height(Length::Fill);
+        if let Some(id) = self.context_space {
+            let Some(space) = spaces.iter().find(|space| space["id"].as_u64() == Some(id)) else {
+                return base.into();
+            };
+            let mut actions = column![
+                button(
+                    text("Delete space")
+                        .size(12)
+                        .color(iced::Color::from_rgb8(190, 65, 65)),
+                )
+                .on_press(Message::DeleteSpace(id))
+                .style(appearance::ghost)
+                .padding([8, 12])
+                .width(Length::Fill),
+            ]
+            .spacing(2);
+            let menu_height = if space["worktree"]["primary"] == false {
+                actions = actions.push(
+                    button(
+                        text("Remove worktree checkout")
+                            .size(12)
+                            .color(iced::Color::from_rgb8(190, 65, 65)),
+                    )
+                    .on_press(Message::RemoveWorktree(id))
+                    .style(appearance::ghost)
+                    .padding([8, 12])
+                    .width(Length::Fill),
+                );
+                82.0
+            } else {
+                44.0
+            };
+            let x = self.cursor_position.x.clamp(8.0, 1180.0 - 236.0);
+            let y = self.cursor_position.y.clamp(8.0, 760.0 - menu_height - 8.0);
+            let popup = container(actions.padding(4))
+                .width(Length::Fixed(220.0))
+                .style(appearance::panel);
+            let popup_layer = container(popup)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(iced::Padding {
+                    top: y,
+                    right: 0.0,
+                    bottom: 0.0,
+                    left: x,
+                })
+                .align_x(Alignment::Start)
+                .align_y(Alignment::Start);
+            Stack::new()
+                .push(mouse_area(base).on_press(Message::DismissContextMenu))
+                .push(popup_layer)
+                .into()
+        } else {
+            base.into()
+        }
     }
 }
 
@@ -995,6 +1045,25 @@ fn subscription(state: &MuxerGui) -> Subscription<Message> {
     }
     if state.active_space_type() == SpaceType::Terminal && state.terminal_focused {
         subscriptions.push(keyboard::listen().map(Message::TerminalKey));
+    }
+    if state.context_space.is_some() {
+        subscriptions.push(iced::event::listen_with(|event, _, _| match event {
+            iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
+                Some(Message::CursorMoved(position))
+            }
+            iced::Event::Keyboard(KeyboardEvent::KeyPressed {
+                key: Key::Named(Named::Escape),
+                ..
+            }) => Some(Message::DismissContextMenu),
+            _ => None,
+        }));
+    } else {
+        subscriptions.push(iced::event::listen_with(|event, _, _| match event {
+            iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
+                Some(Message::CursorMoved(position))
+            }
+            _ => None,
+        }));
     }
     Subscription::batch(subscriptions)
 }
