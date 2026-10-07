@@ -123,6 +123,36 @@ PY
 done
 [ "$count" = "1:$first_tab:$first_space" ] || { echo "Closing a tab did not select the previous tab in the same space (state=$count)" >&2; exit 1; }
 
+# Right-click the focused pane for layout actions, then close the split pane.
+xdotool mousemove --window "$window" 500 300 click 3
+sleep 0.3
+import -window "$window" docs/screenshots/muxer-gui-pane-context-menu.png
+xdotool mousemove --window "$window" 550 320 click 1
+for _ in $(seq 1 30); do
+  pane_count=$(python3 - "$snapshot" <<'PY'
+import json, sys
+print(len(json.load(open(sys.argv[1]))["panes"]))
+PY
+)
+  [ "$pane_count" = 2 ] && break
+  sleep 0.3
+done
+[ "$pane_count" = 2 ] || { echo 'Pane context menu did not split the terminal right' >&2; exit 1; }
+sleep 0.3
+xdotool mousemove --window "$window" 500 300 click 3
+sleep 0.3
+xdotool mousemove --window "$window" 550 388 click 1
+for _ in $(seq 1 30); do
+  pane_count=$(python3 - "$snapshot" <<'PY'
+import json, sys
+print(len(json.load(open(sys.argv[1]))["panes"]))
+PY
+)
+  [ "$pane_count" = 1 ] && break
+  sleep 0.3
+done
+[ "$pane_count" = 1 ] || { echo 'Pane context menu did not close the focused pane' >&2; exit 1; }
+
 # Focus the terminal surface, type like a normal terminal, and verify the shell
 # command's file side effect.
 marker="$state/gui-command.txt"

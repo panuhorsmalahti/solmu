@@ -23,7 +23,8 @@ the workspace. Select a tab to switch to it, use **+** to add one, or click its
 **x** to close it. Split panes and send terminal input from the workspace. Click **+** beside
 **Spaces** to choose a new **Terminal** or **Solmu** space. Right-click a space
 in the sidebar and choose **Delete space** to remove it. Right-click a tab to
-close it from its context menu; click outside the menu or press Escape to dismiss it.
+close it from its context menu. Right-click a pane to split right, split down,
+or close it. Click outside a context menu or press Escape to dismiss it.
 Solmu opens the shared native desktop interface, including its conversation
 list and Profile, Audit, Tasks, and other pages. In Muxer GUI, use chat commands
 such as `/plugins`, `/mcp`, `/skills`, `/compact`, `/status`, `/context`,
@@ -56,3 +57,5 @@ and [development](development.md).
 ![Removing a worktree checkout from Muxer GUI](screenshots/muxer-gui-remove-worktree.png)
 
 ![Closing a tab from its context menu in Muxer GUI](screenshots/muxer-gui-tab-context-menu.png)
+
+![Pane actions in the Muxer GUI context menu](screenshots/muxer-gui-pane-context-menu.png)

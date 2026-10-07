@@ -39,6 +39,7 @@ struct MuxerGui {
     worktree_branch: String,
     context_space: Option<u64>,
     context_tab: Option<u64>,
+    context_pane: Option<u64>,
     cursor_position: Point,
     desktops: HashMap<u64, Desktop>,
 }
@@ -75,6 +76,7 @@ enum Message {
     ToggleSpaceMenu,
     SpaceContextMenu(u64),
     TabContextMenu(u64),
+    PaneContextMenu(u64),
     CursorMoved(Point),
     DismissContextMenu,
     DeleteSpace(u64),
@@ -85,6 +87,7 @@ enum Message {
     OpenWorktree,
     NewTab,
     Split,
+    SplitDown,
     SelectPane(u64),
     FocusSpace(u64),
     FocusTab(u64),
@@ -113,6 +116,7 @@ impl MuxerGui {
             worktree_branch: String::new(),
             context_space: None,
             context_tab: None,
+            context_pane: None,
             cursor_position: Point::ORIGIN,
             desktops: HashMap::new(),
         };
@@ -130,11 +134,19 @@ impl MuxerGui {
             Message::SpaceContextMenu(id) => {
                 self.context_space = Some(id);
                 self.context_tab = None;
+                self.context_pane = None;
                 Task::none()
             }
             Message::TabContextMenu(id) => {
                 self.context_space = None;
                 self.context_tab = Some(id);
+                self.context_pane = None;
+                Task::none()
+            }
+            Message::PaneContextMenu(id) => {
+                self.context_space = None;
+                self.context_tab = None;
+                self.context_pane = Some(id);
                 Task::none()
             }
             Message::CursorMoved(position) => {
@@ -144,6 +156,7 @@ impl MuxerGui {
             Message::DismissContextMenu => {
                 self.context_space = None;
                 self.context_tab = None;
+                self.context_pane = None;
                 Task::none()
             }
             Message::DeleteSpace(id) => {
@@ -331,6 +344,7 @@ impl MuxerGui {
                 }
             }
             Message::Split => {
+                self.context_pane = None;
                 if let Some(pane) = self
                     .selected_pane
                     .or_else(|| self.snapshot["active_pane"].as_u64())
@@ -347,10 +361,29 @@ impl MuxerGui {
                     Task::none()
                 }
             }
+            Message::SplitDown => {
+                self.context_pane = None;
+                if let Some(pane) = self
+                    .selected_pane
+                    .or_else(|| self.snapshot["active_pane"].as_u64())
+                {
+                    let (session, launch) =
+                        (self.session.clone(), self.active_space_type().launch());
+                    perform(
+                        move || {
+                            request(&session, json!({"method":"split_pane","params":{"pane":pane,"axis":"down","launch":launch,"focus":true}})).map(|_| ())
+                        },
+                        "Pane split".into(),
+                    )
+                } else {
+                    Task::none()
+                }
+            }
             Message::FocusSpace(id) => {
                 self.terminal_focused = false;
                 self.context_space = None;
                 self.context_tab = None;
+                self.context_pane = None;
                 self.show_space_types = false;
                 let session = self.session.clone();
                 perform(
@@ -367,6 +400,7 @@ impl MuxerGui {
             Message::FocusTab(id) => {
                 self.terminal_focused = false;
                 self.context_tab = None;
+                self.context_pane = None;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -382,6 +416,7 @@ impl MuxerGui {
             Message::CloseTab(id) => {
                 self.terminal_focused = false;
                 self.context_tab = None;
+                self.context_pane = None;
                 let session = self.session.clone();
                 perform(
                     move || {
@@ -411,6 +446,7 @@ impl MuxerGui {
                 )
             }
             Message::ClosePane(id) => {
+                self.context_pane = None;
                 self.terminal_focused = false;
                 let session = self.session.clone();
                 perform(
@@ -460,6 +496,9 @@ impl MuxerGui {
                             .collect();
                         if self.context_tab.is_some_and(|id| !tab_ids.contains(&id)) {
                             self.context_tab = None;
+                        }
+                        if self.context_pane.is_some_and(|id| !pane_ids.contains(&id)) {
+                            self.context_pane = None;
                         }
                         let selected = self
                             .selected_pane
@@ -912,6 +951,9 @@ impl MuxerGui {
         ]
         .align_y(Alignment::Center)
         .spacing(7);
+        let pane_header = mouse_area(pane_header).on_right_press(Message::PaneContextMenu(
+            self.selected_pane.unwrap_or_default(),
+        ));
         let terminal_text = if self.screen.is_empty() {
             "Choose a pane to see its live terminal output.\n\nCreate a space or start a session to begin."
         } else {
@@ -941,7 +983,10 @@ impl MuxerGui {
             .height(Length::Fill)
             .style(appearance::terminal),
         )
-        .on_press(Message::TerminalFocus);
+        .on_press(Message::TerminalFocus)
+        .on_right_press(Message::PaneContextMenu(
+            self.selected_pane.unwrap_or_default(),
+        ));
         let terminal_panel = container(
             column![pane_header, screen]
                 .spacing(10)
@@ -1073,6 +1118,46 @@ impl MuxerGui {
                 .push(mouse_area(base).on_press(Message::DismissContextMenu))
                 .push(popup_layer)
                 .into()
+        } else if let Some(id) = self.context_pane {
+            if !panes.iter().any(|pane| pane["id"].as_u64() == Some(id)) {
+                return base.into();
+            }
+            let actions = column![
+                button(text("Split right").size(12))
+                    .on_press(Message::Split)
+                    .style(appearance::ghost)
+                    .padding([8, 12])
+                    .width(Length::Fill),
+                button(text("Split down").size(12))
+                    .on_press(Message::SplitDown)
+                    .style(appearance::ghost)
+                    .padding([8, 12])
+                    .width(Length::Fill),
+                button(text("Close pane").size(12))
+                    .on_press(Message::ClosePane(id))
+                    .style(appearance::ghost)
+                    .padding([8, 12])
+                    .width(Length::Fill),
+            ]
+            .spacing(2);
+            let popup = container(actions.padding(4))
+                .width(Length::Fixed(160.0))
+                .style(appearance::panel);
+            let popup_layer = container(popup)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(iced::Padding {
+                    top: self.cursor_position.y.clamp(8.0, 760.0 - 124.0),
+                    right: 0.0,
+                    bottom: 0.0,
+                    left: self.cursor_position.x.clamp(8.0, 1180.0 - 176.0),
+                })
+                .align_x(Alignment::Start)
+                .align_y(Alignment::Start);
+            Stack::new()
+                .push(mouse_area(base).on_press(Message::DismissContextMenu))
+                .push(popup_layer)
+                .into()
         } else {
             base.into()
         }
@@ -1100,7 +1185,8 @@ fn subscription(state: &MuxerGui) -> Subscription<Message> {
     if state.active_space_type() == SpaceType::Terminal && state.terminal_focused {
         subscriptions.push(keyboard::listen().map(Message::TerminalKey));
     }
-    if state.context_space.is_some() || state.context_tab.is_some() {
+    if state.context_space.is_some() || state.context_tab.is_some() || state.context_pane.is_some()
+    {
         subscriptions.push(iced::event::listen_with(|event, _, _| match event {
             iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
                 Some(Message::CursorMoved(position))
