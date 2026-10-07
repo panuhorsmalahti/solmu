@@ -458,6 +458,25 @@ impl App {
                 }
                 let repo_root = PathBuf::from(String::from_utf8_lossy(&repo_output.stdout).trim())
                     .canonicalize()?;
+                let worktree_output = git_output(&repo_root, &["worktree", "list", "--porcelain"])?;
+                let primary_lines = String::from_utf8_lossy(&worktree_output.stdout)
+                    .lines()
+                    .take_while(|line| !line.is_empty())
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>();
+                let primary_root = primary_lines
+                    .iter()
+                    .map(String::as_str)
+                    .find_map(|line| line.strip_prefix("worktree "))
+                    .map(PathBuf::from)
+                    .ok_or("Could not resolve the primary worktree")?
+                    .canonicalize()?;
+                let parent_branch = primary_lines
+                    .iter()
+                    .map(String::as_str)
+                    .find_map(|line| line.strip_prefix("branch refs/heads/"))
+                    .unwrap_or_default()
+                    .to_owned();
                 let check = git_output(&repo_root, &["check-ref-format", "--branch", branch])?;
                 if !check.status.success() {
                     return Err(format!(
@@ -466,8 +485,6 @@ impl App {
                     )
                     .into());
                 }
-                let current = git_output(&repo_root, &["branch", "--show-current"])?;
-                let parent_branch = String::from_utf8_lossy(&current.stdout).trim().to_owned();
                 let target = if let Some(path) = path {
                     if !path.is_absolute() {
                         return Err("Worktree path must be absolute".into());
@@ -492,7 +509,7 @@ impl App {
                     } else {
                         self.config.path.parent().unwrap().join(configured)
                     };
-                    let repo_name = repo_root
+                    let repo_name = primary_root
                         .file_name()
                         .ok_or("Could not name the Git repository")?;
                     root.join(repo_name).join(worktree_slug(branch))
@@ -546,13 +563,19 @@ impl App {
                         .output();
                     return Err(error);
                 }
-                self.spaces[source_index].worktree = Some(super::WorktreeInfo {
-                    repo_root: repo_root.clone(),
-                    branch: parent_branch,
-                    primary: true,
-                });
+                if let Some(index) = self
+                    .spaces
+                    .iter()
+                    .position(|space| space.directory == primary_root)
+                {
+                    self.spaces[index].worktree = Some(super::WorktreeInfo {
+                        repo_root: primary_root.clone(),
+                        branch: parent_branch,
+                        primary: true,
+                    });
+                }
                 self.spaces[self.space].worktree = Some(super::WorktreeInfo {
-                    repo_root,
+                    repo_root: primary_root,
                     branch: branch.clone(),
                     primary: false,
                 });

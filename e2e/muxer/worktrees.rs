@@ -284,5 +284,22 @@ async fn worktree_open_reuses_existing_spaces_and_finds_paths_or_branches() {
     );
     assert_eq!(reopened["opened"], false);
     assert_eq!(reopened["space"]["id"], space_id.parse::<u64>().unwrap());
+    let nested_path = backend.directory.path().join("nested-checkout");
+    let nested = command(
+        &session,
+        &[
+            "worktree",
+            "create",
+            "--space",
+            &space_id,
+            "--branch",
+            "nested-branch",
+            "--path",
+            nested_path.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(nested["created"]["space"]["worktree"]["primary"], false);
+    let primary = command(&session, &["space", "get", &source_id]);
+    assert_eq!(primary["worktree"]["primary"], true);
     assert!(session.command(&["server", "stop"]).status.success());
 }
