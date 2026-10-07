@@ -1,7 +1,7 @@
 # Install the complete Solmu bundle
 
 This optional installer installs the backend, CLI, desktop, web client,
-Boxer, Muxer, and Muxer GUI together. It is separate from the
+Boxer, Boxer GUI, Muxer, and Muxer GUI together. It is separate from the
 [individual module installers](releases.md#individual-components).
 
 Linux/macOS (requires `unzip`):
@@ -33,6 +33,7 @@ Choose a client:
 | Desktop | `solmu-desktop` |
 | Terminal workspace | `muxer` |
 | Muxer window | `muxer-gui` |
+| Boxer window | `boxer-gui` |
 | Web | `http://127.0.0.1:3000` |
 
 `boxer --cwd /path/to/project -- solmu` launches the terminal client through

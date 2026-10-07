@@ -31,7 +31,7 @@ For the installed background backend, edit `~/.solmu/.env` (Windows:
 | --- | --- | --- | --- |
 | `SOLMU_BIND_ADDR` | `127.0.0.1:3000` | `0.0.0.0:3000` | IP address and port for the API server. IPv6 addresses use brackets, such as `[::1]:3000`. |
 | `SOLMU_WEBHOOK_BIND_ADDR` | `127.0.0.1:3001` | `0.0.0.0:3001` | Separate listener for authenticated inbound webhooks. |
-| `SOLMU_AUTO_UPDATE` | `true` | Not used | Opt out of the daily update job for installed modules, including the backend, clients, web files, Boxer, and Muxer. Set `false` in `~/.solmu/.env` (`%USERPROFILE%\.solmu\.env` on Windows); create the file if you installed clients without the backend. Docker deployments update by pulling a new image. |
+| `SOLMU_AUTO_UPDATE` | `true` | Not used | Opt out of the daily update job for installed modules, including the backend, clients, web files, Boxer, Boxer GUI, and Muxer. Set `false` in `~/.solmu/.env` (`%USERPROFILE%\.solmu\.env` on Windows); create the file if you installed clients without the backend. Docker deployments update by pulling a new image. |
 | `SOLMU_WEB_DIR` | `~/.solmu/web` (Windows: `%USERPROFILE%\.solmu\web`) | `/app/web` | Published web client files served by the backend. Service installations use `web` relative to their state folder. |
 | `SOLMU_DATABASE_URL` | `sqlite://solmu.db` | `sqlite:///data/solmu.db` | SQLite file. Its parent directory must exist. Tables are created automatically. |
 | `SOLMU_BACKEND_URL` | `http://127.0.0.1:3000` | Same | Backend address used by Rust clients. |

@@ -8,7 +8,7 @@ use solmu_client::{
     Profile, ScheduledTask, Session, TaskRun, Update,
 };
 
-mod appearance;
+pub mod appearance;
 pub use appearance::theme;
 
 pub struct Desktop {

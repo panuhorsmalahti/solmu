@@ -87,6 +87,9 @@ systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervis
 
 Networking stays allowed. This uses the host kernel.
 
+To launch and manage sessions in a native window that shares live state with
+the CLI, install [Boxer GUI](../boxer-gui/README.md).
+
 `boxer ps` lists active attached launches on every supported OS and detached
 sessions on Linux and macOS. It uses local per-launch records and does not
 require a separate Boxer service. Add `--all` to include finished launches.

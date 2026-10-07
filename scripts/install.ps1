@@ -1,7 +1,7 @@
 param(
     [string]$Version = $env:SOLMU_VERSION,
     [string]$InstallDir = $env:SOLMU_INSTALL_DIR,
-    [ValidateSet('all', 'backend', 'cli', 'desktop', 'muxer', 'muxer-gui', 'boxer', 'web')]
+    [ValidateSet('all', 'backend', 'cli', 'desktop', 'muxer', 'muxer-gui', 'boxer', 'boxer-gui', 'web')]
     [string]$Component = $(if ($env:SOLMU_COMPONENT) { $env:SOLMU_COMPONENT } else { 'all' }),
     [switch]$NoPath,
     [switch]$NoService,
@@ -80,7 +80,7 @@ try {
         if ($cacheFile -and -not (Test-Path -LiteralPath $cacheFile -PathType Leaf)) { Copy-Item -LiteralPath $archive -Destination $cacheFile }
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $zip = [System.IO.Compression.ZipFile]::OpenRead($archive)
-        $binaries = @('solmu-backend.exe', 'solmu.exe', 'solmu-desktop.exe', 'boxer.exe', 'muxer.exe', 'muxer-gui.exe')
+        $binaries = @('solmu-backend.exe', 'solmu.exe', 'solmu-desktop.exe', 'boxer.exe', 'boxer-gui.exe', 'muxer.exe', 'muxer-gui.exe')
         $entries = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
         try {
             foreach ($entry in $zip.Entries) {
@@ -103,7 +103,7 @@ try {
             foreach ($binary in $binaries) { if (-not (Test-Path -LiteralPath (Join-Path $Output $binary) -PathType Leaf)) { throw "Missing binary: $binary" } }
         }
     }
-    $binaries = @('solmu-backend.exe', 'solmu.exe', 'solmu-desktop.exe', 'boxer.exe', 'muxer.exe', 'muxer-gui.exe')
+    $binaries = @('solmu-backend.exe', 'solmu.exe', 'solmu-desktop.exe', 'boxer.exe', 'boxer-gui.exe', 'muxer.exe', 'muxer-gui.exe')
     $needsService = $Component -in @('backend', 'all') -and -not $NoService
     $installerBase = if ($env:SOLMU_INSTALLER_BASE_URL) { $env:SOLMU_INSTALLER_BASE_URL.TrimEnd('/') } else { 'https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts' }
     $helper = Join-Path $solmuTemporary 'service.ps1'
@@ -127,6 +127,7 @@ try {
         'muxer' { 'solmu.exe'; 'muxer.exe' }
         'muxer-gui' { 'solmu.exe'; 'muxer-gui.exe' }
         'boxer' { 'boxer.exe' }
+        'boxer-gui' { 'boxer-gui.exe' }
     }
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     foreach ($binary in $selected) { Copy-Item -LiteralPath (Join-Path $solmuTemporary "files\$binary") -Destination (Join-Path $InstallDir $binary) -Force }
@@ -144,13 +145,13 @@ try {
         if (($env:Path -split ';') -notcontains $InstallDir) { $env:Path = "$InstallDir;$env:Path" }
     }
     $moduleNames = switch ($Component) {
-        'all' { @('backend', 'cli', 'desktop', 'boxer', 'muxer', 'muxer-gui') }
+        'all' { @('backend', 'cli', 'desktop', 'boxer', 'boxer-gui', 'muxer', 'muxer-gui') }
         'muxer' { @('cli', 'muxer') }
         'muxer-gui' { @('cli', 'muxer-gui') }
         default { @($Component) }
     }
     if ($NoService -and $Component -eq 'backend') { $moduleNames = @() }
-    if ($NoService -and $Component -eq 'all') { $moduleNames = @('cli', 'desktop', 'boxer', 'muxer', 'muxer-gui') }
+    if ($NoService -and $Component -eq 'all') { $moduleNames = @('cli', 'desktop', 'boxer', 'boxer-gui', 'muxer', 'muxer-gui') }
     foreach ($module in $moduleNames) { Register-SolmuModule $module $InstallDir $Version $serviceDir }
     if ($Component -eq 'all') {
         Install-Web $webDestination (Join-Path $solmuTemporary 'web')

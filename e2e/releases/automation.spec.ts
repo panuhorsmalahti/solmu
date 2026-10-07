@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 const root = resolve('.')
-const packages = ['backend', 'clients/common', 'clients/cli', 'clients/desktop', 'boxer', 'muxer', 'muxer-gui', 'e2e', 'cloud/congregator/backend']
+const packages = ['backend', 'clients/common', 'clients/cli', 'clients/desktop', 'boxer', 'boxer-gui', 'muxer', 'muxer-gui', 'e2e', 'cloud/congregator/backend']
 
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), 'solmu-release-e2e-'))

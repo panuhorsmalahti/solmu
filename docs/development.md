@@ -18,7 +18,7 @@ npm run test:e2e
 Build the binaries before e2e tests. Tests launch a real Solmu backend with
 temporary SQLite files and a local provider fixture; they never use your keys
 or make paid model requests. Tests live in `e2e/api`, `e2e/cli`, `e2e/desktop`,
-`e2e/web`, `e2e/ios`, `e2e/website`, `e2e/boxer`, `e2e/muxer`, and `e2e/muxer-gui`.
+`e2e/web`, `e2e/ios`, `e2e/website`, `e2e/boxer`, `e2e/boxer-gui`, `e2e/muxer`, and `e2e/muxer-gui`.
 Release automation tests under `e2e/releases` use local Git repositories and
 release metadata fixtures; they do not publish tags, images, or releases.
 Within each client, keep feature tests in separate files such as `conversations`,
@@ -74,6 +74,9 @@ Plugin tests capture `artifacts/cli-plugins.html` and
 Audit tests capture `artifacts/cli-audit.html` and `artifacts/muxer-audit.html`;
 render them with `node scripts/capture-cli.mjs cli-audit` and
 `node scripts/capture-cli.mjs muxer-audit`.
+The Boxer GUI E2E launches a native window under Xvfb and verifies that an
+external CLI launch updates its session list from filesystem events without
+polling. CI captures `docs/screenshots/boxer-gui.png`.
 The Muxer GUI E2E launches a native window under Xvfb without a Muxer process,
 sends input to its embedded terminal engine, verifies saved workspace state,
 and captures `docs/screenshots/muxer-gui.png` in CI.

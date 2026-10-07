@@ -35,7 +35,7 @@ function tarball(files: Record<string, Uint8Array>) {
 export async function releaseFixture(options: { corrupt?: boolean; webFiles?: Record<string, Uint8Array>; missingScript?: boolean; legacyCli?: boolean } = {}) {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'solmu-client-install-e2e-')))
   const destination = path.join(directory, 'install with spaces')
-  const native = Object.fromEntries(['solmu-backend', 'solmu', 'solmu-desktop', 'boxer', 'muxer', 'muxer-gui'].map(name => [executable(name), strToU8(`Published ${name}\n`)]))
+  const native = Object.fromEntries(['solmu-backend', 'solmu', 'solmu-desktop', 'boxer', 'boxer-gui', 'muxer', 'muxer-gui'].map(name => [executable(name), strToU8(`Published ${name}\n`)]))
   if (options.legacyCli) { native[executable('solmu-cli')] = native[executable('solmu')]; delete native[executable('solmu')] }
   const web = options.webFiles ?? { 'index.html': strToU8('<html>Solmu web</html>'), 'assets/app.js': strToU8('console.log("Solmu")'), 'assets/app.css': strToU8('body{color:green}') }
   const platform = windows ? 'windows-x86_64' : process.platform === 'darwin' ? `macos-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}` : 'linux-x86_64'

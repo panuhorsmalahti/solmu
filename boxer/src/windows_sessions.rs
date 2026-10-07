@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::{fs, io, path::PathBuf, time::SystemTime};
 use windows_sys::Win32::{
     Foundation::CloseHandle,
-    System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+    System::Threading::{
+        OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+    },
 };
 
 #[derive(Serialize, Deserialize)]
@@ -55,6 +57,21 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
     } else {
         (arguments.first().and_then(|arg| arg.to_str()), 0)
     };
+    if action == Some("stop")
+        && arguments
+            .get(1 + offset)
+            .and_then(|arg| arg.to_str())
+            .is_some()
+    {
+        let id = arguments[1 + offset].to_string_lossy();
+        let force = arguments
+            .get(2 + offset)
+            .is_some_and(|arg| arg == "--force");
+        if arguments.len() != 2 + offset + usize::from(force) {
+            return Err(io::Error::other("Usage: boxer stop <id> [--force]"));
+        }
+        return stop(&id, force);
+    }
     if !matches!(action, Some("ps" | "list")) {
         return Err(io::Error::other(
             "Usage: boxer ps|sessions list [--all] [--json]",
@@ -113,6 +130,31 @@ pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
     Ok(0)
 }
 
+fn stop(id: &str, force: bool) -> io::Result<i32> {
+    let mut launch = read(id)?;
+    if launch.status == "running" {
+        let process =
+            unsafe { OpenProcess(PROCESS_TERMINATE | PROCESS_SYNCHRONIZE, 0, launch.pid) };
+        if process.is_null() {
+            launch.status = "finished".into();
+            save(&launch)?;
+        } else {
+            let code = if force { 1 } else { 0 };
+            let terminated = unsafe { TerminateProcess(process, code) } != 0;
+            let error = (!terminated).then(io::Error::last_os_error);
+            unsafe { CloseHandle(process) };
+            if let Some(error) = error {
+                return Err(error);
+            }
+            launch.status = "finished".into();
+            launch.exit_code = Some(code as i32);
+            save(&launch)?;
+        }
+    }
+    println!("Session {}: {}", launch.id, launch.status);
+    Ok(0)
+}
+
 fn process_is_running(pid: u32) -> bool {
     unsafe {
         let process = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
@@ -156,7 +198,14 @@ fn save_at(path: &std::path::Path, launch: &Launch) -> io::Result<()> {
         &temporary,
         serde_json::to_vec_pretty(launch).map_err(io::Error::other)?,
     )?;
-    fs::rename(temporary, path)
+    match fs::rename(&temporary, path) {
+        Ok(()) => Ok(()),
+        Err(error) if path.exists() => {
+            fs::remove_file(path)?;
+            fs::rename(temporary, path).map_err(|_| error)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn now_ms() -> io::Result<u128> {

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 const products = [
   { slug: 'muxer', title: 'Muxer · Solmu', feature: 'Real terminals, side by side', image: 'Muxer GUI showing a Solmu workspace and Spaces sidebar', docs: '../docs/muxer/' },
-  { slug: 'boxer', title: 'Boxer · Solmu', feature: 'Choose what files are available', image: null, docs: '../docs/boxer/' },
+  { slug: 'boxer', title: 'Boxer · Solmu', feature: 'Choose what files are available', image: 'Boxer GUI showing a live Boxer process list', docs: '../docs/boxer/' },
   { slug: 'congregator', title: 'Congregator · Solmu', feature: 'Expose application ports', image: 'Congregator dashboard showing an agent and exposed sandbox ports', docs: '../docs/congregator/' },
 ]
 

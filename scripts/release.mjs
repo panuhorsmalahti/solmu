@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 
-const packages = ['backend', 'clients/common', 'clients/cli', 'clients/desktop', 'boxer', 'muxer', 'muxer-gui', 'e2e', 'cloud/congregator/backend']
+const packages = ['backend', 'clients/common', 'clients/cli', 'clients/desktop', 'boxer', 'boxer-gui', 'muxer', 'muxer-gui', 'e2e', 'cloud/congregator/backend']
 const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const read = path => readFileSync(path, 'utf8')
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim()

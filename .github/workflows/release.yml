@@ -77,7 +77,7 @@ jobs:
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev libdbus-1-dev
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --locked --target ${{ matrix.target }} -p solmu-backend -p solmu-cli -p solmu-desktop -p solmu-boxer -p solmu-muxer -p solmu-muxer-gui
+      - run: cargo build --release --locked --target ${{ matrix.target }} -p solmu-backend -p solmu-cli -p solmu-desktop -p solmu-boxer -p solmu-boxer-gui -p solmu-muxer -p solmu-muxer-gui
       - name: Package Unix executables
         if: runner.os != 'Windows'
         env:
@@ -86,7 +86,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p artifacts
-          tar -C "target/$TARGET/release" -czf "artifacts/solmu-v$VERSION-$PLATFORM.tar.gz" solmu-backend solmu solmu-desktop boxer muxer muxer-gui
+          tar -C "target/$TARGET/release" -czf "artifacts/solmu-v$VERSION-$PLATFORM.tar.gz" solmu-backend solmu solmu-desktop boxer boxer-gui muxer muxer-gui
       - name: Package Windows executables
         if: runner.os == 'Windows'
         env:
@@ -94,7 +94,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           New-Item -ItemType Directory artifacts | Out-Null
-          $binaries = @('solmu-backend.exe', 'solmu.exe', 'solmu-desktop.exe', 'boxer.exe', 'muxer.exe', 'muxer-gui.exe') | ForEach-Object { Join-Path "target/$env:TARGET/release" $_ }
+          $binaries = @('solmu-backend.exe', 'solmu.exe', 'solmu-desktop.exe', 'boxer.exe', 'boxer-gui.exe', 'muxer.exe', 'muxer-gui.exe') | ForEach-Object { Join-Path "target/$env:TARGET/release" $_ }
           Compress-Archive -LiteralPath $binaries -DestinationPath "artifacts/solmu-v$env:VERSION-windows-x86_64.zip"
       - uses: actions/upload-artifact@v4
         with:

@@ -19,11 +19,12 @@ const products = [
   {
     slug: 'boxer', title: 'Boxer', descriptor: 'Run agents with clear boundaries.',
     description: 'Launch Solmu or another command in a managed process sandbox. Start with familiar defaults, then limit workspace access and add platform-supported controls when a task needs tighter boundaries.',
-    image: null, alt: '', eyebrow: 'LOCAL SANDBOX · LINUX, MACOS + WINDOWS',
+    image: 'screenshots/boxer-gui.png', alt: 'Boxer GUI showing a live Boxer process list', eyebrow: 'LOCAL SANDBOX · LINUX, MACOS + WINDOWS',
     features: [
       ['Choose what files are available', 'On Linux and macOS, restrict access to a project workspace and add read-only or writable paths.'],
       ['Reuse profiles', 'Keep launch settings for Solmu, Codex, Claude Code, and other commands in named profiles.'],
       ['Inspect the work', 'Run detached sessions, inspect their status and output, and review optional workspace snapshots.'],
+      ['Manage sessions in a window', 'Boxer GUI shares live launch records with the CLI, so either app can manage attached and detached processes.'],
     ],
     docs: '../docs/boxer/', repo: 'https://github.com/panuhorsmalahti/solmu/tree/main/sandbox', action: 'Install Boxer',
     command: 'boxer --profile solmu --cwd /path/to/project -- solmu-backend',

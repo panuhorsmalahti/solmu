@@ -6,13 +6,14 @@ api=${SOLMU_RELEASE_API:-https://api.github.com/repos/$repo/releases}
 base=${SOLMU_RELEASE_BASE_URL:-https://github.com/$repo/releases/download}
 component=${SOLMU_COMPONENT:-all}
 case "$component" in
-  all) selected='solmu-backend solmu solmu-desktop boxer muxer muxer-gui' ;;
+  all) selected='solmu-backend solmu solmu-desktop boxer boxer-gui muxer muxer-gui' ;;
   backend) selected=solmu-backend ;;
   cli) selected=solmu ;;
   desktop) selected=solmu-desktop ;;
   muxer) selected='solmu muxer' ;;
   muxer-gui) selected='solmu muxer-gui' ;;
   boxer) selected=boxer ;;
+  boxer-gui) selected=boxer-gui ;;
   web) selected='' ;;
   *) echo 'Unknown Solmu component' >&2; exit 1 ;;
 esac
@@ -126,7 +127,7 @@ fi
 
 tar -tzf "$temporary/$asset" > "$temporary/entries"
 while IFS= read -r entry; do
-  case "$entry" in solmu-backend|solmu|solmu-cli|solmu-desktop|boxer|muxer|muxer-gui) ;; *) echo 'Unexpected file in release archive' >&2; exit 1 ;; esac
+  case "$entry" in solmu-backend|solmu|solmu-cli|solmu-desktop|boxer|boxer-gui|muxer|muxer-gui) ;; *) echo 'Unexpected file in release archive' >&2; exit 1 ;; esac
 done < "$temporary/entries"
 [ "$(sort "$temporary/entries" | uniq -d | wc -l | tr -d ' ')" = 0 ] || { echo 'Duplicate native archive entry' >&2; exit 1; }
 tar -tvzf "$temporary/$asset" | awk 'substr($0,1,1) != "-" {bad=1} END {exit bad}' || { echo 'Only regular binaries are allowed in release archives' >&2; exit 1; }
@@ -137,7 +138,7 @@ if [ -f "$temporary/solmu-cli" ]; then
   cp "$temporary/solmu-cli" "$temporary/solmu"
   legacy_cli=1
 fi
-for binary in solmu-backend solmu solmu-desktop boxer muxer muxer-gui; do
+for binary in solmu-backend solmu solmu-desktop boxer boxer-gui muxer muxer-gui; do
   [ -f "$temporary/$binary" ] && [ ! -L "$temporary/$binary" ] || { echo "Missing binary: $binary" >&2; exit 1; }
 done
 installer_base=${SOLMU_INSTALLER_BASE_URL:-https://raw.githubusercontent.com/panuhorsmalahti/solmu/main/scripts}
@@ -158,11 +159,12 @@ case "$component" in
   cli) register_component cli "$destination" ;;
   desktop) register_component desktop "$destination" ;;
   boxer) register_component boxer "$destination" ;;
+  boxer-gui) register_component boxer-gui "$destination" ;;
   muxer) register_component cli "$destination"; register_component muxer "$destination" ;;
   muxer-gui) register_component cli "$destination"; register_component muxer-gui "$destination" ;;
   web) register_component web "$destination" ;;
   all)
-    for name in cli desktop boxer muxer muxer-gui; do register_component "$name" "$destination"; done
+    for name in cli desktop boxer boxer-gui muxer muxer-gui; do register_component "$name" "$destination"; done
     if [ "${SOLMU_NO_SERVICE:-0}" != 1 ]; then register_component backend "$destination"; printf '%s\n' "$tag" > "$service_dir/.solmu-backend-version"; fi
     register_component web "$web_destination"
     ;;

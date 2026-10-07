@@ -212,6 +212,12 @@ private processes and a filesystem view with only the workspace writable,
 filtered system calls, dropped capabilities, and CPU/memory/task limits.
 [Permissions and setup](docs/boxer.md).
 
+Manage Boxer launches in a native window with [Boxer GUI](docs/boxer-gui.md).
+It shares live session state with the CLI, so both can stay open together.
+Install it with `install-boxer-gui.sh` or `install-boxer-gui.ps1` from `scripts/`.
+
+![Boxer GUI live process list](docs/screenshots/boxer-gui.png)
+
 Example (Linux/macOS backend workspace permissions):
 
 ```sh

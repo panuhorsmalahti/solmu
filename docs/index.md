@@ -43,6 +43,7 @@ for each workspace product: [Muxer](https://panuhorsmalahti.github.io/solmu/muxe
 - [Plugins](plugins.md): install portable packages with skills and MCP tools.
 - [Congregator](congregator.md): manage Solmu agents in Kubernetes sandboxes.
 - [Boxer](boxer.md): launch a program with optional OS sandbox controls.
+- [Boxer GUI](boxer-gui.md): launch and manage local Boxer processes in a native window.
 
 ## Make room with Muxer
 

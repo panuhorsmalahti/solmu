@@ -67,7 +67,7 @@ fn windows_boxer_ps_lists_attached_launches_and_finished_history() {
             "powershell",
             "-NoProfile",
             "-Command",
-            "Start-Sleep -Seconds 4",
+            "Start-Sleep -Seconds 20",
         ])
         .env("BOXER_SESSIONS_DIR", sessions.path())
         .stdin(Stdio::null())
@@ -117,7 +117,18 @@ fn windows_boxer_ps_lists_attached_launches_and_finished_history() {
     assert_eq!(launch_info["detached"], false);
     assert_ne!(launch_info["pid"].as_u64().unwrap() as u32, launch.id());
 
-    assert!(launch.wait().unwrap().success());
+    let stopped = Command::new(binary("boxer"))
+        .args(["stop", launch_info["id"].as_str().unwrap(), "--force"])
+        .env("BOXER_SESSIONS_DIR", sessions.path())
+        .output()
+        .unwrap();
+    assert!(
+        stopped.status.success(),
+        "boxer stop failed: stdout={}; stderr={}",
+        String::from_utf8_lossy(&stopped.stdout),
+        String::from_utf8_lossy(&stopped.stderr)
+    );
+    assert!(!launch.wait().unwrap().success());
     let listing = Command::new(binary("boxer"))
         .args(["ps", "--all", "--json"])
         .env("BOXER_SESSIONS_DIR", sessions.path())
@@ -126,5 +137,5 @@ fn windows_boxer_ps_lists_attached_launches_and_finished_history() {
     assert!(listing.status.success());
     let launches: serde_json::Value = serde_json::from_slice(&listing.stdout).unwrap();
     assert_eq!(launches[0]["status"], "finished");
-    assert_eq!(launches[0]["exit_code"], 0);
+    assert_eq!(launches[0]["exit_code"], 1);
 }

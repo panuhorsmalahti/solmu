@@ -1,5 +1,5 @@
 [workspace]
-members = ["backend", "clients/common", "clients/cli", "clients/desktop", "boxer", "muxer", "muxer-gui", "e2e", "cloud/congregator/backend"]
+members = ["backend", "clients/common", "clients/cli", "clients/desktop", "boxer", "boxer-gui", "muxer", "muxer-gui", "e2e", "cloud/congregator/backend"]
 resolver = "3"
 
 [workspace.package]

@@ -1,7 +1,7 @@
 # Releases and installation
 
 Solmu releases are stored in [GitHub Releases](https://github.com/panuhorsmalahti/solmu/releases).
-They contain backend, CLI, desktop, Boxer, Muxer, and Muxer GUI binaries, the web build,
+They contain backend, CLI, desktop, Boxer, Boxer GUI, Muxer, and Muxer GUI binaries, the web build,
 a separately downloadable signed Android APK, and `SHA256SUMS`. Linux x64, Windows x64,
 and Intel/Apple Silicon macOS are packaged.
 Linux desktop binaries require the usual X11/Wayland runtime libraries.
@@ -55,9 +55,10 @@ accepts `-Version`, `-InstallDir`, and `-NoPath`. Unix accepts `SOLMU_NO_PATH=1`
 | Muxer GUI | `muxer-gui` and `solmu` | [Muxer GUI](../muxer-gui/README.md#install) |
 | Web | Site files in `~/.solmu/web` | [Web](../clients/web/README.md#install) |
 | Boxer | `boxer` | [Boxer](../boxer/README.md#install) |
+| Boxer GUI | `boxer-gui` | [Boxer GUI](boxer-gui.md#install) |
 
 Each has `scripts/install-<module>.sh` and `.ps1`; terminal uses `install-cli`.
-Client installers assume the backend is already running and do not install it.
+Solmu client installers assume the backend is already running and do not install it. Boxer CLI and GUI run locally.
 Backend installation registers and starts its [background service](services.md).
 The web installer requires `unzip` on Unix, installs only site files, and serves
 them through the running backend at `http://127.0.0.1:3000`.

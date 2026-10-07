@@ -68,6 +68,25 @@ jobs:
             docs/screenshots/muxer-gui-tab-context-menu.png
             docs/screenshots/muxer-gui-pane-context-menu.png
 
+  boxer-gui:
+    name: Boxer GUI (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libfontconfig1-dev xvfb xdotool imagemagick
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p solmu-boxer -p solmu-boxer-gui
+      - run: xvfb-run -a -s '-screen 0 1180x760x24' bash e2e/boxer-gui/run.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: boxer-gui-screenshot
+          path: docs/screenshots/boxer-gui.png
+          if-no-files-found: ignore
+
   android:
     name: Android (ubuntu-latest)
     runs-on: ubuntu-latest
@@ -218,7 +237,7 @@ jobs:
 
   browser:
     name: Web and website
-    needs: [rust, ios, android, muxer-gui]
+    needs: [rust, ios, android, muxer-gui, boxer-gui]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -233,6 +252,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: muxer-gui-screenshot
+          path: docs/screenshots
+      - uses: actions/download-artifact@v4
+        with:
+          name: boxer-gui-screenshot
           path: docs/screenshots
       - uses: actions/download-artifact@v4
         with:

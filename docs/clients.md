@@ -29,17 +29,21 @@ Screenshots: [CLI](screenshots/cli.png) · [Desktop](screenshots/desktop.png) ·
 [Android](screenshots/android.png) · [iOS](screenshots/ios.png) | [Web](screenshots/web.png) ·
 [Muxer](screenshots/muxer.png) · [Muxer GUI](screenshots/muxer-gui.png).
 
+Boxer GUI screenshot: [live session list](screenshots/boxer-gui.png).
+
 | Client | Start after installation | Guide |
 | --- | --- | --- |
 | CLI | `solmu` | [Terminal client](cli.md) |
 | Muxer (spaces and CLI tabs) | `muxer` | [Terminal workspace](muxer.md) |
 | Muxer GUI (native window) | `muxer-gui` | [Graphical workspace](muxer-gui.md) |
+| Boxer GUI (native window) | `boxer-gui` | [Boxer process manager](boxer-gui.md) |
 | Desktop | `solmu-desktop` | [Desktop client](desktop.md) |
 | Android | Install from Android Studio or build with Gradle | [Android client](android.md) |
 | iOS | Build and install with Xcode on a Mac | [iOS client](ios.md) |
 | Web | Open `http://127.0.0.1:3000` | [Web client](web.md) |
 
-These guides assume the backend is already running. Its [installer](services.md)
+Boxer GUI manages local sandbox processes and does not need the Solmu backend.
+The other client guides assume the backend is already running. Its [installer](services.md)
 starts a background service; [Docker](running.md) is another option. The default backend address is `http://127.0.0.1:3000`.
 Rust clients load `SOLMU_BACKEND_URL` from `.env` or the environment. Set it in
 the Vite process environment for web development.
