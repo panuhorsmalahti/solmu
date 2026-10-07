@@ -357,6 +357,13 @@ fn init(args: &[OsString]) -> io::Result<i32> {
 
 fn scaffold(extends: Vec<OsString>, full: bool) -> Value {
     let inherited = !extends.is_empty();
+    // `OsString` serializes as a platform-specific tagged value on Windows and
+    // Unix. Profile references are validated UTF-8 strings, so keep the policy
+    // format portable by serializing their textual form explicitly.
+    let extends = extends
+        .into_iter()
+        .map(|value| value.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
     let mut policy = if extends.len() == 1 {
         json!({"version":1,"extends":extends[0],"read":[],"write":[]})
     } else if !extends.is_empty() {
