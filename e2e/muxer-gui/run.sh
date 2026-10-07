@@ -162,7 +162,11 @@ PY
   [ "$pane_count" = 1 ] && break
   sleep 0.3
 done
-[ "$pane_count" = 1 ] || { echo 'Pane context menu did not close the focused pane' >&2; exit 1; }
+if [ "$pane_count" != 1 ]; then
+  import -window "$window" docs/screenshots/muxer-gui-pane-close-after.png
+  echo "Pane context menu did not close the focused pane (pane_count=$pane_count)" >&2
+  exit 1
+fi
 
 # Focus the terminal surface, type like a normal terminal, and verify the shell
 # command's file side effect.
