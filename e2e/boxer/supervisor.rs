@@ -70,7 +70,12 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
             .unwrap();
         if output.status.success() {
             let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-            if let Some(request) = response["items"].as_array().unwrap().first() {
+            if let Some(request) = response["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|request| request["id"].as_str() != Some(&request_id))
+            {
                 let _ = Command::new(binary("boxer"))
                     .args([
                         "supervisor",
