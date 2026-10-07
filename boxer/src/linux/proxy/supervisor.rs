@@ -1,4 +1,4 @@
-use crate::network::Target;
+use crate::network::{HostPattern, Target};
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsString,
@@ -23,6 +23,12 @@ pub enum Decision {
     Deny,
 }
 
+pub enum Resolution {
+    Once,
+    Session(HostPattern),
+    Deny,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
@@ -34,6 +40,8 @@ struct Request {
 #[serde(deny_unknown_fields)]
 struct Response {
     decision: Decision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    host_pattern: Option<String>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -42,6 +50,8 @@ struct AuditPayload {
     request_id: String,
     target: Target,
     decision: Decision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    host_pattern: Option<String>,
     reason: String,
     timestamp_ms: u128,
 }
@@ -83,7 +93,7 @@ impl Supervisor {
         self.running.store(false, Ordering::Release);
     }
 
-    pub fn request(&self, target: &Target) -> Decision {
+    pub fn request(&self, target: &Target) -> Resolution {
         let id = uuid::Uuid::new_v4().simple().to_string();
         let request = Request {
             id: id.clone(),
@@ -92,37 +102,54 @@ impl Supervisor {
         let request_path = self.directory.join("requests").join(format!("{id}.json"));
         let response_path = self.directory.join("responses").join(format!("{id}.json"));
         if write_new_json(&request_path, &request).is_err() {
-            return Decision::Deny;
+            return Resolution::Deny;
         }
         eprintln!(
             "Boxer approval needed for {}:{}; run `boxer supervisor {} list` in another terminal",
             target.host, target.port, self.id
         );
         let deadline = Instant::now() + REQUEST_TIMEOUT;
-        let (decision, reason) = loop {
+        let (mut decision, mut host_pattern, mut reason) = loop {
             if !self.running.load(Ordering::Acquire) {
-                break (Decision::Deny, "session_stopped");
+                break (Decision::Deny, None, "session_stopped");
             }
             if Instant::now() >= deadline {
-                break (Decision::Deny, "timed_out");
+                break (Decision::Deny, None, "timed_out");
             }
             match fs::read(&response_path) {
                 Ok(contents) => match serde_json::from_slice::<Response>(&contents) {
                     Ok(response) => {
-                        let reason = match response.decision {
-                            Decision::Once => "approved_once",
-                            Decision::Session => "approved_for_session",
-                            Decision::Deny => "denied",
+                        let reason = match (response.decision, response.host_pattern.is_some()) {
+                            (Decision::Once, _) => "approved_once",
+                            (Decision::Session, true) => "approved_for_session_pattern",
+                            (Decision::Session, false) => "approved_for_session",
+                            (Decision::Deny, _) => "denied",
                         };
-                        break (response.decision, reason);
+                        break (response.decision, response.host_pattern, reason);
                     }
                     Err(_) => thread::sleep(Duration::from_millis(25)),
                 },
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
                     thread::sleep(Duration::from_millis(50));
                 }
-                Err(_) => break (Decision::Deny, "request_channel_error"),
+                Err(_) => break (Decision::Deny, None, "request_channel_error"),
             }
+        };
+        let session_pattern = if matches!(decision, Decision::Session) {
+            let requested = host_pattern
+                .clone()
+                .unwrap_or_else(|| format!("{}:{}", target.host, target.port));
+            match HostPattern::parse(&requested) {
+                Ok(pattern) if pattern.matches(&target.host, target.port) => Some(pattern),
+                _ => {
+                    decision = Decision::Deny;
+                    host_pattern = None;
+                    reason = "invalid_grant_pattern";
+                    None
+                }
+            }
+        } else {
+            None
         };
         let timestamp_ms = match now_ms() {
             Ok(timestamp) => timestamp,
@@ -130,7 +157,7 @@ impl Supervisor {
                 eprintln!("Boxer could not timestamp the network approval decision: {error}");
                 let _ = fs::remove_file(request_path);
                 let _ = fs::remove_file(response_path);
-                return Decision::Deny;
+                return Resolution::Deny;
             }
         };
         if let Err(error) = append_audit(
@@ -139,6 +166,7 @@ impl Supervisor {
                 request_id: id.clone(),
                 target: target.clone(),
                 decision,
+                host_pattern,
                 reason: reason.to_owned(),
                 timestamp_ms,
             },
@@ -146,11 +174,15 @@ impl Supervisor {
             eprintln!("Boxer could not record the network approval decision: {error}");
             let _ = fs::remove_file(request_path);
             let _ = fs::remove_file(response_path);
-            return Decision::Deny;
+            return Resolution::Deny;
         }
         let _ = fs::remove_file(request_path);
         let _ = fs::remove_file(response_path);
-        decision
+        match (decision, session_pattern) {
+            (Decision::Once, _) => Resolution::Once,
+            (Decision::Session, Some(pattern)) => Resolution::Session(pattern),
+            _ => Resolution::Deny,
+        }
     }
 }
 
@@ -208,36 +240,59 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
                 println!("No network approval decisions recorded");
             } else {
                 for record in records {
+                    let pattern = record
+                        .payload
+                        .host_pattern
+                        .as_deref()
+                        .map(|pattern| format!("session pattern {pattern}"))
+                        .unwrap_or_default();
                     println!(
-                        "{}\t{}:{}\t{}",
+                        "{}\t{}:{}\t{}\t{}",
                         record.payload.request_id,
                         record.payload.target.host,
                         record.payload.target.port,
-                        record.payload.reason
+                        record.payload.reason,
+                        pattern
                     );
                 }
             }
             Ok(0)
         }
-        "approve" if (4..=5).contains(&arguments.len()) => {
+        "approve" if (4..=7).contains(&arguments.len()) => {
             let request_id = text(&arguments[3], "request ID")?;
             validate_id(request_id)?;
             let decision = match arguments.get(4).and_then(|argument| argument.to_str()) {
-                None | Some("--once") => Decision::Once,
-                Some("--session") => Decision::Session,
+                Some("--once") if arguments.len() == 5 => Decision::Once,
+                Some("--session") if arguments.len() == 5 || arguments.len() == 7 => {
+                    Decision::Session
+                }
                 _ => return Err(usage()),
             };
-            respond(&directory, request_id, decision)?;
+            let host_pattern = if arguments.len() == 7 {
+                if arguments[5] != "--host" {
+                    return Err(usage());
+                }
+                Some(text(&arguments[6], "host pattern")?)
+            } else {
+                None
+            };
+            if host_pattern.is_some() && !matches!(decision, Decision::Session) {
+                return Err(usage());
+            }
+            respond(&directory, request_id, decision, host_pattern)?;
             println!(
                 "Approved request {request_id} ({})",
                 decision_name(decision)
             );
+            if let Some(pattern) = host_pattern {
+                println!("Session grant: {pattern}");
+            }
             Ok(0)
         }
         "deny" if arguments.len() == 4 => {
             let request_id = text(&arguments[3], "request ID")?;
             validate_id(request_id)?;
-            respond(&directory, request_id, Decision::Deny)?;
+            respond(&directory, request_id, Decision::Deny, None)?;
             println!("Denied request {request_id}");
             Ok(0)
         }
@@ -264,14 +319,36 @@ fn list(directory: &std::path::Path) -> io::Result<Vec<Request>> {
     Ok(requests)
 }
 
-fn respond(directory: &std::path::Path, id: &str, decision: Decision) -> io::Result<()> {
+fn respond(
+    directory: &std::path::Path,
+    id: &str,
+    decision: Decision,
+    host_pattern: Option<&str>,
+) -> io::Result<()> {
     let request = directory.join("requests").join(format!("{id}.json"));
     if !request.is_file() {
         return Err(io::Error::other("No such pending Boxer approval"));
     }
+    let request: Request = serde_json::from_slice(&fs::read(request)?).map_err(io::Error::other)?;
+    let host_pattern = match (decision, host_pattern) {
+        (Decision::Session, Some(pattern)) => {
+            let pattern = HostPattern::parse(pattern)?;
+            if !pattern.matches(&request.target.host, request.target.port) {
+                return Err(io::Error::other(
+                    "Session host pattern must include the pending host and port",
+                ));
+            }
+            Some(pattern.authority())
+        }
+        (Decision::Session, None) | (Decision::Once | Decision::Deny, None) => None,
+        _ => return Err(usage()),
+    };
     write_new_json(
         &directory.join("responses").join(format!("{id}.json")),
-        &Response { decision },
+        &Response {
+            decision,
+            host_pattern,
+        },
     )
 }
 
@@ -450,6 +527,6 @@ fn decision_name(decision: Decision) -> &'static str {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer supervisor SESSION_ID list [--json] | history [--json] | approve REQUEST_ID [--once|--session] | deny REQUEST_ID",
+        "Usage: boxer supervisor SESSION_ID list [--json] | history [--json] | approve REQUEST_ID --once | approve REQUEST_ID --session [--host DOMAIN_PATTERN[:PORT]] | deny REQUEST_ID",
     )
 }

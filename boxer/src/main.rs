@@ -314,7 +314,7 @@ fn run() -> io::Result<i32> {
                 "--detached: start a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach by default (Linux/macOS). Set BOXER_DETACH_SEQUENCE to configure the key sequence. Manage sessions with `boxer ps|inspect|pause|resume|stop|prune`."
             );
             println!(
-                "boxer supervisor SESSION_ID list|history|approve|deny: manage and verify runtime network approval decisions (Linux)."
+                "boxer supervisor SESSION_ID list|history|approve|deny: manage and verify runtime network approval decisions; --session --host DOMAIN_PATTERN grants matching hosts for this session (Linux)."
             );
             return Ok(0);
         } else if argument == "--version" {

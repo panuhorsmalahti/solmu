@@ -10,14 +10,10 @@ fn main() {
         .first()
         .is_some_and(|value| value == "--proxy-connect")
     {
-        let target = arguments[1].to_string_lossy();
         let proxy = std::env::var("HTTP_PROXY").expect("sandbox proxy address");
         let proxy = proxy.strip_prefix("http://").unwrap_or(&proxy);
-        let repeats = arguments
-            .get(2)
-            .map(|value| value.to_string_lossy().parse::<usize>().unwrap())
-            .unwrap_or(1);
-        for _ in 0..repeats {
+        for target in arguments.iter().skip(1) {
+            let target = target.to_string_lossy();
             let mut stream = TcpStream::connect(proxy).expect("connect to sandbox proxy");
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(10)))

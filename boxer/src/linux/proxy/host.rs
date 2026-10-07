@@ -76,7 +76,7 @@ impl Host {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
-        let mut session_grants = Vec::<Target>::new();
+        let mut session_grants = Vec::<crate::network::HostPattern>::new();
         host.threads.push(
             thread::Builder::new()
                 .name("boxer-routes".into())
@@ -87,7 +87,9 @@ impl Host {
                             crate::network::matches_domain_pattern(&target.host, pattern)
                         });
                         let mut is_allowed = local.contains(&target)
-                            || session_grants.contains(&target)
+                            || session_grants
+                                .iter()
+                                .any(|pattern| pattern.matches(&target.host, target.port))
                             || allowed
                                 .iter()
                                 .any(|pattern| pattern.matches(&target.host, target.port));
@@ -97,12 +99,12 @@ impl Host {
                             && let Some(supervisor) = &supervisor
                         {
                             match supervisor.request(&target) {
-                                super::supervisor::Decision::Once => is_allowed = true,
-                                super::supervisor::Decision::Session => {
-                                    session_grants.push(target.clone());
+                                super::supervisor::Resolution::Once => is_allowed = true,
+                                super::supervisor::Resolution::Session(pattern) => {
+                                    session_grants.push(pattern);
                                     is_allowed = true;
                                 }
-                                super::supervisor::Decision::Deny => {}
+                                super::supervisor::Resolution::Deny => {}
                             }
                         }
                         let socket = if is_allowed && !hard_denied && !explicitly_denied {

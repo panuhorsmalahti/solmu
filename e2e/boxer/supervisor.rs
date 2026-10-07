@@ -10,7 +10,11 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
         .arg(workspace.path())
         .arg("--")
         .arg(binary("sandbox-probe"))
-        .args(["--proxy-connect", "supervisor-fixture.invalid:443", "2"])
+        .args([
+            "--proxy-connect",
+            "api.example.com:443",
+            "cdn.example.com:443",
+        ])
         .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -40,7 +44,7 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
         );
         let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
         if let Some(request) = response["items"].as_array().unwrap().first() {
-            assert_eq!(request["target"]["host"], "supervisor-fixture.invalid");
+            assert_eq!(request["target"]["host"], "api.example.com");
             assert_eq!(request["target"]["port"], 443);
             break request["id"].as_str().unwrap().to_owned();
         }
@@ -51,8 +55,35 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
         thread::sleep(std::time::Duration::from_millis(25));
     };
 
+    let unrelated_pattern = Command::new(binary("boxer"))
+        .args([
+            "supervisor",
+            &session,
+            "approve",
+            &request_id,
+            "--session",
+            "--host",
+            "*.other.example",
+        ])
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
+        .output()
+        .unwrap();
+    assert_eq!(unrelated_pattern.status.code(), Some(125));
+    assert!(
+        String::from_utf8_lossy(&unrelated_pattern.stderr)
+            .contains("must include the pending host")
+    );
+
     let approved = Command::new(binary("boxer"))
-        .args(["supervisor", &session, "approve", &request_id, "--session"])
+        .args([
+            "supervisor",
+            &session,
+            "approve",
+            &request_id,
+            "--session",
+            "--host",
+            "*.example.com",
+        ])
         .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
         .output()
         .unwrap();
@@ -124,7 +155,11 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
     assert_eq!(history["items"][0]["payload"]["request_id"], request_id);
     assert_eq!(
         history["items"][0]["payload"]["reason"],
-        "approved_for_session"
+        "approved_for_session_pattern"
+    );
+    assert_eq!(
+        history["items"][0]["payload"]["host_pattern"],
+        "*.example.com:443"
     );
     let audit_file = supervisor_root.join(&session).join("audit.jsonl");
     let audit = std::fs::read_to_string(&audit_file).unwrap();

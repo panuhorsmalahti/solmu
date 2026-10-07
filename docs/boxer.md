@@ -961,12 +961,16 @@ systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervis
 boxer supervisor <session-id> list
 boxer supervisor <session-id> approve <request-id> --once
 boxer supervisor <session-id> approve <request-id> --session
+boxer supervisor <session-id> approve <request-id> --session --host '*.example.com'
 boxer supervisor <session-id> deny <request-id>
 ```
 
 `--once` approves only the pending host and port. `--session` remembers that
-exact destination until this Boxer process exits. Requests expire after five
-minutes and are denied when Boxer stops. `boxer supervisor <session-id> list
+exact destination until this Boxer process exits. Add `--host DOMAIN_PATTERN`
+to approve matching hosts and ports for the session; the pattern must include
+the pending request. Use the same exact and wildcard hostname patterns as
+`--allow-host`. Requests expire after five minutes and are denied when Boxer
+stops. `boxer supervisor <session-id> list
 --json` returns machine-readable requests. After the run, review decisions with
 `boxer supervisor <session-id> history [--json]`. Boxer keeps this history under
 `~/.boxer/supervisor/` and verifies its HMAC chain before displaying it. Set
