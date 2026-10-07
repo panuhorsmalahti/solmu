@@ -37,7 +37,8 @@ fn supervised_command_approval_supports_once_and_session_grants() {
             .count(),
         2
     );
-    let session = String::from_utf8_lossy(&output.stderr)
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let session = stderr
         .lines()
         .find_map(|line| line.strip_prefix("Boxer supervisor session: "))
         .and_then(|value| value.split_whitespace().next())
@@ -85,7 +86,8 @@ fn supervised_command_denial_is_recorded_and_does_not_run_the_command() {
     let output = child.wait_with_output().unwrap();
     assert!(!output.status.success());
     assert!(!String::from_utf8_lossy(&output.stdout).contains("cmd-secret-fixture"));
-    let session = String::from_utf8_lossy(&output.stderr)
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let session = stderr
         .lines()
         .find_map(|line| line.strip_prefix("Boxer supervisor session: "))
         .and_then(|value| value.split_whitespace().next())
