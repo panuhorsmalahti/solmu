@@ -181,7 +181,11 @@ sleep 0.2
 xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
-[ -s "$marker" ] && grep -q SOLMU_MUXER_GUI_E2E "$marker" || { echo 'GUI input did not reach its terminal pane' >&2; exit 1; }
+if [ ! -s "$marker" ] || ! grep -q SOLMU_MUXER_GUI_E2E "$marker"; then
+  import -window "$window" docs/screenshots/muxer-gui-terminal-input-after.png
+  echo 'GUI input did not reach its terminal pane' >&2
+  exit 1
+fi
 import -window "$window" docs/screenshots/muxer-gui.png
 single_pane_color=$(convert docs/screenshots/muxer-gui.png -format '%[pixel:p{100,310}]' info:)
 [ "$single_pane_color" != 'srgb(224,233,223)' ] || { echo 'A single pane should not appear as a selectable sidebar item' >&2; exit 1; }

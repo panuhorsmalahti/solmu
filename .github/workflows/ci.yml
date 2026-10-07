@@ -68,6 +68,7 @@ jobs:
             docs/screenshots/muxer-gui-tab-context-menu.png
             docs/screenshots/muxer-gui-pane-context-menu.png
             docs/screenshots/muxer-gui-pane-close-after.png
+            docs/screenshots/muxer-gui-terminal-input-after.png
 
   android:
     name: Android (ubuntu-latest)
