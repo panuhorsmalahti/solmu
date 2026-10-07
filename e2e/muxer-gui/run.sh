@@ -312,9 +312,13 @@ import -window "$window" docs/screenshots/muxer-gui.png
 
 # The Spaces sidebar stays visible while Solmu is active. Right-click the
 # original space, delete it, and verify it is removed.
-xdotool mousemove --window "$window" 100 174 click 3
+xdotool mousemove --window "$window" 100 174
+sleep 0.2
+xdotool click 3
 sleep 0.3
-xdotool mousemove --window "$window" 80 224 click 1
+xdotool mousemove --window "$window" 150 200
+sleep 0.2
+xdotool click 1
 removed=''
 for _ in $(seq 1 30); do
   removed=$(python3 - "$snapshot" "$initial_space" <<'PY'
@@ -331,3 +335,5 @@ done
 test -s docs/screenshots/muxer-gui.png
 test -s docs/screenshots/muxer-gui-worktrees.png
 test -s docs/screenshots/muxer-gui-remove-worktree.png
+test -s docs/screenshots/muxer-gui-tab-context-menu.png
+test -s docs/screenshots/muxer-gui-pane-context-menu.png
