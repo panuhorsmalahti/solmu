@@ -152,7 +152,7 @@ impl MuxerGui {
                 self.context_space = None;
                 self.context_tab = None;
                 self.context_pane = Some(id);
-                self.context_position = self.cursor_position;
+                self.context_position = Point::new(500.0, 300.0);
                 Task::none()
             }
             Message::CursorMoved(position) => {
