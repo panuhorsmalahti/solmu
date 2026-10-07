@@ -142,7 +142,6 @@ PY
   sleep 0.3
 done
 if [ "$pane_count" != 2 ]; then
-  import -window "$window" docs/screenshots/muxer-gui-pane-context-after.png
   echo "Pane context menu did not split the terminal right (pane_count=$pane_count)" >&2
   exit 1
 fi

@@ -41,6 +41,7 @@ struct MuxerGui {
     context_tab: Option<u64>,
     context_pane: Option<u64>,
     cursor_position: Point,
+    context_position: Point,
     desktops: HashMap<u64, Desktop>,
 }
 
@@ -119,6 +120,7 @@ impl MuxerGui {
             context_tab: None,
             context_pane: None,
             cursor_position: Point::ORIGIN,
+            context_position: Point::ORIGIN,
             desktops: HashMap::new(),
         };
         let task = state.snapshot_task();
@@ -136,18 +138,21 @@ impl MuxerGui {
                 self.context_space = Some(id);
                 self.context_tab = None;
                 self.context_pane = None;
+                self.context_position = self.cursor_position;
                 Task::none()
             }
             Message::TabContextMenu(id) => {
                 self.context_space = None;
                 self.context_tab = Some(id);
                 self.context_pane = None;
+                self.context_position = self.cursor_position;
                 Task::none()
             }
             Message::PaneContextMenu(id) => {
                 self.context_space = None;
                 self.context_tab = None;
                 self.context_pane = Some(id);
+                self.context_position = self.cursor_position;
                 Task::none()
             }
             Message::CursorMoved(position) => {
@@ -1072,8 +1077,11 @@ impl MuxerGui {
             } else {
                 44.0
             };
-            let x = self.cursor_position.x.clamp(8.0, 1180.0 - 236.0);
-            let y = self.cursor_position.y.clamp(8.0, 760.0 - menu_height - 8.0);
+            let x = self.context_position.x.clamp(8.0, 1180.0 - 236.0);
+            let y = self
+                .context_position
+                .y
+                .clamp(8.0, 760.0 - menu_height - 8.0);
             let popup = container(actions.padding(4))
                 .width(Length::Fixed(220.0))
                 .style(appearance::panel);
@@ -1110,10 +1118,10 @@ impl MuxerGui {
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .padding(iced::Padding {
-                    top: self.cursor_position.y.clamp(8.0, 760.0 - 60.0),
+                    top: self.context_position.y.clamp(8.0, 760.0 - 60.0),
                     right: 0.0,
                     bottom: 0.0,
-                    left: self.cursor_position.x.clamp(8.0, 1180.0 - 176.0),
+                    left: self.context_position.x.clamp(8.0, 1180.0 - 176.0),
                 })
                 .align_x(Alignment::Start)
                 .align_y(Alignment::Start);
@@ -1150,10 +1158,10 @@ impl MuxerGui {
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .padding(iced::Padding {
-                    top: self.cursor_position.y.clamp(8.0, 760.0 - 124.0),
+                    top: self.context_position.y.clamp(8.0, 760.0 - 124.0),
                     right: 0.0,
                     bottom: 0.0,
-                    left: self.cursor_position.x.clamp(8.0, 1180.0 - 176.0),
+                    left: self.context_position.x.clamp(8.0, 1180.0 - 176.0),
                 })
                 .align_x(Alignment::Start)
                 .align_y(Alignment::Start);

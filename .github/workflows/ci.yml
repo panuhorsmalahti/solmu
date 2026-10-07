@@ -67,7 +67,6 @@ jobs:
             docs/screenshots/muxer-gui-remove-worktree.png
             docs/screenshots/muxer-gui-tab-context-menu.png
             docs/screenshots/muxer-gui-pane-context-menu.png
-            docs/screenshots/muxer-gui-pane-context-after.png
 
   android:
     name: Android (ubuntu-latest)
