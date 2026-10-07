@@ -141,7 +141,8 @@ const POLICY_GUIDE: &str = r#"Boxer policy authoring guide
 Purpose
   A policy controls the filesystem, network, environment, and resource limits
   visible to a launched process. Policies are JSON or JSONC, versioned with
-  `version: 1`. `mode` is required: `unrestricted`, `workspace`, or `isolated`.
+  `version: 1`. Standalone policies require a `mode` of `unrestricted`,
+  `workspace`, or `isolated`; inherited policies may take it from a parent.
   Validate and inspect a policy before using it to start an agent.
 
 Start and inspect
@@ -211,7 +212,7 @@ Important boundaries
   Policies describe requested rules, but available enforcement depends on the
   host OS. `policy validate` and `policy show` report current-platform support;
   they do not apply kernel controls. `boxer --policy FILE --cwd PATH --check`
-  probes enforcement before launch. Unsupported restrictions fail closed.
+  probes enforcement before launch; unsupported restrictions fail closed.
   Do not infer that a policy is enforced merely because it parses successfully.
 "#;
 
