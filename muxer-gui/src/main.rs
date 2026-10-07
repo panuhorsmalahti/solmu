@@ -508,10 +508,14 @@ impl MuxerGui {
                         if self.context_pane.is_some_and(|id| !pane_ids.contains(&id)) {
                             self.context_pane = None;
                         }
-                        let selected = self
-                            .selected_pane
+                        let selected = self.snapshot["active_pane"]
+                            .as_u64()
                             .filter(|id| panes.iter().any(|p| p["id"].as_u64() == Some(*id)))
-                            .or_else(|| self.snapshot["active_pane"].as_u64())
+                            .or_else(|| {
+                                self.selected_pane.filter(|id| {
+                                    panes.iter().any(|p| p["id"].as_u64() == Some(*id))
+                                })
+                            })
                             .or_else(|| panes.first().and_then(|p| p["id"].as_u64()));
                         if selected != self.selected_pane {
                             self.selected_pane = selected;
