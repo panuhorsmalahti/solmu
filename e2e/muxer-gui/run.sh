@@ -129,7 +129,9 @@ sleep 0.2
 xdotool click 3
 sleep 0.3
 import -window "$window" docs/screenshots/muxer-gui-pane-context-menu.png
-xdotool mousemove --window "$window" 550 320 click 1
+xdotool mousemove --window "$window" 550 320
+sleep 0.2
+xdotool click 1
 for _ in $(seq 1 30); do
   pane_count=$(python3 - "$snapshot" <<'PY'
 import json, sys
@@ -145,7 +147,9 @@ xdotool mousemove --window "$window" 500 300
 sleep 0.2
 xdotool click 3
 sleep 0.3
-xdotool mousemove --window "$window" 550 388 click 1
+xdotool mousemove --window "$window" 550 388
+sleep 0.2
+xdotool click 1
 for _ in $(seq 1 30); do
   pane_count=$(python3 - "$snapshot" <<'PY'
 import json, sys
