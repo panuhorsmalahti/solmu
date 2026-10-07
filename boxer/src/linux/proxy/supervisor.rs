@@ -10,7 +10,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
@@ -36,6 +36,25 @@ struct Response {
     decision: Decision,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AuditPayload {
+    request_id: String,
+    target: Target,
+    decision: Decision,
+    reason: String,
+    timestamp_ms: u128,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AuditRecord {
+    sequence: u64,
+    previous_mac: String,
+    payload: AuditPayload,
+    mac: String,
+}
+
 pub struct Supervisor {
     id: String,
     directory: PathBuf,
@@ -47,11 +66,7 @@ impl Supervisor {
         let id = uuid::Uuid::new_v4().simple().to_string();
         let directory = directory(&id)?;
         fs::create_dir(&directory)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))?;
-        }
+        private_directory(&directory)?;
         fs::create_dir(directory.join("requests"))?;
         fs::create_dir(directory.join("responses"))?;
         eprintln!(
@@ -84,21 +99,55 @@ impl Supervisor {
             target.host, target.port, self.id
         );
         let deadline = Instant::now() + REQUEST_TIMEOUT;
-        let decision = loop {
-            if !self.running.load(Ordering::Acquire) || Instant::now() >= deadline {
-                break Decision::Deny;
+        let (decision, reason) = loop {
+            if !self.running.load(Ordering::Acquire) {
+                break (Decision::Deny, "session_stopped");
+            }
+            if Instant::now() >= deadline {
+                break (Decision::Deny, "timed_out");
             }
             match fs::read(&response_path) {
                 Ok(contents) => match serde_json::from_slice::<Response>(&contents) {
-                    Ok(response) => break response.decision,
+                    Ok(response) => {
+                        let reason = match response.decision {
+                            Decision::Once => "approved_once",
+                            Decision::Session => "approved_for_session",
+                            Decision::Deny => "denied",
+                        };
+                        break (response.decision, reason);
+                    }
                     Err(_) => thread::sleep(Duration::from_millis(25)),
                 },
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
                     thread::sleep(Duration::from_millis(50));
                 }
-                Err(_) => break Decision::Deny,
+                Err(_) => break (Decision::Deny, "request_channel_error"),
             }
         };
+        let timestamp_ms = match now_ms() {
+            Ok(timestamp) => timestamp,
+            Err(error) => {
+                eprintln!("Boxer could not timestamp the network approval decision: {error}");
+                let _ = fs::remove_file(request_path);
+                let _ = fs::remove_file(response_path);
+                return Decision::Deny;
+            }
+        };
+        if let Err(error) = append_audit(
+            &self.directory,
+            AuditPayload {
+                request_id: id.clone(),
+                target: target.clone(),
+                decision,
+                reason: reason.to_owned(),
+                timestamp_ms,
+            },
+        ) {
+            eprintln!("Boxer could not record the network approval decision: {error}");
+            let _ = fs::remove_file(request_path);
+            let _ = fs::remove_file(response_path);
+            return Decision::Deny;
+        }
         let _ = fs::remove_file(request_path);
         let _ = fs::remove_file(response_path);
         decision
@@ -108,7 +157,9 @@ impl Supervisor {
 impl Drop for Supervisor {
     fn drop(&mut self) {
         self.stop();
-        let _ = fs::remove_dir_all(&self.directory);
+        for name in ["requests", "responses"] {
+            let _ = fs::remove_dir_all(self.directory.join(name));
+        }
     }
 }
 
@@ -137,6 +188,32 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
                     println!(
                         "{}\t{}:{}",
                         request.id, request.target.host, request.target.port
+                    );
+                }
+            }
+            Ok(0)
+        }
+        "history" if arguments.len() == 3 || arguments.len() == 4 && arguments[3] == "--json" => {
+            let records = read_audit(&directory)?;
+            verify_audit(&directory, &records)?;
+            if arguments
+                .get(3)
+                .is_some_and(|argument| argument == "--json")
+            {
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({"items": records}))?
+                );
+            } else if records.is_empty() {
+                println!("No network approval decisions recorded");
+            } else {
+                for record in records {
+                    println!(
+                        "{}\t{}:{}\t{}",
+                        record.payload.request_id,
+                        record.payload.target.host,
+                        record.payload.target.port,
+                        record.payload.reason
                     );
                 }
             }
@@ -205,9 +282,150 @@ fn write_new_json(path: &std::path::Path, value: &impl Serialize) -> io::Result<
     file.sync_all()
 }
 
+fn root() -> io::Result<PathBuf> {
+    let configured_root = std::env::var_os("BOXER_SUPERVISOR_DIR");
+    let root = if let Some(path) = &configured_root {
+        PathBuf::from(path)
+    } else {
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .map(PathBuf::from)
+            .ok_or_else(|| {
+                io::Error::other("Cannot find the home directory for supervisor data")
+            })?;
+        home.join(".boxer").join("supervisor")
+    };
+    let existed = root.exists();
+    fs::create_dir_all(&root)?;
+    if fs::symlink_metadata(&root)?.file_type().is_symlink() {
+        return Err(io::Error::other(
+            "Boxer supervisor storage cannot be a symbolic link",
+        ));
+    }
+    #[cfg(unix)]
+    if configured_root.is_some() && existed {
+        use std::os::unix::fs::PermissionsExt;
+        if fs::metadata(&root)?.permissions().mode() & 0o077 != 0 {
+            return Err(io::Error::other(
+                "BOXER_SUPERVISOR_DIR must be private (permissions 0700 or stricter)",
+            ));
+        }
+    }
+    private_directory(&root)?;
+    Ok(root.canonicalize()?)
+}
+
 fn directory(id: &str) -> io::Result<PathBuf> {
     validate_id(id)?;
-    Ok(std::env::temp_dir().join(format!("boxer-supervisor-{id}")))
+    Ok(root()?.join(id))
+}
+
+fn private_directory(path: &std::path::Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+fn key(directory: &std::path::Path) -> io::Result<Vec<u8>> {
+    let root = directory
+        .parent()
+        .ok_or_else(|| io::Error::other("Invalid supervisor directory"))?;
+    let path = root.join("audit.key");
+    if !path.exists() {
+        let mut bytes = Vec::with_capacity(32);
+        bytes.extend_from_slice(uuid::Uuid::new_v4().as_bytes());
+        bytes.extend_from_slice(uuid::Uuid::new_v4().as_bytes());
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                file.write_all(&bytes)?;
+                file.sync_all()?;
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => return fs::read(path),
+            Err(error) => return Err(error),
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+        }
+        return Ok(bytes);
+    }
+    let bytes = fs::read(path)?;
+    if bytes.len() != 32 {
+        return Err(io::Error::other("Invalid Boxer supervisor audit key"));
+    }
+    Ok(bytes)
+}
+
+fn now_ms() -> io::Result<u128> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(io::Error::other)?
+        .as_millis())
+}
+
+fn read_audit(directory: &std::path::Path) -> io::Result<Vec<AuditRecord>> {
+    let path = directory.join("audit.jsonl");
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    fs::read_to_string(path)?
+        .lines()
+        .map(|line| serde_json::from_str(line).map_err(io::Error::other))
+        .collect()
+}
+
+fn append_audit(directory: &std::path::Path, payload: AuditPayload) -> io::Result<()> {
+    let records = read_audit(directory)?;
+    verify_audit(directory, &records)?;
+    let previous_mac = records
+        .last()
+        .map_or_else(String::new, |record| record.mac.clone());
+    let sequence = records.len() as u64;
+    let bytes =
+        serde_json::to_vec(&(sequence, &previous_mac, &payload)).map_err(io::Error::other)?;
+    let mut message = b"solmu-boxer-supervisor-audit-v1\0".to_vec();
+    message.extend_from_slice(&bytes);
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &key(directory)?);
+    let record = AuditRecord {
+        sequence,
+        previous_mac,
+        payload,
+        mac: hex::encode(ring::hmac::sign(&key, &message).as_ref()),
+    };
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(directory.join("audit.jsonl"))?;
+    serde_json::to_writer(&mut file, &record).map_err(io::Error::other)?;
+    file.write_all(b"\n")?;
+    file.sync_all()
+}
+
+fn verify_audit(directory: &std::path::Path, records: &[AuditRecord]) -> io::Result<()> {
+    if records.is_empty() {
+        return Ok(());
+    }
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &key(directory)?);
+    let mut previous = String::new();
+    for (index, record) in records.iter().enumerate() {
+        if record.sequence != index as u64 || record.previous_mac != previous {
+            return Err(io::Error::other(
+                "Supervisor audit sequence or link is invalid",
+            ));
+        }
+        let bytes = serde_json::to_vec(&(record.sequence, &record.previous_mac, &record.payload))
+            .map_err(io::Error::other)?;
+        let mut message = b"solmu-boxer-supervisor-audit-v1\0".to_vec();
+        message.extend_from_slice(&bytes);
+        let mac = hex::decode(&record.mac).map_err(io::Error::other)?;
+        ring::hmac::verify(&key, &message, &mac)
+            .map_err(|_| io::Error::other("Supervisor audit authentication failed"))?;
+        previous = record.mac.clone();
+    }
+    Ok(())
 }
 
 fn validate_id(id: &str) -> io::Result<()> {
@@ -232,6 +450,6 @@ fn decision_name(decision: Decision) -> &'static str {
 
 fn usage() -> io::Error {
     io::Error::other(
-        "Usage: boxer supervisor SESSION_ID list [--json] | approve REQUEST_ID [--once|--session] | deny REQUEST_ID",
+        "Usage: boxer supervisor SESSION_ID list [--json] | history [--json] | approve REQUEST_ID [--once|--session] | deny REQUEST_ID",
     )
 }

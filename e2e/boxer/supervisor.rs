@@ -4,12 +4,14 @@ use std::{io::BufRead, process::Stdio, thread, time::Instant};
 #[test]
 fn supervised_network_approval_can_grant_a_target_for_the_session() {
     let workspace = tempfile::tempdir().unwrap();
+    let supervisor_root = workspace.path().join("supervisor-data");
     let mut child = Command::new(binary("boxer"))
         .args(["--isolated", "--network", "proxy", "--supervised", "--cwd"])
         .arg(workspace.path())
         .arg("--")
         .arg(binary("sandbox-probe"))
         .args(["--proxy-connect", "supervisor-fixture.invalid:443", "2"])
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -28,6 +30,7 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
     let request_id = loop {
         let output = Command::new(binary("boxer"))
             .args(["supervisor", &session, "list", "--json"])
+            .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
             .output()
             .unwrap();
         assert!(
@@ -50,6 +53,7 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
 
     let approved = Command::new(binary("boxer"))
         .args(["supervisor", &session, "approve", &request_id, "--session"])
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
         .output()
         .unwrap();
     assert!(
@@ -66,6 +70,7 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
         }
         let output = Command::new(binary("boxer"))
             .args(["supervisor", &session, "list", "--json"])
+            .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
             .output()
             .unwrap();
         if output.status.success() {
@@ -83,6 +88,7 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
                         "deny",
                         request["id"].as_str().unwrap(),
                     ])
+                    .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
                     .output();
                 let _ = child.kill();
                 panic!("session approval prompted again for the same target");
@@ -103,4 +109,35 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
         "{}",
         String::from_utf8_lossy(&output.stdout)
     );
+    let history = Command::new(binary("boxer"))
+        .args(["supervisor", &session, "history", "--json"])
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
+        .output()
+        .unwrap();
+    assert!(
+        history.status.success(),
+        "{}",
+        String::from_utf8_lossy(&history.stderr)
+    );
+    let history: serde_json::Value = serde_json::from_slice(&history.stdout).unwrap();
+    assert_eq!(history["items"].as_array().unwrap().len(), 1);
+    assert_eq!(history["items"][0]["payload"]["request_id"], request_id);
+    assert_eq!(
+        history["items"][0]["payload"]["reason"],
+        "approved_for_session"
+    );
+    let audit_file = supervisor_root.join(&session).join("audit.jsonl");
+    let audit = std::fs::read_to_string(&audit_file).unwrap();
+    std::fs::write(
+        &audit_file,
+        audit.replace("approved_for_session", "denied_for_session"),
+    )
+    .unwrap();
+    let tampered = Command::new(binary("boxer"))
+        .args(["supervisor", &session, "history"])
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
+        .output()
+        .unwrap();
+    assert_eq!(tampered.status.code(), Some(125));
+    assert!(String::from_utf8_lossy(&tampered.stderr).contains("authentication failed"));
 }

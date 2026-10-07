@@ -967,10 +967,13 @@ boxer supervisor <session-id> deny <request-id>
 `--once` approves only the pending host and port. `--session` remembers that
 exact destination until this Boxer process exits. Requests expire after five
 minutes and are denied when Boxer stops. `boxer supervisor <session-id> list
---json` returns machine-readable requests. Explicit `--deny-host` rules and
-metadata service blocks cannot be approved around. Approval currently covers
-routed network connections; filesystem and command approvals are not yet
-supervised.
+--json` returns machine-readable requests. After the run, review decisions with
+`boxer supervisor <session-id> history [--json]`. Boxer keeps this history under
+`~/.boxer/supervisor/` and verifies its HMAC chain before displaying it. Set
+`BOXER_SUPERVISOR_DIR` to choose another storage directory. Explicit
+`--deny-host` rules and metadata service blocks cannot be approved around.
+Approval currently covers routed network connections; filesystem and command
+approvals are not yet supervised.
 
 To send routed connections through a corporate HTTP CONNECT proxy, pass
 `--upstream-proxy` or set `BOXER_UPSTREAM_PROXY`:
