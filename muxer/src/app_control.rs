@@ -165,6 +165,65 @@ impl App {
             Request::TerminalOpen { .. } => {
                 Err("Terminal streams belong to the session coordinator".into())
             }
+            Request::WorktreeList { space } => {
+                let source_id = space.unwrap_or(self.spaces[self.space].id);
+                let source = self
+                    .spaces
+                    .iter()
+                    .find(|space| space.id == source_id)
+                    .ok_or("Source space does not exist")?;
+                let output = git_output(&source.directory, &["worktree", "list", "--porcelain"])?;
+                if !output.status.success() {
+                    return Err(format!(
+                        "git worktree list failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )
+                    .into());
+                }
+                let text = String::from_utf8_lossy(&output.stdout);
+                let mut worktrees = Vec::new();
+                let mut path = None;
+                let mut branch = None;
+                let mut head = None;
+                let mut detached = false;
+                let mut append = |path: &mut Option<PathBuf>,
+                                  branch: &mut Option<String>,
+                                  head: &mut Option<String>,
+                                  detached: &mut bool| {
+                    if let Some(path) = path.take() {
+                        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.clone());
+                        let open_space = self
+                            .spaces
+                            .iter()
+                            .find(|space| space.directory == canonical_path)
+                            .map(|space| space.id);
+                        worktrees.push(json!({
+                            "path": path,
+                            "branch": branch.take(),
+                            "head": head.take(),
+                            "detached": *detached,
+                            "primary": worktrees.is_empty(),
+                            "open_space": open_space,
+                        }));
+                        *detached = false;
+                    }
+                };
+                for line in text.lines() {
+                    if line.is_empty() {
+                        append(&mut path, &mut branch, &mut head, &mut detached);
+                    } else if let Some(value) = line.strip_prefix("worktree ") {
+                        path = Some(PathBuf::from(value));
+                    } else if let Some(value) = line.strip_prefix("branch refs/heads/") {
+                        branch = Some(value.to_owned());
+                    } else if let Some(value) = line.strip_prefix("HEAD ") {
+                        head = Some(value.to_owned());
+                    } else if line == "detached" {
+                        detached = true;
+                    }
+                }
+                append(&mut path, &mut branch, &mut head, &mut detached);
+                Ok(json!({"worktrees": worktrees}))
+            }
             Request::AgentList => Ok(
                 json!({"items":self.panes.iter().filter(|pane| pane.exited.is_none() && pane.launch.solmu()).map(|pane| self.automation_record(Kind::Pane, pane.id).unwrap()).collect::<Vec<_>>()}),
             ),

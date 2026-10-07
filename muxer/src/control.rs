@@ -120,6 +120,10 @@ pub enum Request {
         #[serde(default)]
         focus: bool,
     },
+    WorktreeList {
+        #[serde(default)]
+        space: Option<u64>,
+    },
     CreateTab {
         #[serde(default)]
         launch: Option<crate::launch::Launch>,
@@ -261,6 +265,7 @@ impl Request {
             Self::Snapshot
                 | Self::List { .. }
                 | Self::Get { .. }
+                | Self::WorktreeList { .. }
                 | Self::Read { .. }
                 | Self::AgentList
                 | Self::AgentGet { .. }
@@ -286,7 +291,7 @@ pub fn key_bytes(keys: &[String]) -> Result<Vec<u8>, String> {
 
 pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
   muxer completion bash|zsh|fish|powershell
-  muxer worktree create --branch NAME [--space ID] [--base REF] [--path PATH] [--focus]
+  muxer worktree list [--space ID] | create --branch NAME [--space ID] [--base REF] [--path PATH] [--focus]
   muxer status | api snapshot
   muxer api request '{\"method\":\"snapshot\"}'
   muxer space list|get ID|focus ID|rename ID NAME|close ID
@@ -440,8 +445,14 @@ fn number(value: &str) -> Result<u64, String> {
 }
 fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
     if group == "worktree" {
-        if args.pop()? != "create" {
-            return Err("Use worktree create".into());
+        let action = args.pop()?;
+        if action == "list" {
+            return Ok(Request::WorktreeList {
+                space: args.optional_id("--space")?,
+            });
+        }
+        if action != "create" {
+            return Err("Use worktree list or create".into());
         }
         let branch = args.take("--branch")?.ok_or("--branch is required")?;
         let base = args.take("--base")?;

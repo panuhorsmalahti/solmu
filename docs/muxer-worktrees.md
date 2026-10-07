@@ -22,6 +22,19 @@ and focuses the new Solmu space.
 
 ## Create from scripts
 
+List the repository's registered worktrees and see which ones are already open
+as Muxer spaces:
+
+```sh
+muxer worktree list --space 1
+```
+
+The response includes each checkout path, branch, commit, whether it is the
+primary checkout, and the open space ID when present. `--space` defaults to the
+selected space.
+
+Create a branch checkout:
+
 ```sh
 muxer worktree create --space 1 --branch feature/review --base main --focus
 ```

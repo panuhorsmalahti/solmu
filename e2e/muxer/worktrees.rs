@@ -152,6 +152,19 @@ async fn worktree_create_handles_new_and_existing_branches_and_restores_metadata
             .success()
     );
 
+    let listed = command(&session, &["worktree", "list", "--space", &source_id]);
+    let items = listed["worktrees"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["primary"], true);
+    assert!(
+        items.iter().any(|item| {
+            item["branch"] == "feature/worktree"
+                && item["open_space"] == worktree_id.parse::<u64>().unwrap()
+        }),
+        "{listed}"
+    );
+    assert!(items.iter().any(|item| item["branch"] == "existing-branch"));
+
     let invalid = session.command(&[
         "worktree",
         "create",
