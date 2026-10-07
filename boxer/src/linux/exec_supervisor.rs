@@ -126,7 +126,7 @@ fn run_traced(
         let signal = libc::WSTOPSIG(status);
         let event = status >> 16;
         if event == libc::PTRACE_EVENT_SECCOMP {
-            let mut registers = Registers::get(pid)?;
+            let registers = Registers::get(pid)?;
             let path_address = registers.path_address(pid)?;
             let path = read_remote_string(pid, path_address).unwrap_or_default();
             let identity = executable_identity(pid, &path);
