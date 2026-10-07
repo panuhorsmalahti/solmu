@@ -42,9 +42,18 @@ struct Space {
     name: Option<String>,
     #[serde(default)]
     kind: Option<SpaceKind>,
+    #[serde(default)]
+    worktree: Option<WorktreeInfo>,
     directory: PathBuf,
     tabs: Vec<Tab>,
     selected: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct WorktreeInfo {
+    repo_root: PathBuf,
+    branch: String,
+    primary: bool,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -92,7 +101,7 @@ struct SavedPane {
 }
 impl Snapshot {
     pub fn validate(&self) -> Result<(), Box<dyn Error>> {
-        if !matches!(self.version, 1 | 2) {
+        if !matches!(self.version, 1 | 2 | 3) {
             return Err("Saved session requires a different Muxer version".into());
         }
         if self.spaces.len() > 8 || self.panes.len() > 512 {
@@ -232,6 +241,7 @@ pub struct App {
     pub panes: Vec<Pane>,
     pub active: usize,
     workspace: Option<Editor>,
+    worktree: Option<Editor>,
     rename: Option<Rename>,
     command: Option<Rename>,
     picker: Option<Picker>,
@@ -258,6 +268,7 @@ pub struct View {
     selections: Vec<(PathBuf, u64)>,
     tabs: Vec<(u64, u64, bool)>,
     workspace: Option<Editor>,
+    worktree: Option<Editor>,
     rename: Option<Rename>,
     command: Option<Rename>,
     picker: Option<Picker>,
@@ -279,8 +290,10 @@ impl View {
 impl App {
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
-            version: if self.panes.iter().any(|pane| !pane.launch.solmu()) {
-                2
+            version: if self.panes.iter().any(|pane| !pane.launch.solmu())
+                || self.spaces.iter().any(|space| space.worktree.is_some())
+            {
+                3
             } else {
                 1
             },
@@ -387,6 +400,7 @@ impl App {
                 })
                 .collect(),
             workspace: self.workspace.clone(),
+            worktree: self.worktree.clone(),
             rename: self.rename.clone(),
             command: self.command.clone(),
             picker: self.picker.clone(),
@@ -434,6 +448,7 @@ impl App {
             .unwrap_or(0);
         self.focus(active);
         self.workspace = view.workspace.clone();
+        self.worktree = view.worktree.clone();
         self.rename = view.rename.clone();
         self.command = view.command.clone();
         self.picker = view.picker.clone();
@@ -530,6 +545,7 @@ impl App {
         match action {
             NewTab => return Ok(self.action("New tab")),
             NewSpace => self.workspace = Some(Editor::default()),
+            NewWorktree => self.worktree = Some(Editor::default()),
             PreviousSpace => {
                 self.select_space((self.space + self.spaces.len() - 1) % self.spaces.len())
             }
@@ -601,6 +617,7 @@ impl App {
             spaces: vec![],
             active: 0,
             workspace: None,
+            worktree: None,
             rename: None,
             command: None,
             picker: None,
@@ -644,6 +661,7 @@ impl App {
             id: pane.id,
             name: None,
             kind: Some(SpaceKind::from_launch(&pane.launch)),
+            worktree: None,
             directory,
             tabs: vec![Tab {
                 id: pane.id,
@@ -831,6 +849,30 @@ impl App {
                 Ok(()) => self.workspace = None,
                 Err(error) => self.notice = format!("Workspace unavailable: {error}"),
             }
+        }
+    }
+    fn submit_worktree(&mut self) {
+        let Some(branch) = self
+            .worktree
+            .as_ref()
+            .map(|editor| editor.text.trim().to_owned())
+        else {
+            return;
+        };
+        if branch.is_empty() {
+            self.notice = "Enter a branch name".into();
+            return;
+        }
+        let request = crate::control::Request::WorktreeCreate {
+            space: Some(self.spaces[self.space].id),
+            branch,
+            base: None,
+            path: None,
+            focus: true,
+        };
+        match self.automation(&request) {
+            Ok(_) => self.worktree = None,
+            Err(error) => self.notice = format!("Could not create worktree: {error}"),
         }
     }
     fn restart(&mut self) {
@@ -1191,6 +1233,8 @@ impl App {
             setting.editor.insert(text);
         } else if let Some(editor) = &mut self.workspace {
             editor.insert(text);
+        } else if let Some(editor) = &mut self.worktree {
+            editor.insert(text);
         } else if let Some(rename) = &mut self.rename {
             rename.editor.insert(text);
         } else if let Some(picker) = &mut self.picker {
@@ -1232,6 +1276,17 @@ impl App {
                 }
                 KeyCode::Enter => self.submit(),
                 _ => path.key(key),
+            }
+            return Ok(false);
+        }
+        if let Some(branch) = &mut self.worktree {
+            match key.code {
+                KeyCode::Esc => {
+                    self.worktree = None;
+                    self.notice.clear();
+                }
+                KeyCode::Enter => self.submit_worktree(),
+                _ => branch.key(key),
             }
             return Ok(false);
         }
@@ -1370,6 +1425,7 @@ impl App {
     }
     pub fn context_menu(&mut self, area: Rect, x: u16, y: u16) {
         if self.workspace.is_some()
+            || self.worktree.is_some()
             || self.command.is_some()
             || self.rename.is_some()
             || self.picker.is_some()
@@ -1491,6 +1547,18 @@ impl App {
             }
             return Ok(false);
         }
+        if self.worktree.is_some() {
+            let modal = modal(area);
+            if y == modal.y + 4 {
+                if (modal.x + 2..modal.x + 12).contains(&x) {
+                    self.submit_worktree();
+                } else if (modal.x + 15..modal.x + 25).contains(&x) {
+                    self.worktree = None;
+                    self.notice.clear();
+                }
+            }
+            return Ok(false);
+        }
         if x < self.sidebar_width(area) {
             if y == 0 {
                 self.open_settings();
@@ -1508,6 +1576,7 @@ impl App {
             if rect.contains(point) {
                 match label {
                     "+ Space" => self.workspace = Some(Editor::default()),
+                    "+ Worktree" => self.worktree = Some(Editor::default()),
                     "Find" => self.open_picker(false),
                     "Navigate" => self.navigation = !self.navigation,
                     "Help" => self.open_picker(true),
@@ -2004,6 +2073,16 @@ impl App {
                 "Create",
             );
         }
+        if let Some(branch) = &self.worktree {
+            self.draw_editor(
+                frame,
+                area,
+                "New Git worktree",
+                "Branch name:",
+                branch,
+                "Create",
+            );
+        }
         if let Some(rename) = &self.rename {
             self.draw_editor(
                 frame,
@@ -2184,6 +2263,7 @@ impl App {
         let mut x = content.x;
         [
             "+ Space",
+            "+ Worktree",
             "+ Tab",
             "Split",
             "Zoom",
@@ -2260,14 +2340,26 @@ fn valid_name(name: &Option<String>) -> bool {
     })
 }
 fn space_title(space: &Space) -> String {
-    space.name.clone().unwrap_or_else(|| {
+    if let Some(worktree) = space.worktree.as_ref().filter(|worktree| !worktree.primary) {
+        let repository = worktree
+            .repo_root
+            .file_name()
+            .unwrap_or(worktree.repo_root.as_os_str())
+            .to_string_lossy();
+        return space
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("{repository} · {}", worktree.branch));
+    }
+    let title = space.name.clone().unwrap_or_else(|| {
         space
             .directory
             .file_name()
             .unwrap_or(space.directory.as_os_str())
             .to_string_lossy()
             .into_owned()
-    })
+    });
+    title
 }
 fn display_directory(path: &Path) -> String {
     let value = path.to_string_lossy();

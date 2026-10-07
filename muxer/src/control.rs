@@ -109,6 +109,17 @@ pub enum Request {
         #[serde(default)]
         focus: bool,
     },
+    WorktreeCreate {
+        #[serde(default)]
+        space: Option<u64>,
+        branch: String,
+        #[serde(default)]
+        base: Option<String>,
+        #[serde(default)]
+        path: Option<PathBuf>,
+        #[serde(default)]
+        focus: bool,
+    },
     CreateTab {
         #[serde(default)]
         launch: Option<crate::launch::Launch>,
@@ -239,6 +250,7 @@ impl Request {
                 | Self::AgentFocus { .. }
                 | Self::Zoom { .. }
                 | Self::CreateSpace { focus: true, .. }
+                | Self::WorktreeCreate { focus: true, .. }
                 | Self::CreateTab { focus: true, .. }
                 | Self::SplitPane { focus: true, .. }
         )
@@ -274,6 +286,7 @@ pub fn key_bytes(keys: &[String]) -> Result<Vec<u8>, String> {
 
 pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
   muxer completion bash|zsh|fish|powershell
+  muxer worktree create --branch NAME [--space ID] [--base REF] [--path PATH] [--focus]
   muxer status | api snapshot
   muxer api request '{\"method\":\"snapshot\"}'
   muxer space list|get ID|focus ID|rename ID NAME|close ID
@@ -426,6 +439,25 @@ fn number(value: &str) -> Result<u64, String> {
         .ok_or_else(|| "IDs must be positive integers".into())
 }
 fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
+    if group == "worktree" {
+        if args.pop()? != "create" {
+            return Err("Use worktree create".into());
+        }
+        let branch = args.take("--branch")?.ok_or("--branch is required")?;
+        let base = args.take("--base")?;
+        let path = args
+            .take("--path")?
+            .map(PathBuf::from)
+            .map(|path| std::path::absolute(path).map_err(|error| error.to_string()))
+            .transpose()?;
+        return Ok(Request::WorktreeCreate {
+            space: args.optional_id("--space")?,
+            branch,
+            base,
+            path,
+            focus: args.flag("--focus"),
+        });
+    }
     if group == "terminal" {
         let action = args.pop()?;
         let observe = if action == "session" {
@@ -807,7 +839,7 @@ pub fn cli(values: Vec<OsString>) -> bool {
     }
     if !matches!(
         group,
-        "space" | "tab" | "pane" | "api" | "status" | "events" | "agent" | "terminal"
+        "space" | "tab" | "pane" | "api" | "status" | "events" | "agent" | "terminal" | "worktree"
     ) {
         return false;
     }
@@ -882,7 +914,8 @@ const BASH_COMPLETION: &str = r#"_muxer_completions() {
     status:*) candidates="server" ;;
     api:*) candidates="snapshot request" ;;
     completion:*) candidates="bash zsh fish powershell" ;;
-    *) candidates="space tab pane api status events agent terminal session server completion --help --version --default-config --session --cwd --foreground" ;;
+    worktree:*) candidates="create" ;;
+    *) candidates="space tab pane api status events agent terminal session server worktree completion --help --version --default-config --session --cwd --foreground" ;;
   esac
   COMPREPLY=( $(compgen -W "$candidates" -- "$cur") )
 }
@@ -891,7 +924,7 @@ complete -F _muxer_completions muxer
 
 const ZSH_COMPLETION: &str = r#"#compdef muxer
 local -a commands
-commands=(space tab pane api status events agent terminal session server completion)
+commands=(space tab pane api status events agent terminal session server worktree completion)
 if (( CURRENT == 2 )); then
   _describe 'command' commands
 else
@@ -905,11 +938,12 @@ else
     status) _values 'action' server ;;
     api) _values 'action' snapshot request ;;
     completion) _values 'shell' bash zsh fish powershell ;;
+    worktree) _values 'action' create ;;
   esac
 fi
 "#;
 
-const FISH_COMPLETION: &str = r#"complete -c muxer -f -n '__fish_use_subcommand' -a 'space tab pane api status events agent terminal session server completion'
+const FISH_COMPLETION: &str = r#"complete -c muxer -f -n '__fish_use_subcommand' -a 'space tab pane api status events agent terminal session server worktree completion'
 complete -c muxer -f -n '__fish_seen_subcommand_from space' -a 'list get create focus rename close'
 complete -c muxer -f -n '__fish_seen_subcommand_from tab' -a 'list get create focus rename close'
 complete -c muxer -f -n '__fish_seen_subcommand_from pane' -a 'list get split focus rename close swap zoom resize restart read send-text send-keys wait wait-output'
@@ -920,13 +954,14 @@ complete -c muxer -f -n '__fish_seen_subcommand_from session' -a 'list attach'
 complete -c muxer -f -n '__fish_seen_subcommand_from status' -a 'server'
 complete -c muxer -f -n '__fish_seen_subcommand_from api' -a 'snapshot request'
 complete -c muxer -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
+complete -c muxer -f -n '__fish_seen_subcommand_from worktree' -a 'create'
 "#;
 
 const POWERSHELL_COMPLETION: &str = r#"Register-ArgumentCompleter -Native -CommandName muxer -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
   $words = @($commandAst.CommandElements | ForEach-Object { $_.ToString() })
   $candidates = switch ($words.Count) {
-    1 { 'space tab pane api status events agent terminal session server completion --help --version --default-config --session --cwd --foreground' }
+    1 { 'space tab pane api status events agent terminal session server worktree completion --help --version --default-config --session --cwd --foreground' }
     default {
       switch ($words[1]) {
         { $_ -in 'space', 'tab' } { 'list get create focus rename close' }
@@ -938,6 +973,7 @@ const POWERSHELL_COMPLETION: &str = r#"Register-ArgumentCompleter -Native -Comma
         'status' { 'server' }
         'api' { 'snapshot request' }
         'completion' { 'bash zsh fish powershell' }
+        'worktree' { 'create' }
         default { '' }
       }
     }

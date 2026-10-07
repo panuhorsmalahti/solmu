@@ -306,6 +306,7 @@ impl Drop for Terminal {
 mod panes;
 
 mod workspaces;
+mod worktrees;
 
 mod agents;
 mod appearance;

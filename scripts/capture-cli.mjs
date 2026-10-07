@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 
 // Render terminal cells recorded by the real CLI or muxer e2e test.
 const client = process.argv[2] ?? 'cli'
-if (!['cli', 'cli-profile', 'cli-skills', 'cli-mcp', 'cli-plugins', 'cli-audit', 'cli-tasks', 'muxer', 'muxer-settings', 'muxer-automation', 'muxer-terminal', 'muxer-commands', 'muxer-skills', 'muxer-mcp', 'muxer-plugins', 'muxer-audit', 'muxer-tasks'].includes(client)) throw new Error('Choose a captured CLI or Muxer screen')
+if (!['cli', 'cli-profile', 'cli-skills', 'cli-mcp', 'cli-plugins', 'cli-audit', 'cli-tasks', 'muxer', 'muxer-settings', 'muxer-automation', 'muxer-terminal', 'muxer-commands', 'muxer-worktrees', 'muxer-skills', 'muxer-mcp', 'muxer-plugins', 'muxer-audit', 'muxer-tasks'].includes(client)) throw new Error('Choose a captured CLI or Muxer screen')
 const browser = await chromium.launch()
 try {
   const page = await browser.newPage({ viewport: { width: client.startsWith('muxer') ? 1700 : 1000, height: client.startsWith('muxer') ? 848 : 688 }, deviceScaleFactor: 1 })

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 pub enum Action {
     NewTab,
     NewSpace,
+    NewWorktree,
     PreviousSpace,
     NextSpace,
     NextTab,
@@ -50,6 +51,12 @@ pub fn definitions() -> Vec<Definition> {
     let mut result: Vec<_> = [
         (NewTab, "new_tab", "New tab", &["prefix+n", "prefix+c"][..]),
         (NewSpace, "new_space", "New space", &["prefix+w"]),
+        (
+            NewWorktree,
+            "new_worktree",
+            "New Git worktree",
+            &["prefix+shift+g"],
+        ),
         (
             PreviousSpace,
             "previous_space",

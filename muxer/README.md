@@ -51,6 +51,8 @@ shortcuts. Naming and search fields support Unicode cursor editing and paste.
 **Settings** customizes shortcuts, themes, sidebar width, and working-directory
 policies. Changes apply automatically, including edits to `config.toml`.
 Read [Muxer settings](../docs/muxer-configuration.md) for examples.
+Create Git branch checkouts as new spaces with **+ Worktree** or
+**Ctrl+b Shift+G**. See the [worktree guide](../docs/muxer-worktrees.md).
 Scripts can inspect sessions, create and arrange panes, send terminal input,
 and read live screens through the [local automation commands](../docs/muxer-automation.md).
 Event streams report live changes; waits observe pane states or matching output.
@@ -88,6 +90,8 @@ the guide has commands for saving them to each shell's startup location.
 For source builds, see [development](../docs/development.md).
 
 ![Solmu client screenshot](../docs/screenshots/muxer.png)
+
+![Create a Git worktree space in Muxer](../docs/screenshots/muxer-worktrees.png)
 
 ## Audit
 

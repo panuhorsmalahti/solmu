@@ -40,6 +40,10 @@ headless_rows = 40
 new_cwd = "follow"
 # path = "/path/to/project"
 
+[worktrees]
+# New Git checkouts are placed under this directory.
+directory = "~/.solmu/muxer/worktrees"
+
 [terminal]
 # New panes default to Solmu. Choose shell to start an interactive shell instead.
 new_pane = "solmu"
@@ -87,6 +91,7 @@ pub struct Config {
     pub rows: u16,
     pub cwd_policy: String,
     pub cwd_path: String,
+    pub worktrees_directory: String,
     pub new_pane: String,
     pub shell: String,
     pub shell_mode: String,
@@ -174,7 +179,15 @@ impl Config {
             .map_err(|error| error.to_string())?;
         known(
             Some(doc.as_table()),
-            &["keys", "theme", "ui", "server", "workspace", "terminal"],
+            &[
+                "keys",
+                "theme",
+                "ui",
+                "server",
+                "workspace",
+                "worktrees",
+                "terminal",
+            ],
             "",
         )?;
         let keys = section(&doc, "keys")?;
@@ -240,6 +253,16 @@ impl Config {
         if cwd_policy == "path" && cwd_path.trim().is_empty() {
             return Err("workspace.path is required when workspace.new_cwd is path".into());
         }
+        let worktrees = section(&doc, "worktrees")?;
+        known(worktrees, &["directory"], "worktrees.")?;
+        let worktrees_directory = string(
+            get(worktrees, "directory"),
+            "~/.solmu/muxer/worktrees",
+            "worktrees.directory",
+        )?;
+        if worktrees_directory.trim().is_empty() || worktrees_directory.contains('\0') {
+            return Err("worktrees.directory must be a non-empty path".into());
+        }
         let terminal = section(&doc, "terminal")?;
         known(terminal, &["new_pane", "shell", "shell_mode"], "terminal.")?;
         let new_pane = string(get(terminal, "new_pane"), "solmu", "terminal.new_pane")?;
@@ -276,6 +299,7 @@ impl Config {
             )?,
             cwd_policy,
             cwd_path,
+            worktrees_directory,
             new_pane,
             shell,
             shell_mode,
@@ -403,6 +427,10 @@ impl Config {
             ("server.headless_rows".into(), self.rows.to_string()),
             ("workspace.new_cwd".into(), self.cwd_policy.clone()),
             ("workspace.path".into(), self.cwd_path.clone()),
+            (
+                "worktrees.directory".into(),
+                self.worktrees_directory.clone(),
+            ),
             ("terminal.new_pane".into(), self.new_pane.clone()),
             ("terminal.shell".into(), self.shell.clone()),
             ("terminal.shell_mode".into(), self.shell_mode.clone()),
@@ -433,6 +461,7 @@ impl Config {
             "server.headless_rows" => "8–100 rows",
             "workspace.new_cwd" => "follow, current, home, or path",
             "workspace.path" => "directory; relative to this config file",
+            "worktrees.directory" => "worktree destination root; relative to this config file",
             "terminal.new_pane" => "solmu or shell; applies to new panes only",
             "terminal.shell" => "executable name or path; empty uses platform default",
             "terminal.shell_mode" => "auto, login, or non_login",

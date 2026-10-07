@@ -1,6 +1,7 @@
 use super::*;
 use crate::control::{Kind, Request, Zoom, key_bytes};
 use serde_json::{Value, json};
+use std::process::Command;
 
 fn target(kind: Kind, id: u64) -> Target {
     match kind {
@@ -31,6 +32,27 @@ fn directory(path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
         return Err("Workspace must be an existing directory".into());
     }
     Ok(path)
+}
+
+fn worktree_slug(branch: &str) -> String {
+    let mut slug = String::new();
+    for ch in branch.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+            slug.push(ch.to_ascii_lowercase());
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug: String = slug.trim_matches('-').chars().take(64).collect();
+    if slug.is_empty() {
+        format!("worktree-{:x}", branch.len())
+    } else {
+        slug
+    }
+}
+
+fn git_output(cwd: &Path, args: &[&str]) -> Result<std::process::Output, Box<dyn Error>> {
+    Ok(Command::new("git").arg("-C").arg(cwd).args(args).output()?)
 }
 
 impl App {
@@ -74,7 +96,7 @@ impl App {
                     }
                 });
                 Ok(
-                    json!({"id": space.id, "name": space.name, "cwd": space.directory, "kind": kind, "selected_tab": space.selected, "tabs": space.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>() }),
+                    json!({"id": space.id, "name": space.name, "cwd": space.directory, "kind": kind, "worktree": space.worktree.as_ref().map(|worktree| json!({"repo_root":worktree.repo_root,"branch":worktree.branch,"primary":worktree.primary})), "selected_tab": space.selected, "tabs": space.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>() }),
                 )
             }
             Kind::Tab => {
@@ -239,6 +261,141 @@ impl App {
                 self.add_space_launch(cwd, launch.clone())?;
                 self.spaces[self.space].name = label;
                 self.automation_created()
+            }
+            Request::WorktreeCreate {
+                space,
+                branch,
+                base,
+                path,
+                ..
+            } => {
+                if branch.trim() != branch
+                    || branch.is_empty()
+                    || branch.len() > 240
+                    || branch.chars().any(char::is_control)
+                {
+                    return Err("Branch names must be 1 through 240 characters without surrounding whitespace or control characters".into());
+                }
+                if base.as_ref().is_some_and(|base| {
+                    base.is_empty() || base.starts_with('-') || base.chars().any(char::is_control)
+                }) {
+                    return Err("Base must be a Git revision without control characters".into());
+                }
+                let source_id = space.unwrap_or(self.spaces[self.space].id);
+                let source_index = self
+                    .spaces
+                    .iter()
+                    .position(|space| space.id == source_id)
+                    .ok_or("Source space does not exist")?;
+                let source_directory = self.spaces[source_index].directory.clone();
+                let repo_output = git_output(&source_directory, &["rev-parse", "--show-toplevel"])?;
+                if !repo_output.status.success() {
+                    return Err("The selected space is not inside a Git repository".into());
+                }
+                let repo_root = PathBuf::from(String::from_utf8_lossy(&repo_output.stdout).trim())
+                    .canonicalize()?;
+                let check = git_output(&repo_root, &["check-ref-format", "--branch", branch])?;
+                if !check.status.success() {
+                    return Err(format!(
+                        "Invalid Git branch name: {}",
+                        String::from_utf8_lossy(&check.stderr).trim()
+                    )
+                    .into());
+                }
+                let current = git_output(&repo_root, &["branch", "--show-current"])?;
+                let parent_branch = String::from_utf8_lossy(&current.stdout).trim().to_owned();
+                let target = if let Some(path) = path {
+                    if !path.is_absolute() {
+                        return Err("Worktree path must be absolute".into());
+                    }
+                    if path.exists() {
+                        return Err("Worktree path already exists".into());
+                    }
+                    path.clone()
+                } else {
+                    let configured = PathBuf::from(&self.config.current.worktrees_directory);
+                    let root = if let Some(rest) =
+                        self.config.current.worktrees_directory.strip_prefix("~/")
+                    {
+                        let home =
+                            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                                .ok_or(
+                                    "Could not resolve the home directory for worktrees.directory",
+                                )?;
+                        PathBuf::from(home).join(rest)
+                    } else if configured.is_absolute() {
+                        configured
+                    } else {
+                        self.config.path.parent().unwrap().join(configured)
+                    };
+                    let repo_name = repo_root
+                        .file_name()
+                        .ok_or("Could not name the Git repository")?;
+                    root.join(repo_name).join(worktree_slug(branch))
+                };
+                if target.exists() {
+                    return Err(format!(
+                        "Worktree destination already exists: {}",
+                        target.display()
+                    )
+                    .into());
+                }
+                if let Some(parent) = target.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let has_branch = git_output(
+                    &repo_root,
+                    &[
+                        "show-ref",
+                        "--verify",
+                        "--quiet",
+                        &format!("refs/heads/{branch}"),
+                    ],
+                )?
+                .status
+                .success();
+                let mut add = Command::new("git");
+                add.arg("-C").arg(&repo_root).args(["worktree", "add"]);
+                if !has_branch {
+                    add.arg("-b").arg(branch);
+                }
+                add.arg(&target);
+                if has_branch {
+                    add.arg(branch);
+                } else {
+                    add.arg(base.as_deref().unwrap_or("HEAD"));
+                }
+                let output = add.output()?;
+                if !output.status.success() {
+                    return Err(format!(
+                        "git worktree add failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )
+                    .into());
+                }
+                if let Err(error) = self.add_space(target.clone()) {
+                    let _ = Command::new("git")
+                        .arg("-C")
+                        .arg(&repo_root)
+                        .args(["worktree", "remove", "--force"])
+                        .arg(&target)
+                        .output();
+                    return Err(error);
+                }
+                self.spaces[source_index].worktree = Some(super::WorktreeInfo {
+                    repo_root: repo_root.clone(),
+                    branch: parent_branch,
+                    primary: true,
+                });
+                self.spaces[self.space].worktree = Some(super::WorktreeInfo {
+                    repo_root,
+                    branch: branch.clone(),
+                    primary: false,
+                });
+                let created = self.automation_created()?;
+                Ok(
+                    json!({"created": created, "worktree": {"path": target, "branch": branch, "base": if has_branch { Value::Null } else { json!(base.as_deref().unwrap_or("HEAD")) }}}),
+                )
             }
             Request::CreateTab {
                 space,

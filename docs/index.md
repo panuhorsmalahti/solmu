@@ -45,6 +45,7 @@ for each workspace product: [Muxer](https://panuhorsmalahti.github.io/solmu/muxe
 
 ## Make room with Muxer
 
+- [Git worktrees](muxer-worktrees.md)
 - [Shells and commands](muxer-commands.md)
 - [Settings](muxer-configuration.md)
 - [Layout and terminal automation](muxer-automation.md)

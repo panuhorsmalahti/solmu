@@ -164,3 +164,6 @@ See [Muxer usage and session recovery](muxer.md).
 [Shell and command panes](muxer-commands.md) run local terminals and project commands beside
 Solmu. New-pane defaults apply automatically; saved commands wait for explicit
 restart after the server restarts.
+
+Set `worktrees.directory` in `config.toml` to choose where Muxer creates branch
+checkouts. See [Git worktrees](muxer-worktrees.md).

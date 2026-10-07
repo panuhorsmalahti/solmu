@@ -160,6 +160,9 @@ return after a server restart.
 command form. Their output remains readable after exit. Choose **Restart** to
 run a saved command again. [Shells and commands](docs/muxer-commands.md).
 
+**Work on a branch in parallel.** Create a Git worktree directly from a Muxer
+space and open it as another project space. [Git worktrees](docs/muxer-worktrees.md).
+
 **Make it yours.** Change shortcuts, colors, sidebar options, and new-pane defaults
 in **Settings**. Changes apply automatically. [Muxer settings](docs/muxer-configuration.md).
 
@@ -173,6 +176,8 @@ opens one existing pane, with one controller and multiple observers.
 
 ![Solmu muxer terminal workspace](docs/screenshots/muxer.png)
 
+![Creating a Git worktree in Muxer](docs/screenshots/muxer-worktrees.png)
+
 ### Muxer GUI
 
 Prefer a window? [Muxer GUI](muxer-gui/README.md) is a standalone native Rust
@@ -182,6 +187,8 @@ desktop app, or Terminal to use a shell and other command-line clients such as
 Claude Code.
 
 ![Solmu Muxer GUI](docs/screenshots/muxer-gui.png)
+
+![Creating a worktree from Muxer GUI](docs/screenshots/muxer-gui-worktrees.png)
 
 ## Boxer
 

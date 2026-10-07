@@ -1,0 +1,206 @@
+use super::{sessions::Session, *};
+use serde_json::Value;
+use std::{
+    path::PathBuf,
+    process::{Command, Output},
+};
+
+fn git(directory: &std::path::Path, args: &[&str]) -> Output {
+    Command::new("git")
+        .arg("-C")
+        .arg(directory)
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+fn command(session: &Session<'_>, args: &[&str]) -> Value {
+    let output = session.command(args);
+    assert!(
+        output.status.success(),
+        "{args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice::<Value>(&output.stdout).unwrap()["result"].clone()
+}
+
+fn repository(directory: &std::path::Path) {
+    std::fs::create_dir_all(directory).unwrap();
+    let init = Command::new("git")
+        .args(["init", "-q"])
+        .arg(directory)
+        .output()
+        .unwrap();
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+    std::fs::write(directory.join("README.md"), "worktree fixture\n").unwrap();
+    assert!(git(directory, &["add", "README.md"]).status.success());
+    let commit = Command::new("git")
+        .arg("-C")
+        .arg(directory)
+        .args([
+            "-c",
+            "user.name=Solmu E2E",
+            "-c",
+            "user.email=e2e@example.invalid",
+            "commit",
+            "-qm",
+            "initial",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        commit.status.success(),
+        "{}",
+        String::from_utf8_lossy(&commit.stderr)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn worktree_create_handles_new_and_existing_branches_and_restores_metadata() {
+    let backend = Backend::start().await;
+    let repo = backend.directory.path().join("project");
+    repository(&repo);
+    assert!(git(&repo, &["branch", "existing-branch"]).status.success());
+    let session = Session {
+        backend: &backend,
+        name: "worktrees",
+    };
+    assert!(session.command(&["server", "start"]).status.success());
+
+    let source = command(
+        &session,
+        &[
+            "space",
+            "create",
+            "--cwd",
+            repo.to_str().unwrap(),
+            "--name",
+            "Project",
+        ],
+    );
+    let source_id = source["space"]["id"].as_u64().unwrap().to_string();
+    let new_path = backend.directory.path().join("checkouts/new-branch");
+    let created = command(
+        &session,
+        &[
+            "worktree",
+            "create",
+            "--space",
+            &source_id,
+            "--branch",
+            "feature/worktree",
+            "--base",
+            "HEAD",
+            "--path",
+            new_path.to_str().unwrap(),
+            "--focus",
+        ],
+    );
+    assert_eq!(created["worktree"]["branch"], "feature/worktree");
+    let created_path = PathBuf::from(created["worktree"]["path"].as_str().unwrap());
+    assert_eq!(
+        created_path.canonicalize().unwrap(),
+        new_path.canonicalize().unwrap()
+    );
+    assert!(new_path.join("README.md").is_file());
+    assert!(
+        git(&new_path, &["branch", "--show-current"])
+            .status
+            .success()
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&git(&new_path, &["branch", "--show-current"]).stdout).trim(),
+        "feature/worktree"
+    );
+    let worktree_id = created["created"]["space"]["id"]
+        .as_u64()
+        .unwrap()
+        .to_string();
+    let child = &created["created"]["space"]["worktree"];
+    assert_eq!(child["branch"], "feature/worktree");
+    assert_eq!(child["primary"], false);
+    let parent = command(&session, &["space", "get", &source_id]);
+    assert_eq!(parent["worktree"]["primary"], true);
+    assert_eq!(
+        parent["worktree"]["repo_root"],
+        serde_json::to_value(repo.canonicalize().unwrap()).unwrap()
+    );
+
+    let existing_path = backend.directory.path().join("checkouts/existing-branch");
+    let existing = command(
+        &session,
+        &[
+            "worktree",
+            "create",
+            "--space",
+            &source_id,
+            "--branch",
+            "existing-branch",
+            "--path",
+            existing_path.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(existing["worktree"]["branch"], "existing-branch");
+    assert_eq!(existing["worktree"]["base"], Value::Null);
+    assert!(
+        git(&existing_path, &["branch", "--show-current"])
+            .status
+            .success()
+    );
+
+    let invalid = session.command(&[
+        "worktree",
+        "create",
+        "--space",
+        &source_id,
+        "--branch",
+        "../escape",
+        "--path",
+        backend.directory.path().join("invalid").to_str().unwrap(),
+    ]);
+    assert!(!invalid.status.success());
+    assert!(!backend.directory.path().join("invalid").exists());
+
+    assert!(session.command(&["server", "stop"]).status.success());
+    assert!(session.command(&["server", "start"]).status.success());
+    let restored: Value = command(&session, &["space", "get", &worktree_id]);
+    assert_eq!(restored["worktree"]["branch"], "feature/worktree");
+    assert_eq!(restored["worktree"]["primary"], false);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn worktree_branch_prompt_creates_a_space_in_the_terminal_ui() {
+    let backend = Backend::start().await;
+    let repo = backend.directory.path().join("ui-project");
+    repository(&repo);
+    let config = backend.directory.path().join("muxer-state/config.toml");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(
+        config,
+        format!(
+            "[worktrees]\ndirectory = {:?}\n",
+            backend.directory.path().join("checkouts").to_string_lossy()
+        ),
+    )
+    .unwrap();
+
+    let mut tui = Terminal::start(&backend, &[&repo]);
+    tui.wait("Ready").await;
+    tui.click("+ Worktree").await;
+    tui.wait("New Git worktree").await;
+    solmu_e2e::support::capture_terminal(tui.screen.lock().unwrap().screen(), "muxer-worktrees");
+    tui.command("feature/ui-worktree");
+    tui.wait("ui-project · feature/ui-worktree").await;
+    assert!(
+        backend
+            .directory
+            .path()
+            .join("checkouts/ui-project/feature-ui-worktree/README.md")
+            .is_file()
+    );
+    tui.exit().await;
+}

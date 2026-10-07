@@ -61,7 +61,9 @@ jobs:
         if: always()
         with:
           name: muxer-gui-screenshot
-          path: docs/screenshots/muxer-gui.png
+          path: |
+            docs/screenshots/muxer-gui.png
+            docs/screenshots/muxer-gui-worktrees.png
 
   android:
     name: Android (ubuntu-latest)

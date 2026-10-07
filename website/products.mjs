@@ -9,6 +9,7 @@ const products = [
     eyebrow: 'LOCAL WORKSPACES · TERMINAL + NATIVE GUI',
     features: [
       ['Spaces that remember', 'Group work by project. Each space keeps its own workspace, tabs, and selected view.'],
+      ['Branch checkouts as spaces', 'Create a Git worktree from a project space and open the branch in its own workspace.'],
       ['Real terminals, side by side', 'Run shells and project commands in interactive terminal panes alongside Solmu conversations.'],
       ['A window when you want one', 'Muxer GUI opens the shared Solmu desktop or a full Terminal space. It can run without the Muxer server.'],
     ],

@@ -4,7 +4,7 @@ use iced::{
         self, Event as KeyboardEvent,
         key::{Key, Named},
     },
-    widget::{button, column, container, mouse_area, row, scrollable, text},
+    widget::{button, column, container, mouse_area, row, scrollable, text, text_input},
 };
 use serde_json::{Value, json};
 use solmu_client::{Action, Api};
@@ -36,6 +36,7 @@ struct MuxerGui {
     terminal_focused: bool,
     notice: String,
     show_space_types: bool,
+    worktree_branch: String,
     context_space: Option<u64>,
     desktops: HashMap<u64, Desktop>,
 }
@@ -73,6 +74,8 @@ enum Message {
     SpaceContextMenu(u64),
     DeleteSpace(u64),
     CreateSpace(SpaceType),
+    WorktreeBranchChanged(String),
+    CreateWorktree,
     NewTab,
     Split,
     SelectPane(u64),
@@ -100,6 +103,7 @@ impl MuxerGui {
             terminal_focused: false,
             notice: "Starting the embedded workspace engine…".into(),
             show_space_types: false,
+            worktree_branch: String::new(),
             context_space: None,
             desktops: HashMap::new(),
         };
@@ -214,6 +218,35 @@ impl MuxerGui {
                         .map(|_| ())
                     },
                     "Space created".into(),
+                )
+            }
+            Message::WorktreeBranchChanged(value) => {
+                self.worktree_branch = value;
+                Task::none()
+            }
+            Message::CreateWorktree => {
+                let branch = self.worktree_branch.trim().to_owned();
+                let Some(space) = self.snapshot["active_space"].as_u64() else {
+                    self.notice = "Select a project space first".into();
+                    return Task::none();
+                };
+                if branch.is_empty() {
+                    self.notice = "Enter a branch name".into();
+                    return Task::none();
+                }
+                self.terminal_focused = false;
+                self.show_space_types = false;
+                self.worktree_branch.clear();
+                let session = self.session.clone();
+                perform(
+                    move || {
+                        request(
+                            &session,
+                            json!({"method":"worktree_create","params":{"space":space,"branch":branch,"focus":true}}),
+                        )
+                        .map(|_| ())
+                    },
+                    "Worktree created".into(),
                 )
             }
             Message::NewTab => {
@@ -535,6 +568,15 @@ impl MuxerGui {
                             .width(Length::Fill),
                         button(text("Solmu").size(12))
                             .on_press(Message::CreateSpace(SpaceType::Solmu))
+                            .style(appearance::ghost)
+                            .padding([7, 10])
+                            .width(Length::Fill),
+                        text_input("New worktree branch…", &self.worktree_branch)
+                            .on_input(Message::WorktreeBranchChanged)
+                            .on_submit(Message::CreateWorktree)
+                            .padding([8, 10]),
+                        button(text("Create worktree").size(12))
+                            .on_press(Message::CreateWorktree)
                             .style(appearance::ghost)
                             .padding([7, 10])
                             .width(Length::Fill),

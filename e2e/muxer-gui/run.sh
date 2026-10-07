@@ -15,14 +15,23 @@ export SOLMU_MUXER_CONFIG="$state/config.toml"
 export SOLMU_CLI_PATH="$root/target/debug/solmu"
 export PATH="$root/target/debug:$PATH"
 export SOLMU_MUXER_PATH="$state/no-muxer-binary"
-cat > "$SOLMU_MUXER_CONFIG" <<'EOF'
+cat > "$SOLMU_MUXER_CONFIG" <<EOF
 [terminal]
 new_pane = "shell"
+[worktrees]
+directory = "$state/worktrees"
 EOF
+
+source="$state/source"
+mkdir -p "$source"
+git init -q "$source"
+printf 'Muxer GUI worktree fixture\n' > "$source/README.md"
+git -C "$source" add README.md
+git -C "$source" -c user.name='Solmu E2E' -c user.email=e2e@example.invalid commit -qm initial
 
 # Launch the GUI with no Muxer executable or daemon. Its embedded engine should
 # create and persist the default workspace itself.
-target/debug/muxer-gui &
+(cd "$source" && "$root/target/debug/muxer-gui") &
 gui_pid=$!
 window=''
 for _ in $(seq 1 90); do
@@ -137,8 +146,28 @@ PY
 xdotool mousemove --window "$window" 240 131 click 1
 sleep 0.3
 import -window "$window" docs/screenshots/muxer-gui.png
+import -window "$window" docs/screenshots/muxer-gui-worktrees.png
 single_pane_color=$(convert docs/screenshots/muxer-gui.png -format '%[pixel:p{100,310}]' info:)
 [ "$single_pane_color" != 'srgb(224,233,223)' ] || { echo 'A single pane should not appear as a selectable sidebar item' >&2; exit 1; }
+
+# Create a Git worktree from the selected project through the + menu.
+xdotool mousemove --window "$window" 95 232 click 1
+xdotool type --clearmodifiers 'gui-e2e-worktree'
+xdotool key Return
+worktree=''
+for _ in $(seq 1 30); do
+  worktree=$(python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+space = next((item for item in data["spaces"] if (item.get("worktree") or {}).get("branch") == "gui-e2e-worktree"), {})
+print(f'{len(data["spaces"])}:{space.get("kind", "empty")}:{(space.get("worktree") or {}).get("primary", "empty")}')
+PY
+)
+  [ "$worktree" = "$((before + 1)):terminal:False" ] && break
+  sleep 0.5
+done
+[ "$worktree" = "$((before + 1)):terminal:False" ] || { echo "GUI did not create a worktree space (state=$worktree)" >&2; exit 1; }
+before=$((before + 1))
 xdotool mousemove --window "$window" 75 168 click 1
 sleep 0.3
 created=''
@@ -215,3 +244,4 @@ done
 [ "$removed" = removed ] || { echo 'Right-click Delete space did not remove the selected workspace' >&2; exit 1; }
 
 test -s docs/screenshots/muxer-gui.png
+test -s docs/screenshots/muxer-gui-worktrees.png

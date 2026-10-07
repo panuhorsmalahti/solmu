@@ -14,7 +14,7 @@ const groups = [
   ['Getting started', ['index', 'bundle', 'services', 'configuration', 'running', 'releases']],
   ['Clients', ['clients', 'cli', 'desktop', 'android', 'ios', 'web', 'muxer', 'muxer-gui']],
   ['Agent', ['agent', 'profile', 'audit', 'tasks', 'goals', 'workspaces', 'tools', 'skills', 'mcp', 'plugins', 'boxer']],
-  ['Muxer', ['muxer-commands', 'muxer-configuration', 'muxer-automation', 'muxer-agents', 'muxer-terminals']],
+  ['Muxer', ['muxer-worktrees', 'muxer-commands', 'muxer-configuration', 'muxer-automation', 'muxer-agents', 'muxer-terminals']],
   ['Reference', ['api', 'development', 'license']],
 ]
 
