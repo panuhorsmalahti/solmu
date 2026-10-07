@@ -2,6 +2,106 @@ use super::*;
 use std::{io::BufRead, process::Stdio, thread, time::Instant};
 
 #[test]
+fn supervised_command_approval_supports_once_and_session_grants() {
+    let workspace = tempfile::tempdir().unwrap();
+    let supervisor_root = workspace.path().join("supervisor-data");
+    let mut child = Command::new(binary("boxer"))
+        .args(["--isolated", "--network", "deny", "--supervised", "--cwd"])
+        .arg(workspace.path())
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("--exec-three-times")
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write;
+    child.stdin.take().unwrap().write_all(b"y\ns\n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout)
+            .matches("cmd-secret-fixture")
+            .count(),
+        3
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr)
+            .matches("Boxer command approval requested")
+            .count(),
+        2
+    );
+    let session = String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .find_map(|line| line.strip_prefix("Boxer supervisor session: "))
+        .and_then(|value| value.split_whitespace().next())
+        .expect("supervisor session ID");
+    let history = Command::new(binary("boxer"))
+        .args(["supervisor", session, "history", "--json"])
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
+        .output()
+        .unwrap();
+    assert!(
+        history.status.success(),
+        "{}",
+        String::from_utf8_lossy(&history.stderr)
+    );
+    let history: serde_json::Value = serde_json::from_slice(&history.stdout).unwrap();
+    assert_eq!(history["items"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        history["items"][0]["payload"]["reason"],
+        "command_approved_once"
+    );
+    assert_eq!(
+        history["items"][1]["payload"]["reason"],
+        "command_approved_for_session"
+    );
+}
+
+#[test]
+fn supervised_command_denial_is_recorded_and_does_not_run_the_command() {
+    let workspace = tempfile::tempdir().unwrap();
+    let supervisor_root = workspace.path().join("supervisor-data");
+    let mut child = Command::new(binary("boxer"))
+        .args(["--isolated", "--network", "deny", "--supervised", "--cwd"])
+        .arg(workspace.path())
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg("--exec-once")
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write;
+    child.stdin.take().unwrap().write_all(b"n\n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("cmd-secret-fixture"));
+    let session = String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .find_map(|line| line.strip_prefix("Boxer supervisor session: "))
+        .and_then(|value| value.split_whitespace().next())
+        .expect("supervisor session ID");
+    let history = Command::new(binary("boxer"))
+        .args(["supervisor", session, "history", "--json"])
+        .env("BOXER_SUPERVISOR_DIR", &supervisor_root)
+        .output()
+        .unwrap();
+    assert!(history.status.success());
+    let history: serde_json::Value = serde_json::from_slice(&history.stdout).unwrap();
+    assert_eq!(history["items"].as_array().unwrap().len(), 1);
+    assert_eq!(history["items"][0]["payload"]["reason"], "command_denied");
+}
+
+#[test]
 fn supervised_network_approval_can_grant_a_target_for_the_session() {
     let workspace = tempfile::tempdir().unwrap();
     let supervisor_root = workspace.path().join("supervisor-data");

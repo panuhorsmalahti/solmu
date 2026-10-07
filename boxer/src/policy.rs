@@ -902,10 +902,10 @@ impl Policy {
 
     fn resolve_rest(&mut self, workspace: &Path) -> io::Result<()> {
         if self.supervised
-            && (!cfg!(target_os = "linux") || !self.isolated || self.network != Network::Proxy)
+            && (!cfg!(target_os = "linux") || !cfg!(target_arch = "x86_64") || !self.isolated)
         {
             return Err(io::Error::other(
-                "Supervised network approvals require Linux --isolated --network proxy",
+                "Supervised approvals require Linux x86_64 --isolated mode",
             ));
         }
         self.upstream_bypass.sort();

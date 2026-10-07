@@ -5,6 +5,34 @@ use std::{
 
 fn main() {
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    #[cfg(unix)]
+    if arguments
+        .first()
+        .is_some_and(|value| value == "--exec-three-times")
+    {
+        let executable = std::env::current_exe().unwrap();
+        for _ in 0..3 {
+            let status = std::process::Command::new(&executable)
+                .arg("--credential-fixture")
+                .status()
+                .unwrap();
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
+        }
+        return;
+    }
+    #[cfg(unix)]
+    if arguments
+        .first()
+        .is_some_and(|value| value == "--exec-once")
+    {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--credential-fixture")
+            .status()
+            .unwrap();
+        std::process::exit(status.code().unwrap_or(1));
+    }
     #[cfg(target_os = "linux")]
     if arguments
         .first()

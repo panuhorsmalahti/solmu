@@ -945,12 +945,17 @@ complete `*` label such as `build.*.ci.example.com` for exactly one label.
 Metadata service hostnames are always denied. Routed connections also reject
 private, loopback, link-local, and other special-use IP destinations.
 
-### Approve routed network requests while Boxer runs
+### Approve commands and routed network requests while Boxer runs
 
-Add `--supervised` to pause on remote destinations that are not already
-allowed. This is available on Linux with `--isolated --network proxy`; grant
-rules, local routes, and network profiles continue to work as configured.
-Start Boxer from a delegated cgroup, then use the session ID it prints from a
+Add `--supervised` to approve commands that are not part of the sandbox's
+startup chain. Boxer intercepts sandboxed command execution on Linux x86_64 and
+asks whether to allow each command once, for the session, or deny it. In proxy
+mode, it also pauses on remote destinations that are not already allowed. This
+is available with `--isolated`; network approvals require `--network proxy`.
+Grant rules, local routes, and network profiles continue to work as configured.
+For command prompts, enter `y` to approve once, `s` to approve that executable
+for this session, or press Enter to deny. To manage pending network requests,
+start Boxer from a delegated cgroup and use the printed session ID from a
 second terminal:
 
 ```sh
@@ -976,8 +981,9 @@ stops. `boxer supervisor <session-id> list
 `~/.boxer/supervisor/` and verifies its HMAC chain before displaying it. Set
 `BOXER_SUPERVISOR_DIR` to choose another storage directory. Explicit
 `--deny-host` rules and metadata service blocks cannot be approved around.
-Approval currently covers routed network connections; filesystem and command
-approvals are not yet supervised.
+If Boxer cannot read an executable path or receive an answer, it denies the
+command. File access approvals are not yet supervised. Command decisions are
+included in the same verified supervisor history as routed network decisions.
 
 To send routed connections through a corporate HTTP CONNECT proxy, pass
 `--upstream-proxy` or set `BOXER_UPSTREAM_PROXY`:

@@ -6,7 +6,7 @@ use std::{
     io::{self, Write},
     path::PathBuf,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -48,10 +48,13 @@ struct Response {
 #[serde(deny_unknown_fields)]
 struct AuditPayload {
     request_id: String,
-    target: Target,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target: Option<Target>,
     decision: Decision,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     host_pattern: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    command_path: Option<String>,
     reason: String,
     timestamp_ms: u128,
 }
@@ -69,6 +72,7 @@ pub struct Supervisor {
     id: String,
     directory: PathBuf,
     running: Arc<AtomicBool>,
+    audit_lock: Mutex<()>,
 }
 
 impl Supervisor {
@@ -80,17 +84,42 @@ impl Supervisor {
         fs::create_dir(directory.join("requests"))?;
         fs::create_dir(directory.join("responses"))?;
         eprintln!(
-            "Boxer supervisor session: {id} (list requests with `boxer supervisor {id} list`)"
+            "Boxer supervisor session: {id} (review decisions with `boxer supervisor {id} history`)"
         );
         Ok(Self {
             id,
             directory,
             running: Arc::new(AtomicBool::new(true)),
+            audit_lock: Mutex::new(()),
         })
     }
 
     pub fn stop(&self) {
         self.running.store(false, Ordering::Release);
+    }
+
+    pub fn record_command(&self, path: &str, decision: Decision) -> io::Result<()> {
+        let _guard = self
+            .audit_lock
+            .lock()
+            .map_err(|_| io::Error::other("Supervisor audit lock is unavailable"))?;
+        append_audit(
+            &self.directory,
+            AuditPayload {
+                request_id: uuid::Uuid::new_v4().simple().to_string(),
+                target: None,
+                decision,
+                host_pattern: None,
+                command_path: Some(path.to_owned()),
+                reason: match decision {
+                    Decision::Once => "command_approved_once",
+                    Decision::Session => "command_approved_for_session",
+                    Decision::Deny => "command_denied",
+                }
+                .to_owned(),
+                timestamp_ms: now_ms()?,
+            },
+        )
     }
 
     pub fn request(&self, target: &Target) -> Resolution {
@@ -160,17 +189,22 @@ impl Supervisor {
                 return Resolution::Deny;
             }
         };
-        if let Err(error) = append_audit(
-            &self.directory,
-            AuditPayload {
-                request_id: id.clone(),
-                target: target.clone(),
-                decision,
-                host_pattern,
-                reason: reason.to_owned(),
-                timestamp_ms,
-            },
-        ) {
+        let audit_result = match self.audit_lock.lock() {
+            Ok(_guard) => append_audit(
+                &self.directory,
+                AuditPayload {
+                    request_id: id.clone(),
+                    target: Some(target.clone()),
+                    decision,
+                    host_pattern,
+                    command_path: None,
+                    reason: reason.to_owned(),
+                    timestamp_ms,
+                },
+            ),
+            Err(_) => Err(io::Error::other("Supervisor audit lock is unavailable")),
+        };
+        if let Err(error) = audit_result {
             eprintln!("Boxer could not record the network approval decision: {error}");
             let _ = fs::remove_file(request_path);
             let _ = fs::remove_file(response_path);
@@ -237,7 +271,7 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
                     serde_json::to_string(&serde_json::json!({"items": records}))?
                 );
             } else if records.is_empty() {
-                println!("No network approval decisions recorded");
+                println!("No supervisor decisions recorded");
             } else {
                 for record in records {
                     let pattern = record
@@ -246,13 +280,16 @@ pub fn command(arguments: &[OsString]) -> io::Result<i32> {
                         .as_deref()
                         .map(|pattern| format!("session pattern {pattern}"))
                         .unwrap_or_default();
+                    let subject = record
+                        .payload
+                        .target
+                        .as_ref()
+                        .map(|target| format!("{}:{}", target.host, target.port))
+                        .or_else(|| record.payload.command_path.clone())
+                        .unwrap_or_else(|| "unknown".into());
                     println!(
-                        "{}\t{}:{}\t{}\t{}",
-                        record.payload.request_id,
-                        record.payload.target.host,
-                        record.payload.target.port,
-                        record.payload.reason,
-                        pattern
+                        "{}\t{}\t{}\t{}",
+                        record.payload.request_id, subject, record.payload.reason, pattern
                     );
                 }
             }

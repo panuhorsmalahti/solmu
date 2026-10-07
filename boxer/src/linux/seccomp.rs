@@ -7,7 +7,7 @@ use std::{
 
 // Classic BPF over seccomp_data. Reject other ABIs before interpreting syscall
 // numbers; x32 shares AUDIT_ARCH_X86_64 but has a separate syscall-number bit.
-fn instructions(network: Network) -> io::Result<Vec<libc::sock_filter>> {
+fn instructions(network: Network, supervise_commands: bool) -> io::Result<Vec<libc::sock_filter>> {
     #[cfg(target_arch = "x86_64")]
     let arch = 0xc000003e;
     #[cfg(target_arch = "aarch64")]
@@ -130,6 +130,14 @@ fn instructions(network: Network) -> io::Result<Vec<libc::sock_filter>> {
             emit(RET, 0, 0, DENY);
             emit(RET, 0, 0, 0x7fff0000);
         }
+        if supervise_commands {
+            // The host-side ptrace supervisor handles these requests. Without
+            // a tracer, the kernel returns ENOSYS instead of running them.
+            for syscall in [libc::SYS_execve, libc::SYS_execveat] {
+                emit(EQ, 0, 1, syscall as u32);
+                emit(RET, 0, 0, 0x7ff00000); // SECCOMP_RET_TRACE
+            }
+        }
         // glibc falls back to clone when clone3 is unavailable. Its pointed-to
         // flags cannot be safely inspected by classic BPF.
         emit(EQ, 0, 1, libc::SYS_clone3 as u32);
@@ -155,7 +163,7 @@ fn instructions(network: Network) -> io::Result<Vec<libc::sock_filter>> {
 }
 
 pub fn install_network_denial() -> io::Result<()> {
-    let mut instructions = instructions(Network::Deny)?;
+    let mut instructions = instructions(Network::Deny, false)?;
     let program = libc::sock_fprog {
         len: instructions.len().try_into().map_err(io::Error::other)?,
         filter: instructions.as_mut_ptr(),
@@ -172,9 +180,9 @@ pub fn install_network_denial() -> io::Result<()> {
     Ok(())
 }
 
-pub fn filter(network: Network) -> io::Result<File> {
+pub fn filter(network: Network, supervise_commands: bool) -> io::Result<File> {
     let mut program = Vec::new();
-    for instruction in instructions(network)? {
+    for instruction in instructions(network, supervise_commands)? {
         program.extend(instruction.code.to_ne_bytes());
         program.extend([instruction.jt, instruction.jf]);
         program.extend(instruction.k.to_ne_bytes());

@@ -13,9 +13,11 @@ use std::{
         unix::process::{CommandExt, ExitStatusExt},
     },
     process::Command,
+    sync::Arc,
 };
 
 mod cgroup;
+mod exec_supervisor;
 pub mod proxy;
 mod seccomp;
 pub mod unlink;
@@ -346,11 +348,20 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
         }
         group.validate_workspace(path)?;
     }
-    let filter = seccomp::filter(policy.network)?;
+    let filter = seccomp::filter(policy.network, policy.supervised)?;
     let filter_fd = filter.as_raw_fd();
     let group_fd = group.as_raw_fd();
     let mut bridge = if policy.network == Network::Proxy {
         Some(proxy::Host::new(&policy)?)
+    } else {
+        None
+    };
+    let command_supervisor = if policy.supervised {
+        let existing = bridge.as_ref().and_then(proxy::Host::supervisor);
+        Some(match existing {
+            Some(supervisor) => supervisor,
+            None => Arc::new(proxy::supervisor::Supervisor::new()?),
+        })
     } else {
         None
     };
@@ -419,6 +430,18 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
         sandbox = scope_worker(sandbox, &policy)?;
     }
     // Options must precede the agent separator.
+    let sandbox_arguments: Vec<_> = sandbox.get_args().map(std::ffi::OsStr::to_owned).collect();
+    let sandbox_separator = sandbox_arguments
+        .iter()
+        .position(|argument| argument == "--")
+        .ok_or_else(|| io::Error::other("Bubblewrap command is missing its separator"))?;
+    let initial_program = sandbox_arguments
+        .get(sandbox_separator + 1)
+        .ok_or_else(|| io::Error::other("Bubblewrap command is missing its program"))?;
+    let mut bootstrap = vec![initial_program.as_encoded_bytes().to_vec()];
+    if initial_program == "/opt/solmu/boxer" {
+        bootstrap.push(b"/opt/solmu/agent".to_vec());
+    }
     let mut supervised = Command::new("bwrap");
     supervised
         .arg("--seccomp")
@@ -455,30 +478,52 @@ fn isolated(mut command: Command, mut policy: Policy) -> io::Result<i32> {
             return Err(io::Error::last_os_error());
         }
     }
-    let mut child = supervised.spawn().map_err(|error| {
-        io::Error::other(format!(
-            "Could not start Bubblewrap with enforced cgroup limits: {error}"
-        ))
-    })?;
+    let status = if policy.supervised {
+        match exec_supervisor::run(
+            &mut supervised,
+            bootstrap,
+            &group,
+            command_supervisor
+                .as_deref()
+                .expect("supervised mode has a supervisor"),
+        ) {
+            Ok(status) => status,
+            Err(error) => {
+                let _ = group.terminate();
+                let _ = group.cleanup();
+                return Err(io::Error::other(format!(
+                    "Could not supervise Bubblewrap command execution: {error}"
+                )));
+            }
+        }
+    } else {
+        let mut child = supervised.spawn().map_err(|error| {
+            io::Error::other(format!(
+                "Could not start Bubblewrap with enforced cgroup limits: {error}"
+            ))
+        })?;
+        let mut cancelled = 0;
+        let status = loop {
+            let signal = INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed);
+            if signal != 0 && cancelled == 0 {
+                cancelled = signal;
+                group.terminate()?;
+            }
+            if let Some(status) = child.try_wait()? {
+                break status;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        if cancelled != 0 {
+            group.cleanup()?;
+            return Ok(128 + cancelled);
+        }
+        status
+    };
     if let Some(bridge) = &mut bridge {
         bridge.children.clear();
     }
-    let mut cancelled = 0;
-    let status = loop {
-        let signal = INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed);
-        if signal != 0 && cancelled == 0 {
-            cancelled = signal;
-            group.terminate()?;
-        }
-        if let Some(status) = child.try_wait()? {
-            break status;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    };
     group.cleanup()?;
-    if cancelled != 0 {
-        return Ok(128 + cancelled);
-    }
     drop(credential_broker);
     Ok(status
         .code()

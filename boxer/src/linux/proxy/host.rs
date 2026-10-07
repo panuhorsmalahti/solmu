@@ -27,6 +27,10 @@ pub struct Host {
 }
 
 impl Host {
+    pub fn supervisor(&self) -> Option<Arc<super::supervisor::Supervisor>> {
+        self.supervisor.clone()
+    }
+
     pub fn new(policy: &Policy) -> io::Result<Self> {
         let allowed = policy
             .hosts
