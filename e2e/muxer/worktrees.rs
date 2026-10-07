@@ -303,3 +303,88 @@ async fn worktree_open_reuses_existing_spaces_and_finds_paths_or_branches() {
     assert_eq!(primary["worktree"]["primary"], true);
     assert!(session.command(&["server", "stop"]).status.success());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn worktree_remove_protects_dirty_checkouts_and_keeps_the_branch() {
+    let backend = Backend::start().await;
+    let repo = backend.directory.path().join("remove-project");
+    repository(&repo);
+    let session = Session {
+        backend: &backend,
+        name: "worktree-remove",
+    };
+    assert!(session.command(&["server", "start"]).status.success());
+    let source = command(
+        &session,
+        &[
+            "space",
+            "create",
+            "--cwd",
+            repo.to_str().unwrap(),
+            "--name",
+            "Project",
+        ],
+    );
+    let source_id = source["space"]["id"].as_u64().unwrap().to_string();
+    let path = backend.directory.path().join("remove-checkout");
+    let created = command(
+        &session,
+        &[
+            "worktree",
+            "create",
+            "--space",
+            &source_id,
+            "--branch",
+            "remove-branch",
+            "--path",
+            path.to_str().unwrap(),
+        ],
+    );
+    let worktree_id = created["created"]["space"]["id"]
+        .as_u64()
+        .unwrap()
+        .to_string();
+    std::fs::write(path.join("uncommitted.txt"), "keep unless forced\n").unwrap();
+
+    let rejected = session.command(&["worktree", "remove", "--space", &worktree_id]);
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("uncommitted changes"));
+    assert!(path.exists());
+    assert_eq!(
+        command(&session, &["space", "get", &worktree_id])["id"],
+        worktree_id.parse::<u64>().unwrap()
+    );
+
+    let removed = command(
+        &session,
+        &["worktree", "remove", "--space", &worktree_id, "--force"],
+    );
+    assert_eq!(removed["branch"], "remove-branch");
+    assert!(!path.exists());
+    assert!(
+        git(
+            &repo,
+            &[
+                "show-ref",
+                "--verify",
+                "--quiet",
+                "refs/heads/remove-branch"
+            ]
+        )
+        .status
+        .success()
+    );
+    let spaces = command(&session, &["space", "list"]);
+    let spaces = spaces["items"].as_array().unwrap();
+    assert!(
+        spaces
+            .iter()
+            .any(|space| space["id"] == source_id.parse::<u64>().unwrap())
+    );
+    assert!(
+        spaces
+            .iter()
+            .all(|space| space["id"] != worktree_id.parse::<u64>().unwrap())
+    );
+    assert!(session.command(&["server", "stop"]).status.success());
+}

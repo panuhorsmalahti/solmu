@@ -64,6 +64,7 @@ jobs:
           path: |
             docs/screenshots/muxer-gui.png
             docs/screenshots/muxer-gui-worktrees.png
+            docs/screenshots/muxer-gui-remove-worktree.png
 
   android:
     name: Android (ubuntu-latest)

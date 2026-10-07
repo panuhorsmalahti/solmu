@@ -329,6 +329,77 @@ impl App {
                     json!({"opened": opened, "space": self.automation_record(Kind::Space, space_id)?}),
                 )
             }
+            Request::WorktreeRemove { space, force } => {
+                let index = self
+                    .spaces
+                    .iter()
+                    .position(|candidate| candidate.id == *space)
+                    .ok_or("Worktree space does not exist")?;
+                let entry = self.spaces[index].clone();
+                let worktree = entry
+                    .worktree
+                    .as_ref()
+                    .ok_or("The selected space is not a registered Git worktree")?;
+                if worktree.primary {
+                    return Err(
+                        "The primary repository checkout cannot be removed as a worktree".into(),
+                    );
+                }
+                if !force {
+                    let status = git_output(
+                        &entry.directory,
+                        &["status", "--porcelain", "--untracked-files=all"],
+                    )?;
+                    if !status.status.success() {
+                        return Err("Could not inspect the worktree status".into());
+                    }
+                    if !status.stdout.is_empty() {
+                        return Err("Worktree has uncommitted changes; commit or stash them, or pass --force to remove them".into());
+                    }
+                }
+                let open = self.spaces[index].tabs.iter().any(|tab| {
+                    tab.layout
+                        .ids()
+                        .iter()
+                        .any(|id| self.panes.iter().any(|pane| pane.id == *id))
+                });
+                if open && self.spaces.len() == 1 {
+                    return Err(
+                        "Open another space before removing the last open worktree space".into(),
+                    );
+                }
+                if open {
+                    let tabs: Vec<_> = entry.tabs.iter().map(|tab| tab.id).collect();
+                    for tab in tabs {
+                        self.close_tab(tab);
+                    }
+                }
+                let mut remove = Command::new("git");
+                remove
+                    .arg("-C")
+                    .arg(&worktree.repo_root)
+                    .args(["worktree", "remove"]);
+                if *force {
+                    remove.arg("--force");
+                }
+                let output = remove.arg(&entry.directory).output()?;
+                if !output.status.success() {
+                    if open && entry.directory.is_dir() {
+                        self.add_space(entry.directory.clone())?;
+                        let restored = self.space;
+                        self.spaces[restored].name = entry.name;
+                        self.spaces[restored].worktree = entry.worktree;
+                    }
+                    return Err(format!(
+                        "git worktree remove failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )
+                    .into());
+                }
+                Ok(
+                    json!({"removed": entry.directory, "branch": worktree.branch, "space": entry.id, "forced": force}),
+                )
+            }
             Request::AgentList => Ok(
                 json!({"items":self.panes.iter().filter(|pane| pane.exited.is_none() && pane.launch.solmu()).map(|pane| self.automation_record(Kind::Pane, pane.id).unwrap()).collect::<Vec<_>>()}),
             ),

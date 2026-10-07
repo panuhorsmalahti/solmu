@@ -192,6 +192,24 @@ PY
   sleep 0.5
 done
 [ "$opened" = "$before:1:$worktree_space:$worktree_space" ] || { echo "GUI did not reopen the existing worktree space (state=$opened)" >&2; exit 1; }
+# A space context menu can remove the checkout while preserving its branch.
+worktree_path="$state/worktrees/source/gui-e2e-worktree"
+xdotool mousemove --window "$window" 100 174 click 3
+sleep 0.3
+import -window "$window" docs/screenshots/muxer-gui-remove-worktree.png
+xdotool mousemove --window "$window" 105 276 click 1
+for _ in $(seq 1 30); do
+  removed=$(python3 - "$snapshot" "$worktree_space" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+print("removed" if all(item["id"] != int(sys.argv[2]) for item in data["spaces"]) else "present")
+PY
+)
+  [ "$removed" = removed ] && break
+  sleep 0.5
+done
+[ "$removed" = removed ] && [ ! -e "$worktree_path" ] || { echo 'GUI did not remove the worktree checkout and its space' >&2; exit 1; }
+before=$((before - 1))
 xdotool mousemove --window "$window" 240 131 click 1
 sleep 0.3
 xdotool mousemove --window "$window" 75 168 click 1
@@ -271,3 +289,4 @@ done
 
 test -s docs/screenshots/muxer-gui.png
 test -s docs/screenshots/muxer-gui-worktrees.png
+test -s docs/screenshots/muxer-gui-remove-worktree.png

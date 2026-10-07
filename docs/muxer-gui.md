@@ -37,7 +37,9 @@ shell.
 Use **+** and enter a branch name. **Create worktree** creates a Git checkout
 from the selected project's repository; **Open worktree** reopens that branch
 as a separate Solmu space, focusing its existing space when it is already open.
-See [Git worktrees](muxer-worktrees.md).
+Right-click a worktree space and choose **Remove worktree checkout** to remove
+the Git checkout; Muxer keeps the branch, and refuses checkouts with uncommitted
+changes. See [Git worktrees](muxer-worktrees.md).
 
 Muxer GUI owns the session lock while open. Close it before opening that
 session in the terminal Muxer app; the session layout and metadata are saved
@@ -49,3 +51,5 @@ and [development](development.md).
 ![Muxer GUI](screenshots/muxer-gui.png)
 
 ![Creating a worktree from Muxer GUI](screenshots/muxer-gui-worktrees.png)
+
+![Removing a worktree checkout from Muxer GUI](screenshots/muxer-gui-remove-worktree.png)

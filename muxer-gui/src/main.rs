@@ -73,6 +73,7 @@ enum Message {
     ToggleSpaceMenu,
     SpaceContextMenu(u64),
     DeleteSpace(u64),
+    RemoveWorktree(u64),
     CreateSpace(SpaceType),
     WorktreeBranchChanged(String),
     CreateWorktree,
@@ -135,6 +136,20 @@ impl MuxerGui {
                         .map(|_| ())
                     },
                     "Space deleted".into(),
+                )
+            }
+            Message::RemoveWorktree(id) => {
+                self.context_space = None;
+                let session = self.session.clone();
+                perform(
+                    move || {
+                        request(
+                            &session,
+                            json!({"method":"worktree_remove","params":{"space":id}}),
+                        )
+                        .map(|_| ())
+                    },
+                    "Worktree removed".into(),
                 )
             }
             Message::TerminalFocus => {
@@ -656,21 +671,35 @@ impl MuxerGui {
                 .on_right_press(Message::SpaceContextMenu(id)),
             );
             if self.context_space == Some(id) {
-                spaces_section = spaces_section.push(
-                    container(
+                let mut actions = column![
+                    button(
+                        text("Delete space")
+                            .size(11)
+                            .color(iced::Color::from_rgb8(190, 65, 65)),
+                    )
+                    .on_press(Message::DeleteSpace(id))
+                    .style(appearance::ghost)
+                    .padding([7, 10])
+                    .width(Length::Fill),
+                ]
+                .spacing(2);
+                if space["worktree"]["primary"] == false {
+                    actions = actions.push(
                         button(
-                            text("Delete space")
+                            text("Remove worktree checkout")
                                 .size(11)
                                 .color(iced::Color::from_rgb8(190, 65, 65)),
                         )
-                        .on_press(Message::DeleteSpace(id))
+                        .on_press(Message::RemoveWorktree(id))
                         .style(appearance::ghost)
                         .padding([7, 10])
                         .width(Length::Fill),
-                    )
-                    .padding(4)
-                    .style(appearance::panel)
-                    .width(Length::Fill),
+                    );
+                }
+                spaces_section = spaces_section.push(
+                    container(actions.padding(4))
+                        .style(appearance::panel)
+                        .width(Length::Fill),
                 );
             }
             if Some(id) == active_space

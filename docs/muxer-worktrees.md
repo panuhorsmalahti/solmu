@@ -43,6 +43,17 @@ muxer worktree open --path /worktrees/solmu/review --space 1
 Opening an already open worktree returns its existing space. Opening a closed
 worktree creates a Solmu space for it; use `--focus` to select it immediately.
 
+Remove a worktree checkout by its open space ID:
+
+```sh
+muxer worktree remove --space 2
+```
+
+Muxer closes the worktree space and asks Git to remove the checkout. The branch
+is kept. Dirty worktrees are refused; pass `--force` only when you want to
+discard uncommitted and untracked files. The primary repository space cannot
+be removed this way.
+
 Create a branch checkout:
 
 ```sh

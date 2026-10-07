@@ -134,6 +134,11 @@ pub enum Request {
         #[serde(default)]
         focus: bool,
     },
+    WorktreeRemove {
+        space: u64,
+        #[serde(default)]
+        force: bool,
+    },
     CreateTab {
         #[serde(default)]
         launch: Option<crate::launch::Launch>,
@@ -302,7 +307,7 @@ pub fn key_bytes(keys: &[String]) -> Result<Vec<u8>, String> {
 
 pub const HELP: &str = "Muxer local automation (add --session NAME anywhere):
   muxer completion bash|zsh|fish|powershell
-  muxer worktree list [--space ID] | open (--branch NAME | --path PATH) [--space ID] [--focus] | create --branch NAME [--space ID] [--base REF] [--path PATH] [--focus]
+  muxer worktree list [--space ID] | open (--branch NAME | --path PATH) [--space ID] [--focus] | remove --space ID [--force] | create --branch NAME [--space ID] [--base REF] [--path PATH] [--focus]
   muxer status | api snapshot
   muxer api request '{\"method\":\"snapshot\"}'
   muxer space list|get ID|focus ID|rename ID NAME|close ID
@@ -477,6 +482,12 @@ fn parse(args: &mut Args, group: &str) -> Result<Request, String> {
                 branch,
                 path,
                 focus: args.flag("--focus"),
+            });
+        }
+        if action == "remove" {
+            return Ok(Request::WorktreeRemove {
+                space: args.optional_id("--space")?.ok_or("--space is required")?,
+                force: args.flag("--force"),
             });
         }
         if action != "create" {
