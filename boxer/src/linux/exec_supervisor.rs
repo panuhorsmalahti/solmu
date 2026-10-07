@@ -1,9 +1,12 @@
 //! Intercepts sandboxed `execve` calls so an operator can approve commands at
 //! runtime. The tracer stays outside Bubblewrap's namespaces and seccomp policy.
 
-use std::{io, process::{Command, ExitStatus}};
+use std::{
+    io,
+    process::{Command, ExitStatus},
+};
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use std::{
     collections::HashSet,
     fs,
@@ -22,21 +25,21 @@ pub fn run(
     group: &super::cgroup::Group,
     supervisor: &super::proxy::supervisor::Supervisor,
 ) -> io::Result<ExitStatus> {
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
         let _ = command;
         let _ = bootstrap;
         let _ = group;
         let _ = supervisor;
         return Err(io::Error::other(
-            "Supervised command approvals currently require Linux x86_64",
+            "Supervised command approvals require Linux x86_64 or aarch64",
         ));
     }
-    #[cfg(target_arch = "x86_64")]
-    run_x86_64(command, bootstrap, group, supervisor)
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    run_traced(command, bootstrap, group, supervisor)
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 #[derive(Clone, Copy)]
 enum Decision {
     Once,
@@ -44,15 +47,15 @@ enum Decision {
     Deny,
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 struct ExecutableIdentity {
     device: u64,
     inode: u64,
 }
 
-#[cfg(target_arch = "x86_64")]
-fn run_x86_64(
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn run_traced(
     command: &mut Command,
     bootstrap: Vec<Vec<u8>>,
     group: &super::cgroup::Group,
@@ -123,17 +126,8 @@ fn run_x86_64(
         let signal = libc::WSTOPSIG(status);
         let event = status >> 16;
         if event == libc::PTRACE_EVENT_SECCOMP {
-            let mut registers = unsafe { std::mem::zeroed::<libc::user_regs_struct>() };
-            ptrace_data(
-                libc::PTRACE_GETREGS,
-                pid,
-                (&mut registers as *mut libc::user_regs_struct) as usize,
-            )?;
-            let path_address = if registers.orig_rax as i64 == libc::SYS_execve {
-                registers.rdi
-            } else {
-                registers.rsi
-            };
+            let mut registers = Registers::get(pid)?;
+            let path_address = registers.path_address(pid)?;
             let path = read_remote_string(pid, path_address).unwrap_or_default();
             let identity = executable_identity(pid, &path);
             let decision = if path.is_empty() {
@@ -176,13 +170,7 @@ fn run_x86_64(
                 }
                 Decision::Deny => {
                     eprintln!("Boxer denied command execution");
-                    registers.orig_rax = u64::MAX;
-                    registers.rax = (-(libc::EACCES as i64)) as u64;
-                    ptrace_data(
-                        libc::PTRACE_SETREGS,
-                        pid,
-                        (&registers as *const libc::user_regs_struct) as usize,
-                    )?;
+                    registers.deny(pid)?;
                 }
             }
             ptrace(libc::PTRACE_CONT, pid, 0)?;
@@ -214,6 +202,103 @@ fn run_x86_64(
 }
 
 #[cfg(target_arch = "x86_64")]
+struct Registers(libc::user_regs_struct);
+
+#[cfg(target_arch = "aarch64")]
+struct Registers([u64; 34]);
+
+#[cfg(target_arch = "x86_64")]
+impl Registers {
+    fn get(pid: libc::pid_t) -> io::Result<Self> {
+        let mut registers = unsafe { std::mem::zeroed::<libc::user_regs_struct>() };
+        ptrace_data(
+            libc::PTRACE_GETREGS,
+            pid,
+            (&mut registers as *mut libc::user_regs_struct) as usize,
+        )?;
+        Ok(Self(registers))
+    }
+
+    fn path_address(&self, _pid: libc::pid_t) -> io::Result<u64> {
+        let registers = &self.0;
+        Ok(if registers.orig_rax as i64 == libc::SYS_execve {
+            registers.rdi
+        } else {
+            registers.rsi
+        })
+    }
+
+    fn deny(self, pid: libc::pid_t) -> io::Result<()> {
+        let mut registers = self.0;
+        registers.orig_rax = u64::MAX;
+        registers.rax = (-(libc::EACCES as i64)) as u64;
+        ptrace_data(
+            libc::PTRACE_SETREGS,
+            pid,
+            (&registers as *const libc::user_regs_struct) as usize,
+        )
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+impl Registers {
+    fn get(pid: libc::pid_t) -> io::Result<Self> {
+        const NT_PRSTATUS: libc::c_int = 1;
+        let mut registers = [0u64; 34];
+        let mut vector = libc::iovec {
+            iov_base: registers.as_mut_ptr().cast(),
+            iov_len: std::mem::size_of_val(&registers),
+        };
+        if unsafe {
+            libc::ptrace(
+                libc::PTRACE_GETREGSET,
+                pid,
+                NT_PRSTATUS as usize as *mut libc::c_void,
+                (&mut vector as *mut libc::iovec).cast::<libc::c_void>(),
+            )
+        } == -1
+        {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Self(registers))
+    }
+
+    fn path_address(&self, _pid: libc::pid_t) -> io::Result<u64> {
+        // arm64 passes execve pathname in x0 and execveat pathname in x1.
+        Ok(if self.0[8] as i64 == libc::SYS_execve {
+            self.0[0]
+        } else {
+            self.0[1]
+        })
+    }
+
+    fn deny(self, pid: libc::pid_t) -> io::Result<()> {
+        const NT_PRSTATUS: libc::c_int = 1;
+        let mut registers = self.0;
+        // Setting the syscall number to -1 skips it; x0 is the syscall result.
+        registers[8] = u64::MAX;
+        registers[0] = (-(libc::EACCES as i64)) as u64;
+        let mut vector = libc::iovec {
+            iov_base: registers.as_mut_ptr().cast(),
+            iov_len: std::mem::size_of_val(&registers),
+        };
+        if unsafe {
+            libc::ptrace(
+                libc::PTRACE_SETREGSET,
+                pid,
+                NT_PRSTATUS as usize as *mut libc::c_void,
+                (&mut vector as *mut libc::iovec).cast::<libc::c_void>(),
+            )
+        } == -1
+        {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn executable_identity(pid: libc::pid_t, path: &[u8]) -> Option<ExecutableIdentity> {
     if path.is_empty() {
         return None;
@@ -238,7 +323,7 @@ fn executable_identity(pid: libc::pid_t, path: &[u8]) -> Option<ExecutableIdenti
     })
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn prompt(path: &[u8]) -> io::Result<Decision> {
     let display = path.escape_ascii().to_string();
     eprint!(
@@ -254,7 +339,7 @@ fn prompt(path: &[u8]) -> io::Result<Decision> {
     })
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn read_remote_string(pid: libc::pid_t, address: u64) -> io::Result<Vec<u8>> {
     let mut value = Vec::with_capacity(256);
     for offset in (0..4096usize).step_by(8) {
@@ -279,12 +364,12 @@ fn read_remote_string(pid: libc::pid_t, address: u64) -> io::Result<Vec<u8>> {
     Err(io::Error::other("Command path exceeds 4096 bytes"))
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn ptrace(request: libc::c_uint, pid: libc::pid_t, data: usize) -> io::Result<()> {
     ptrace_data(request, pid, data)
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn ptrace_data(request: libc::c_uint, pid: libc::pid_t, data: usize) -> io::Result<()> {
     if unsafe { libc::ptrace(request, pid, 0, data) } == -1 {
         Err(io::Error::last_os_error())
@@ -293,7 +378,7 @@ fn ptrace_data(request: libc::c_uint, pid: libc::pid_t, data: usize) -> io::Resu
     }
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn status_to_exit(status: i32) -> io::Result<ExitStatus> {
     if libc::WIFEXITED(status) {
         Ok(ExitStatus::from_raw(libc::WEXITSTATUS(status) << 8))

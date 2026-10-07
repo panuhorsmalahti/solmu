@@ -949,7 +949,7 @@ private, loopback, link-local, and other special-use IP destinations.
 
 Add `--supervised` to approve commands that are not part of the sandbox's
 startup chain. Boxer intercepts sandboxed command execution on Linux x86_64 and
-asks whether to allow each command once, for the session, or deny it. In proxy
+aarch64 and asks whether to allow each command once, for the session, or deny it. In proxy
 mode, it also pauses on remote destinations that are not already allowed. This
 is available with `--isolated`; network approvals require `--network proxy`.
 Grant rules, local routes, and network profiles continue to work as configured.
