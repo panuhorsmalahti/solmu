@@ -4,8 +4,89 @@ use super::*;
 use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use std::{
     io::{Read, Write},
+    process::Stdio,
     sync::mpsc,
 };
+
+#[test]
+fn attached_launches_appear_in_the_session_list_and_record_exit_status() {
+    let directory = tempfile::tempdir().unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    let detached = Command::new(binary("boxer"))
+        .args(["--detached", "--cwd"])
+        .arg(workspace.path())
+        .args(["--", "/bin/sh", "-c", "sleep 10"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(detached.status.success());
+    let detached_id = String::from_utf8_lossy(&detached.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("Detached Boxer session: "))
+        .unwrap()
+        .to_owned();
+    let mut launch = Command::new(binary("boxer"))
+        .args(["--cwd"])
+        .arg(workspace.path())
+        .args(["--", "/bin/sh", "-c", "sleep 2"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let listing = Command::new(binary("boxer"))
+        .args(["ps", "--json"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(listing.status.success());
+    let sessions: serde_json::Value = serde_json::from_slice(&listing.stdout).unwrap();
+    assert_eq!(sessions.as_array().unwrap().len(), 2);
+    assert!(
+        sessions
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|session| { session["id"] == detached_id && session["detached"] == true })
+    );
+    let attached = sessions
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["detached"] == false)
+        .expect("attached Boxer launch is listed");
+    let id = attached["id"].as_str().unwrap().to_owned();
+    assert_eq!(attached["status"], "running");
+    assert_eq!(attached["attached"], true);
+    assert_eq!(attached["workspace"], workspace.path().to_str().unwrap());
+
+    assert!(launch.wait().unwrap().success());
+    let listing = Command::new(binary("boxer"))
+        .args(["ps", "--all", "--json"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(listing.status.success());
+    let sessions: serde_json::Value = serde_json::from_slice(&listing.stdout).unwrap();
+    let finished = sessions
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["id"] == id)
+        .expect("finished attached launch remains available with --all");
+    assert_eq!(finished["status"], "finished");
+    assert_eq!(finished["exit_code"], 0);
+    assert_eq!(finished["attached"], true);
+
+    let stop = Command::new(binary("boxer"))
+        .args(["stop", &detached_id, "--force"])
+        .env("BOXER_SESSIONS_DIR", directory.path())
+        .output()
+        .unwrap();
+    assert!(stop.status.success());
+}
 
 fn wait_for_output(
     output: &mpsc::Receiver<Vec<u8>>,

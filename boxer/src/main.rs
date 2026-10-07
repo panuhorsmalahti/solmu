@@ -37,6 +37,8 @@ use macos as platform;
 mod windows;
 #[cfg(windows)]
 use windows as platform;
+#[cfg(windows)]
+mod windows_sessions;
 
 fn main() {
     let arguments: Vec<_> = std::env::args_os().skip(1).collect();
@@ -94,10 +96,14 @@ fn main() {
         {
             sessions::command(&arguments)
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            windows_sessions::command(&arguments)
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             Err(io::Error::other(
-                "Detached sessions are currently supported on Linux and macOS",
+                "Boxer sessions are unsupported on this OS",
             ))
         }
     } else {
@@ -311,7 +317,7 @@ fn run() -> io::Result<i32> {
                 "--rollback: snapshot the workspace before and after a command. Use `boxer rollback list|show|restore|cleanup` to review, restore, and prune snapshots; `boxer rollback audit list|show|export|verify` reviews and exports the local audit trail."
             );
             println!(
-                "--detached: start a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach by default (Linux/macOS). Set BOXER_DETACH_SEQUENCE to configure the key sequence. Manage sessions with `boxer ps|inspect|pause|resume|stop|prune`."
+                "`boxer ps` lists attached launches on all platforms, and detached sessions on Linux/macOS. `--detached` starts a background terminal session; use `boxer attach <id>` and Ctrl-] then d to detach by default. Set BOXER_DETACH_SEQUENCE to configure the key sequence. Manage detached sessions with `boxer attach|detach|pause|resume|stop|prune`."
             );
             println!(
                 "boxer supervisor SESSION_ID list|history|approve|deny: manage and verify runtime network approval decisions; --session --host DOMAIN_PATTERN grants matching hosts for this session (Linux)."
@@ -875,6 +881,23 @@ fn run() -> io::Result<i32> {
             "--isolated is currently supported only on Linux",
         ));
     }
+    #[cfg(unix)]
+    if !sessions::is_child() {
+        return sessions::start_attached(
+            &raw_arguments,
+            &workspace,
+            &command.get_program().to_string_lossy(),
+        );
+    }
+    #[cfg(windows)]
+    {
+        let launch_id =
+            windows_sessions::register(&workspace, &command.get_program().to_string_lossy())?;
+        let result = windows::run_tracked(command, resolved, &launch_id);
+        windows_sessions::finish(&launch_id, result.as_ref().copied().unwrap_or(125))?;
+        result
+    }
+    #[cfg(not(any(unix, windows)))]
     platform::run(command, resolved)
 }
 

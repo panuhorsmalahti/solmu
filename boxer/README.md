@@ -87,6 +87,10 @@ systemd-run --user --pty --same-dir -p Delegate=yes -p DelegateSubgroup=supervis
 
 Networking stays allowed. This uses the host kernel.
 
+`boxer ps` lists active attached launches on every supported OS and detached
+sessions on Linux and macOS. It uses local per-launch records and does not
+require a separate Boxer service. Add `--all` to include finished launches.
+
 On Linux, restrict destinations with `--isolated --network proxy`. Choose a
 built-in host set with `--network-profile minimal|developer|claude-code|codex|opencode|enterprise` or add exact
 hosts or wildcard patterns with `--allow-host api.openai.com`. Forward an existing backend with

@@ -29,7 +29,15 @@ impl Drop for Handle {
     }
 }
 
-pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
+pub fn run(command: Command, policy: Policy) -> io::Result<i32> {
+    run_inner(command, policy, None)
+}
+
+pub fn run_tracked(command: Command, policy: Policy, launch_id: &str) -> io::Result<i32> {
+    run_inner(command, policy, Some(launch_id))
+}
+
+fn run_inner(mut command: Command, policy: Policy, launch_id: Option<&str>) -> io::Result<i32> {
     if policy.network == crate::policy::Network::Deny {
         return Err(io::Error::other(
             "Network restrictions are not supported by the Windows Job Object backend; use Linux/WSL or macOS for an offline policy",
@@ -64,6 +72,9 @@ pub fn run(mut command: Command, policy: Policy) -> io::Result<i32> {
     // descendant in the gap between creation and assignment.
     let mut child = command.creation_flags(CREATE_SUSPENDED).spawn()?;
     let result = (|| {
+        if let Some(launch_id) = launch_id {
+            crate::windows_sessions::set_child_pid(launch_id, child.id())?;
+        }
         if unsafe { AssignProcessToJobObject(job.0, child.as_raw_handle().cast()) } == 0 {
             return Err(io::Error::last_os_error());
         }

@@ -41,9 +41,15 @@ struct Session {
     workspace: String,
     command: String,
     status: String,
+    #[serde(default = "default_detached")]
+    detached: bool,
     #[serde(default)]
     attached: bool,
     exit_code: Option<i32>,
+}
+
+fn default_detached() -> bool {
+    true
 }
 
 pub fn command(arguments: &[std::ffi::OsString]) -> io::Result<i32> {
@@ -185,6 +191,7 @@ pub fn start(
         workspace: workspace.to_string_lossy().into_owned(),
         command: command.to_owned(),
         status: "running".into(),
+        detached: true,
         attached: false,
         exit_code: None,
     };
@@ -210,6 +217,46 @@ pub fn start(
         return Err(error);
     }
     Ok(0)
+}
+
+/// Run a Boxer launch under a small foreground supervisor so it can be listed
+/// alongside detached sessions. The child waits for its record before applying
+/// sandbox policy and launching the requested program.
+pub fn start_attached(
+    arguments: &[std::ffi::OsString],
+    workspace: &std::path::Path,
+    command: &str,
+) -> io::Result<i32> {
+    let root = root()?;
+    let id = Uuid::new_v4().hyphenated().to_string();
+    let mut child = Command::new(std::env::current_exe()?)
+        .arg(CHILD_ARGUMENT)
+        .arg(&id)
+        .args(arguments)
+        .current_dir(workspace)
+        .spawn()?;
+    let session = Session {
+        version: 1,
+        id: id.clone(),
+        pid: child.id(),
+        created_unix_ms: now_ms()?,
+        workspace: workspace.to_string_lossy().into_owned(),
+        command: command.to_owned(),
+        status: "running".into(),
+        detached: false,
+        attached: true,
+        exit_code: None,
+    };
+    if let Err(error) = save(&root, &session) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
+    child.wait().map(|status| {
+        status
+            .code()
+            .unwrap_or_else(|| 128 + status.signal().unwrap_or(1))
+    })
 }
 
 pub fn daemon_id(arguments: &[std::ffi::OsString]) -> Option<String> {
@@ -494,7 +541,9 @@ pub fn finish(id: &str, code: i32) -> io::Result<()> {
     let root = root()?;
     let mut session = read(&root, id)?;
     session.status = "finished".into();
-    session.attached = false;
+    if session.detached {
+        session.attached = false;
+    }
     session.exit_code = Some(code);
     save(&root, &session)
 }
@@ -569,7 +618,7 @@ fn stop(id: &str, force: bool, timeout: Option<u32>) -> io::Result<i32> {
     let mut session = read(&root, id)?;
     refresh_status(&mut session);
     if is_active(&session) {
-        if !is_live_session(session.pid) {
+        if !is_live(&session) {
             session.status = "finished".into();
             save(&root, &session)?;
             println!("Session {}: {}", id, session.status);
@@ -596,7 +645,7 @@ fn stop(id: &str, force: bool, timeout: Option<u32>) -> io::Result<i32> {
                     }
                 }
             }
-            if is_active(&session) && !is_live_session(session.pid) {
+            if is_active(&session) && !is_live(&session) {
                 session.status = "finished".into();
                 session.attached = false;
                 save(&root, &session)?;
@@ -697,9 +746,21 @@ fn is_active(session: &Session) -> bool {
 }
 
 fn refresh_status(session: &mut Session) {
-    if is_active(session) && !is_live_session(session.pid) {
+    if is_active(session) && !is_live(session) {
         session.status = "finished".into();
-        session.attached = false;
+        if session.detached {
+            session.attached = false;
+        }
+    }
+}
+
+fn is_live(session: &Session) -> bool {
+    if session.detached {
+        is_live_session(session.pid)
+    } else {
+        // A foreground wrapper waits for the child and records its exit before
+        // leaving. This check also handles the wrapper being terminated early.
+        unsafe { libc::kill(session.pid as i32, 0) == 0 }
     }
 }
 
@@ -829,6 +890,13 @@ fn runtime_socket_path(id: &str, suffix: &str) -> PathBuf {
 }
 
 fn control(id: &str, action: u8) -> io::Result<i32> {
+    let root = root()?;
+    let session = read(&root, id)?;
+    if !session.detached {
+        return Err(io::Error::other(
+            "This Boxer launch is attached to its original terminal",
+        ));
+    }
     control_with_value(id, action, 0)
 }
 
@@ -870,6 +938,9 @@ fn attach(id: &str) -> io::Result<i32> {
     let parsed = Uuid::parse_str(id).map_err(|_| io::Error::other("Invalid session ID"))?;
     let root = root()?;
     let session = read(&root, &parsed.hyphenated().to_string())?;
+    if !session.detached {
+        return Err(io::Error::other("Only detached sessions can be attached"));
+    }
     if !is_active(&session) {
         return Err(io::Error::other("Session is not running"));
     }

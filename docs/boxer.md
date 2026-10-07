@@ -38,6 +38,14 @@ scope. They do not control pathname-based Unix sockets.
 The same settings can be saved in a policy as `linux_signal_scope: true` and
 `linux_abstract_unix_socket_scope: true`.
 
+## List Boxer launches
+
+`boxer ps` lists active Boxer launches, including ordinary attached commands.
+On Linux and macOS, it also lists detached sessions. Each launch is recorded
+locally; no always-running Boxer service is required. Use `boxer ps --all` to
+include finished launches, or `boxer ps --json` for scripts. The list shows the
+session ID, status, attachment, process ID, and command.
+
 ## Run a detached session
 
 On Linux and macOS, add `--detached` to leave a Boxer process running after the
@@ -65,7 +73,7 @@ boxer prune --older-than 7
 boxer prune --keep 20
 ```
 
-By default, `boxer ps` lists running sessions. Add `--all` to include sessions
+By default, `boxer ps` lists running launches. Add `--all` to include launches
 that have stopped or exited. Use `--json` to script the list, or
 `boxer inspect <session-id> --json` to retrieve one session's details.
 Use `boxer pause` to suspend the session's agent process group and `boxer resume`
