@@ -187,6 +187,30 @@ jobs:
             target/debug/mcp-fixture
           retention-days: 2
 
+  boxer-arm64:
+    name: Boxer supervisor (Linux ARM64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap libdbus-1-dev
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p solmu-boxer
+      - run: cargo build --locked -p solmu-e2e --bin sandbox-probe
+      - run: |
+          sudo systemd-run --wait --pipe --collect \
+            -p User="$USER" -p WorkingDirectory="$PWD" \
+            -p Delegate=yes -p DelegateSubgroup=supervisor \
+            /usr/bin/env "PATH=$PATH" \
+            cargo test --locked -p solmu-e2e --test boxer supervisor:: -- --test-threads=1
+
   browser:
     name: Web and website
     needs: [rust, ios, android, muxer-gui]
