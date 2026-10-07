@@ -311,10 +311,11 @@ fn executable_identity(pid: libc::pid_t, path: &[u8]) -> Option<ExecutableIdenti
     };
     let metadata = fs::metadata(fs::canonicalize(&remote).ok()?)
         .or_else(|_| {
-            requested
-                .is_absolute()
-                .then(|| fs::metadata(requested))
-                .unwrap_or_else(|| Err(io::Error::other("Executable is not visible to Boxer")))
+            if requested.is_absolute() {
+                fs::metadata(requested)
+            } else {
+                Err(io::Error::other("Executable is not visible to Boxer"))
+            }
         })
         .ok()?;
     metadata.is_file().then_some(ExecutableIdentity {
