@@ -172,8 +172,11 @@ fi
 # command's file side effect.
 marker="$state/gui-command.txt"
 xdotool windowfocus --sync "$window"
+sleep 0.2
 eval "$(xdotool getwindowgeometry --shell "$window")"
-xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT / 2))" click 1
+xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT / 2))"
+sleep 0.2
+xdotool click 1
 sleep 0.2
 xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
