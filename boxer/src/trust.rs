@@ -153,8 +153,16 @@ pub fn verify_policy(
                 "Trust policy instruction patterns must stay inside the workspace",
             ));
         }
-        let workspace_pattern = workspace.to_string_lossy().replace('\\', "/");
-        let workspace_glob = glob::Pattern::escape(&workspace_pattern);
+        let workspace_path = workspace.to_string_lossy();
+        #[cfg(windows)]
+        let workspace_path = workspace_path
+            .strip_prefix(r"\\?\")
+            .unwrap_or(&workspace_path);
+        // Glob patterns always use `/` separators, including on Windows. Strip
+        // the Windows verbatim prefix first so its `?` is not interpreted as a
+        // wildcard in the absolute path.
+        let workspace_path = workspace_path.replace('\\', "/");
+        let workspace_glob = glob::Pattern::escape(&workspace_path);
         let pattern_glob = format!("{workspace_glob}/{pattern}");
         let matches = glob::glob(&pattern_glob).map_err(|error| {
             io::Error::other(format!("Invalid trust policy instruction pattern: {error}"))
@@ -165,6 +173,19 @@ pub fn verify_policy(
             if !entry.is_file() {
                 continue;
             }
+            #[cfg(windows)]
+            let entry = {
+                let entry = entry.to_string_lossy();
+                let entry = entry.strip_prefix(r"\\?\").unwrap_or(&entry);
+                PathBuf::from(entry)
+            };
+            let workspace = workspace;
+            #[cfg(windows)]
+            let workspace = {
+                let workspace = workspace.to_string_lossy();
+                let workspace = workspace.strip_prefix(r"\\?\").unwrap_or(&workspace);
+                PathBuf::from(workspace)
+            };
             let relative = entry.strip_prefix(workspace).map_err(io::Error::other)?;
             let relative = relative.to_string_lossy().replace('\\', "/");
             matched += 1;

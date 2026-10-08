@@ -302,7 +302,12 @@ fn signed_trust_policy_verifies_every_file_matching_instruction_patterns() {
             .unwrap()
     };
     let accepted = run("pattern-accepted.txt");
-    assert_eq!(accepted.status.code(), Some(7));
+    assert_eq!(
+        accepted.status.code(),
+        Some(7),
+        "{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
 
     std::fs::write(&skills, "changed skill instructions").unwrap();
     let rejected = run("pattern-rejected.txt");
