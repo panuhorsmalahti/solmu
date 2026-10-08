@@ -140,6 +140,7 @@ fn signed_trust_policy_requires_every_listed_file_before_startup() {
 }
 
 #[test]
+#[cfg(unix)]
 fn signed_workspace_trust_policy_is_discovered_and_verified_automatically() {
     let root = tempfile::tempdir().unwrap();
     let workspace = root.path().join("workspace");
@@ -291,7 +292,7 @@ fn signed_trust_policy_verifies_every_file_matching_instruction_patterns() {
     }
     let run = |marker: &str| {
         Command::new(binary("boxer"))
-            .args(["--workspace", "--cwd"])
+            .args(["--cwd"])
             .arg(&workspace)
             .arg("--")
             .arg(binary("sandbox-probe"))

@@ -434,7 +434,11 @@ fn policy_schema_describes_the_supported_policy_fields() {
         schema["$schema"],
         "https://json-schema.org/draft/2020-12/schema"
     );
-    assert_eq!(schema["required"], serde_json::json!(["version", "mode"]));
+    assert_eq!(schema["required"], serde_json::json!(["version"]));
+    assert_eq!(
+        schema["allOf"][0]["then"]["required"],
+        serde_json::json!(["mode"])
+    );
     assert_eq!(schema["additionalProperties"], false);
     for field in [
         "network",

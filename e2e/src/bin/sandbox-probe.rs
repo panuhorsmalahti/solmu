@@ -201,11 +201,18 @@ fn main() {
             let check = check.to_string_lossy();
             let (name, expectation) = check.split_once('=').expect("NAME=present|absent");
             if check_value {
-                assert_eq!(
-                    std::env::var(name).as_deref(),
-                    Ok(expectation),
-                    "unexpected environment variable value: {name}"
-                );
+                if expectation == "absent" {
+                    assert!(
+                        std::env::var_os(name).is_none(),
+                        "unexpected environment variable visibility: {name}"
+                    );
+                } else {
+                    assert_eq!(
+                        std::env::var(name).as_deref(),
+                        Ok(expectation),
+                        "unexpected environment variable value: {name}"
+                    );
+                }
             } else {
                 let actual = std::env::var_os(name).is_some();
                 assert_eq!(
@@ -223,9 +230,11 @@ fn main() {
         .is_some_and(|value| value == "--rollback-set")
     {
         let modified = std::path::PathBuf::from(&arguments[1]);
-        let created = std::path::PathBuf::from(&arguments[2]);
-        let deleted = std::path::PathBuf::from(&arguments[3]);
+        let newline = std::path::PathBuf::from(&arguments[2]);
+        let created = std::path::PathBuf::from(&arguments[3]);
+        let deleted = std::path::PathBuf::from(&arguments[4]);
         std::fs::write(modified, b"Solmu sandbox write allowed").unwrap();
+        std::fs::write(newline, b"Solmu sandbox write allowed").unwrap();
         std::fs::write(created, b"created during session").unwrap();
         std::fs::remove_file(deleted).unwrap();
         std::process::exit(7);

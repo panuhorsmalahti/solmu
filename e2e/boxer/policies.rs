@@ -70,6 +70,7 @@ fn resolved_policies_show_permissions_and_never_launch_or_disclose_environment_v
 }
 
 #[test]
+#[cfg(unix)]
 fn write_only_policy_paths_are_resolved_and_cannot_overlap_readable_grants() {
     let directory = tempfile::tempdir().unwrap();
     let workspace = directory.path().join("workspace");

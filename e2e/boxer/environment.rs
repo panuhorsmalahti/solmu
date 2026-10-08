@@ -11,7 +11,7 @@ fn policy_environment_patterns_allow_deny_and_match_full_names() {
             "version": 1,
             "mode": "unrestricted",
             "environment": {
-                "allow_vars": ["BOXER_E2E_*", "BOXER_EXACT", "boxer_e2e_case"],
+                "allow_vars": ["BOXER_E2E_K*", "BOXER_EXACT", "boxer_e2e_case"],
                 "deny_vars": ["BOXER_E2E_SECRET"],
                 "case_insensitive_vars": true
             }

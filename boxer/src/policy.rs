@@ -1386,7 +1386,8 @@ impl Policy {
                             environment.unwrap().matches_any(patterns, &name_text)
                                 || explicitly_passed
                         },
-                    );
+                    )
+                    || explicitly_passed;
                 let deny = environment
                     .is_some_and(|rules| rules.matches_any(&rules.deny_vars, &name_text));
                 if allow && !deny && !dangerous_inherited_env(&name_text) {

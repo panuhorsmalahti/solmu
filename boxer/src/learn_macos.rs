@@ -156,7 +156,6 @@ fn collect_trace(stdout: impl io::Read, path: &std::path::Path, pid: u32) -> io:
     let mut reader = io::BufReader::new(stdout);
     let mut file = std::fs::File::create(path)?;
     let mut line = String::new();
-    let process = format!(".{pid}");
     loop {
         line.clear();
         if reader.read_line(&mut line)? == 0 {
@@ -165,7 +164,7 @@ fn collect_trace(stdout: impl io::Read, path: &std::path::Path, pid: u32) -> io:
         if line
             .split_whitespace()
             .last()
-            .is_some_and(|column| column.ends_with(&process))
+            .is_some_and(|column| process_matches_pid(column, pid))
         {
             use std::io::Write;
             file.write_all(line.as_bytes())?;
@@ -216,13 +215,12 @@ fn stop_tracer(tracer: &mut std::process::Child) -> io::Result<()> {
 fn parse_fs_usage(contents: &str, pid: u32) -> Filesystem {
     let mut read = BTreeSet::new();
     let mut write = BTreeSet::new();
-    let process = format!(".{pid}");
     for line in contents.lines() {
         let columns: Vec<_> = line.split_whitespace().collect();
         if columns.len() < 5
             || !columns
                 .last()
-                .is_some_and(|column| column.ends_with(&process))
+                .is_some_and(|column| process_matches_pid(column, pid))
         {
             continue;
         }
@@ -258,6 +256,13 @@ fn parse_fs_usage(contents: &str, pid: u32) -> Filesystem {
         write,
         read_write,
     }
+}
+
+fn process_matches_pid(process: &str, pid: u32) -> bool {
+    process
+        .rsplit_once('.')
+        .and_then(|(_, process_pid)| process_pid.parse::<u32>().ok())
+        == Some(pid)
 }
 
 fn is_read_operation(operation: &str) -> bool {

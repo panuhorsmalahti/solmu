@@ -66,7 +66,12 @@ fn rollback_snapshots_sessions_lists_diffs_and_restores_workspace() {
         .env("USERPROFILE", root.path())
         .output()
         .unwrap();
-    assert_eq!(output.status.code(), Some(7));
+    assert_eq!(
+        output.status.code(),
+        Some(7),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(
         std::fs::read_to_string(workspace.join("modified.txt")).unwrap(),
         "Solmu sandbox write allowed"
