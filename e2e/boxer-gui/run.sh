@@ -51,9 +51,17 @@ import -window "$window" "$state/stopped.png"
 cmp -s "$state/empty.png" "$state/stopped.png" && { echo 'Boxer GUI did not react to the launch stopping' >&2; exit 1; }
 
 # Launch and stop a process from the GUI itself.
-xdotool mousemove --window "$window" 170 200 click 1 key ctrl+a BackSpace
-xdotool key Tab ctrl+a
-xdotool type --clearmodifiers '/bin/cat'
+xdotool windowfocus --sync "$window"
+xdotool mousemove --window "$window" 170 200 click 1
+sleep 0.2
+xdotool key --clearmodifiers ctrl+a
+xdotool key BackSpace
+sleep 0.2
+xdotool key Tab
+sleep 0.2
+xdotool key --clearmodifiers ctrl+a
+xdotool type --delay 40 --clearmodifiers '/bin/cat'
+sleep 0.3
 xdotool mousemove --window "$window" 900 200 click 1
 for _ in $(seq 1 40); do
   gui_launch_id=$("$root/target/debug/boxer" ps --json | python3 -c 'import json,sys; sessions=json.load(sys.stdin); print(next((item["id"] for item in sessions if item["command"] == "/bin/cat"), ""))')
