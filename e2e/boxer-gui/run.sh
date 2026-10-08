@@ -52,14 +52,12 @@ cmp -s "$state/empty.png" "$state/stopped.png" && { echo 'Boxer GUI did not reac
 
 # Launch and stop a process from the GUI itself.
 xdotool windowfocus --sync "$window"
-xdotool mousemove --window "$window" 170 200 click 1
+xdotool mousemove --sync --window "$window" 450 198
 sleep 0.2
+xdotool click 1
+sleep 0.3
 xdotool key --clearmodifiers ctrl+a
 xdotool key BackSpace
-sleep 0.2
-xdotool key Tab
-sleep 0.2
-xdotool key --clearmodifiers ctrl+a
 xdotool type --delay 40 --clearmodifiers '/bin/cat'
 sleep 0.3
 xdotool mousemove --window "$window" 900 200 click 1

@@ -200,7 +200,7 @@ xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT / 2))"
 sleep 0.2
 xdotool click 1
 sleep 0.2
-xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
+xdotool type --delay 20 --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
 if [ ! -s "$marker" ] || ! grep -q SOLMU_MUXER_GUI_E2E "$marker"; then
