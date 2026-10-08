@@ -8,7 +8,7 @@ use std::{
         fs::PermissionsExt,
         io::AsRawFd,
         net::{UnixListener, UnixStream},
-        process::CommandExt,
+        process::{CommandExt, ExitStatusExt},
     },
     path::PathBuf,
     process::{Command, Stdio},

@@ -803,7 +803,6 @@ impl Page {
                     footer,
                 );
                 let _ = offset;
-                return;
             }
             Self::Audit { .. } => unreachable!("audit was rendered above"),
             Self::Plugins { scroll } => {

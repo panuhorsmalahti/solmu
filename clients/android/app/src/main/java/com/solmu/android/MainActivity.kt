@@ -417,7 +417,7 @@ private class SolmuModel(
             val incoming = page.array("items")
             memories = if (reset) incoming else memories + incoming
             memoryOffset = offset + incoming.size
-            memoryHasMore = page.bool("has_more")
+            memoryHasMore = page.boolean("has_more")
         } finally { memoriesLoading = false }
     }
 

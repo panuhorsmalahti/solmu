@@ -897,7 +897,7 @@ fn run() -> io::Result<i32> {
         windows_sessions::finish(&launch_id, result.as_ref().copied().unwrap_or(125))?;
         result
     }
-    #[cfg(not(any(unix, windows)))]
+    #[cfg(not(windows))]
     platform::run(command, resolved)
 }
 

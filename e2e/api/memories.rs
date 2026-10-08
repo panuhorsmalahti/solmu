@@ -59,8 +59,10 @@ async fn memories_are_read_only_paged_and_added_to_relevant_prompts_by_the_agent
             .await
             .contains(&"done".to_string())
     );
-    let captured = backend.requests.lock().unwrap();
-    let body = &captured.last().unwrap().1;
+    let body = {
+        let captured = backend.requests.lock().unwrap();
+        captured.last().unwrap().1.clone()
+    };
     let systems = body["messages"]
         .as_array()
         .unwrap()
@@ -72,8 +74,6 @@ async fn memories_are_read_only_paged_and_added_to_relevant_prompts_by_the_agent
     assert!(systems.contains("My cat is named Miso"));
     assert!(systems.contains("Miso the cat likes salmon"));
     assert!(body.to_string().contains("Memory"));
-    drop(captured);
-
     memory_tool(
         &backend,
         json!({"action":"update","id":old["id"],"content":"My cat is named Miso and is six"}),
