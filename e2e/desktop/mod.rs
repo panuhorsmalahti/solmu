@@ -18,6 +18,11 @@ impl iced_test::selector::Selector for ContainsText<'_> {
             iced_test::selector::Candidate::Text { content, .. } if content.contains(self.0) => {
                 Some(())
             }
+            iced_test::selector::Candidate::TextInput { state, .. }
+                if state.text().contains(self.0) =>
+            {
+                Some(())
+            }
             _ => None,
         }
     }
