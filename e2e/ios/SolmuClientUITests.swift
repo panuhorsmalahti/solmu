@@ -27,14 +27,9 @@ final class SolmuClientUITests: XCTestCase {
         input.typeText("Hello from iOS")
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
-        // The response text can appear before the request has fully settled.
-        // Wait for the composer to become enabled before submitting a command.
-        let sendButton = app.buttons["send-message"]
-        let composerReady = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == true AND isEnabled == true"),
-            object: sendButton
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [composerReady], timeout: 20), .completed)
+        // While Solmu is responding the composer is replaced by a Stop button.
+        // Wait for that response state to end before submitting the next command.
+        XCTAssertTrue(app.buttons["stop-response"].waitForNonExistence(timeout: 20))
         input.tap(); input.typeText("/goal Keep iOS covered")
         XCTAssertEqual(input.value as? String, "/goal Keep iOS covered")
         app.buttons["send-message"].tap()
