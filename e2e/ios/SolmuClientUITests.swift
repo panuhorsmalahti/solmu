@@ -8,6 +8,25 @@ final class SolmuClientUITests: XCTestCase {
         if dismiss.waitForExistence(timeout: 2), dismiss.isHittable { dismiss.tap() }
     }
 
+    private func enterText(_ text: String, in field: XCUIElement) {
+        for attempt in 0..<2 {
+            field.tap()
+            field.typeText(text)
+
+            let complete = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", text),
+                object: field
+            )
+            if XCTWaiter.wait(for: [complete], timeout: 3) == .completed { return }
+
+            guard attempt == 0 else { break }
+            let currentValue = field.value as? String ?? ""
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: currentValue.count))
+        }
+
+        XCTAssertEqual(field.value as? String, text)
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
@@ -30,8 +49,7 @@ final class SolmuClientUITests: XCTestCase {
         // While Solmu is responding the composer is replaced by a Stop button.
         // Wait for that response state to end before submitting the next command.
         XCTAssertTrue(app.buttons["stop-response"].waitForNonExistence(timeout: 20))
-        input.tap(); input.typeText("/goal Keep iOS covered")
-        XCTAssertEqual(input.value as? String, "/goal Keep iOS covered")
+        enterText("/goal Keep iOS covered", in: input)
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.staticTexts["solmu-notice"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["solmu-notice"].label, "Goal started: Keep iOS covered (goal-ios)")
