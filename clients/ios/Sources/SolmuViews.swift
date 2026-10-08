@@ -45,12 +45,17 @@ struct SolmuHomeView: View {
                 } catch { store.error = error.localizedDescription }
             }
         }
-        .alert("Solmu", isPresented: Binding(get: { !store.error.isEmpty }, set: { if !$0 { store.error = "" } })) {
-            Button("OK", role: .cancel) { store.error = "" }
-        } message: { Text(store.error) }
-        .alert("", isPresented: Binding(get: { !store.notice.isEmpty }, set: { if !$0 { store.notice = "" } })) {
-            Button("OK", role: .cancel) { store.notice = "" }
-        } message: { Text(store.notice) }
+        .alert(
+            store.error.isEmpty ? "" : "Solmu",
+            isPresented: Binding(
+                get: { !store.error.isEmpty || !store.notice.isEmpty },
+                set: { if !$0 { store.error = ""; store.notice = "" } }
+            )
+        ) {
+            Button("OK", role: .cancel) { store.error = ""; store.notice = "" }
+        } message: {
+            Text(store.error.isEmpty ? store.notice : store.error)
+        }
     }
 }
 

@@ -3,15 +3,20 @@ use super::*;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn memories_command_lists_saved_facts_and_dates() {
     let backend = Backend::start().await;
-    backend
-        .client
-        .post(backend.endpoint("/api/v1/memories"))
-        .json(&serde_json::json!({"content":"My cat is named Miso"}))
-        .send()
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(backend.directory.path().join("solmu.db")),
+        )
         .await
-        .unwrap()
-        .error_for_status()
         .unwrap();
+    sqlx::query("INSERT INTO memories (id, content) VALUES (?, ?)")
+        .bind("memory-cli")
+        .bind("My cat is named Miso")
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
     let mut terminal = Terminal::start(&backend);
     terminal.ready().await;
     terminal.command("/memories");
