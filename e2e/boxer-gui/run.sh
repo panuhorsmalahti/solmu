@@ -75,10 +75,10 @@ sleep 0.5
 xdotool mousemove --window "$window" 900 368 click 1
 for _ in $(seq 1 40); do
   stopped=$("$root/target/debug/boxer" ps --all --json | python3 -c 'import json,sys; sessions=json.load(sys.stdin); item=next((item for item in sessions if item["id"] == sys.argv[1]), {}); print(item.get("status", "missing"))' "$gui_launch_id")
-  [ "$stopped" = finished ] && break
+  [[ "$stopped" == stopped || "$stopped" == finished ]] && break
   sleep 0.1
 done
-if [ "$stopped" != finished ]; then
+if [[ "$stopped" != stopped && "$stopped" != finished ]]; then
   import -window "$window" docs/screenshots/boxer-gui.png
   "$root/target/debug/boxer" ps --all --json >&2
   echo "Boxer GUI Stop did not stop the selected process (status=$stopped, id=$gui_launch_id)" >&2

@@ -27,6 +27,9 @@ final class SolmuClientUITests: XCTestCase {
         input.typeText("Hello from iOS")
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.staticTexts["Hello from Solmu iOS"].waitForExistence(timeout: 20))
+        // The response text can appear before its stream finishes. Wait for the
+        // composer to become available again before submitting the next command.
+        XCTAssertTrue(app.buttons["send-message"].waitForExistence(timeout: 20))
         input.tap(); input.typeText("/goal Keep iOS covered")
         app.buttons["send-message"].tap()
         XCTAssertTrue(app.alerts.staticTexts["Goal started: Keep iOS covered (goal-ios)"].waitForExistence(timeout: 10))

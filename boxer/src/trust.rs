@@ -167,6 +167,14 @@ pub fn verify_policy(
         let matches = glob::glob(&pattern_glob).map_err(|error| {
             io::Error::other(format!("Invalid trust policy instruction pattern: {error}"))
         })?;
+        #[cfg(windows)]
+        let workspace_for_relative = {
+            let workspace = workspace.to_string_lossy();
+            let workspace = workspace.strip_prefix(r"\\?\").unwrap_or(&workspace);
+            PathBuf::from(workspace)
+        };
+        #[cfg(not(windows))]
+        let workspace_for_relative = workspace.to_path_buf();
         let mut matched = 0usize;
         for entry in matches {
             let entry = entry.map_err(|error| io::Error::other(error.to_string()))?;
@@ -179,14 +187,9 @@ pub fn verify_policy(
                 let entry = entry.strip_prefix(r"\\?\").unwrap_or(&entry);
                 PathBuf::from(entry)
             };
-            let workspace = workspace;
-            #[cfg(windows)]
-            let workspace = {
-                let workspace = workspace.to_string_lossy();
-                let workspace = workspace.strip_prefix(r"\\?\").unwrap_or(&workspace);
-                PathBuf::from(workspace)
-            };
-            let relative = entry.strip_prefix(workspace).map_err(io::Error::other)?;
+            let relative = entry
+                .strip_prefix(&workspace_for_relative)
+                .map_err(io::Error::other)?;
             let relative = relative.to_string_lossy().replace('\\', "/");
             matched += 1;
             if matched > 512 {
