@@ -44,14 +44,26 @@ final class SolmuURLProtocol: URLProtocol {
     override func startLoading() {
         var intercepted = request
         if intercepted.httpBody == nil, let stream = intercepted.httpBodyStream {
+            let mode = RunLoop.Mode.default
+            stream.schedule(in: .current, forMode: mode)
             stream.open()
             var body = Data()
             let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
-            defer { buffer.deallocate(); stream.close() }
-            while true {
+            defer {
+                buffer.deallocate()
+                stream.remove(from: .current, forMode: mode)
+                stream.close()
+            }
+            let deadline = Date().addingTimeInterval(2)
+            while Date() < deadline {
                 let count = stream.read(buffer, maxLength: 1024)
-                if count <= 0 { break }
-                body.append(buffer, count: count)
+                if count > 0 {
+                    body.append(buffer, count: count)
+                } else if stream.streamStatus == .atEnd || stream.streamStatus == .closed || stream.streamStatus == .error {
+                    break
+                } else {
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+                }
             }
             intercepted.httpBody = body
             intercepted.httpBodyStream = nil
