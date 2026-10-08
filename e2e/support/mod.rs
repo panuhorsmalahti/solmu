@@ -324,11 +324,10 @@ impl Backend {
                 {
                     std::thread::sleep(Duration::from_millis(10));
                 }
-                if child.try_wait().ok().flatten().is_none() {
-                    unsafe {
-                        libc::kill(process_group, libc::SIGKILL);
-                    }
+                unsafe {
+                    libc::kill(process_group, libc::SIGKILL);
                 }
+                let _ = child.wait();
             } else {
                 let _ = child.kill();
             }
