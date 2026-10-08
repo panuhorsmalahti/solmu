@@ -363,7 +363,7 @@ mod tests {
                 "14:56:52.386 open F=58 /tmp/solmu/input.txt 0.000012 probe.42\n",
                 "14:56:52.400 RdData F=58 /tmp/solmu/input.txt 0.000011 probe.42\n",
                 "14:56:52.410 WrData F=59 /tmp/solmu/output.txt 0.000020 probe.42\n",
-                "14:56:52.420 WrData F=59 /tmp/other.txt 0.000020 other.42\n",
+                "14:56:52.420 WrData F=59 /tmp/other.txt 0.000020 other.142\n",
             ),
             42,
         );
