@@ -257,17 +257,40 @@ data = json.load(open(sys.argv[1]))
 print(next(item["id"] for item in data["spaces"] if (item.get("worktree") or {}).get("branch") == "gui-e2e-worktree"))
 PY
 )
+# Switch away first so reopening the existing worktree must change spaces.
+xdotool mousemove --sync --window "$window" 100 184 click 1
+for _ in $(seq 1 30); do
+  active_space=$(python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+active = data["active"]
+space = next(space for space in data["spaces"] if any(
+    tab["id"] == space["selected"] and tab["selected"] == active
+    for tab in space["tabs"]
+))
+print(space["id"])
+PY
+)
+  [ "$active_space" = "$initial_space" ] && break
+  sleep 0.3
+done
+[ "$active_space" = "$initial_space" ] || { echo "Could not return to the original space before reopening its worktree (active=$active_space)" >&2; exit 1; }
 xdotool mousemove --window "$window" 240 131 click 1
 sleep 0.3
 xdotool mousemove --window "$window" 95 232 click 1
-xdotool type --clearmodifiers 'gui-e2e-worktree'
-xdotool mousemove --window "$window" 90 318 click 1
+xdotool type --delay 40 --clearmodifiers 'gui-e2e-worktree'
+xdotool mousemove --sync --window "$window" 90 318 click 1
 for _ in $(seq 1 30); do
   opened=$(python3 - "$snapshot" "$worktree_space" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 matches = [item for item in data["spaces"] if (item.get("worktree") or {}).get("branch") == "gui-e2e-worktree"]
-print(f'{len(data["spaces"])}:{len(matches)}:{data["active"]}:{sys.argv[2]}')
+active = data["active"]
+active_space = next(item["id"] for item in data["spaces"] if any(
+    tab["id"] == item["selected"] and tab["selected"] == active
+    for tab in item["tabs"]
+))
+print(f'{len(data["spaces"])}:{len(matches)}:{active_space}:{sys.argv[2]}')
 PY
 )
   [ "$opened" = "$before:1:$worktree_space:$worktree_space" ] && break
@@ -276,8 +299,6 @@ done
 [ "$opened" = "$before:1:$worktree_space:$worktree_space" ] || { echo "GUI did not reopen the existing worktree space (state=$opened)" >&2; exit 1; }
 # A space context menu can remove the checkout while preserving its branch.
 worktree_path="$state/worktrees/source/gui-e2e-worktree"
-xdotool mousemove --sync --window "$window" 600 500 click 1
-sleep 0.2
 xdotool mousemove --sync --window "$window" 100 245 click 3
 sleep 0.3
 import -window "$window" docs/screenshots/muxer-gui-remove-worktree.png
