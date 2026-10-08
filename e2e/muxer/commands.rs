@@ -217,7 +217,7 @@ async fn saved_commands_wait_for_explicit_restart_and_exited_output_stays_readab
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(saved["version"], 2);
+    assert_eq!(saved["version"], 3);
     assert!(session.command(&["server", "start"]).status.success());
     let stopped = command(&session, &["pane", "get", &id]);
     assert_eq!(stopped["exited"], "command awaits explicit restart");
