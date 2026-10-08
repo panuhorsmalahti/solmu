@@ -36,7 +36,7 @@ enum SolmuAPIError: LocalizedError {
 }
 
 final class SolmuURLProtocol: URLProtocol {
-    static let testBodyProperty = "SolmuUITestBody"
+    static let testBodyHeader = "X-Solmu-UI-Test-Body"
     static var handler: ((URLRequest) -> (Int, String))?
 
     override class func canInit(with request: URLRequest) -> Bool { handler != nil && request.url?.scheme != "ws" && request.url?.scheme != "wss" }
@@ -137,7 +137,7 @@ final class SolmuStore: ObservableObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.fragmentsAllowed, .sortedKeys])
             if testMode {
-                URLProtocol.setProperty(body, forKey: SolmuURLProtocol.testBodyProperty, in: &request)
+                request.setValue(request.httpBody?.base64EncodedString(), forHTTPHeaderField: SolmuURLProtocol.testBodyHeader)
             }
         }
         let (data, response) = try await session.data(for: request)
@@ -470,7 +470,9 @@ final class SolmuStore: ObservableObject {
         var webhook: SolmuJSON?
         SolmuURLProtocol.handler = { request in
             let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
-            let body = URLProtocol.property(forKey: SolmuURLProtocol.testBodyProperty, in: request) as? SolmuJSON
+            let body = request.value(forHTTPHeaderField: SolmuURLProtocol.testBodyHeader)
+                .flatMap(Data.init(base64Encoded:))
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? SolmuJSON }
                 ?? request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? SolmuJSON }
                 ?? [:]
             func json(_ value: SolmuJSON) -> (Int, String) { (200, String(data: (try? JSONSerialization.data(withJSONObject: value)) ?? Data("{}".utf8), encoding: .utf8) ?? "{}") }
