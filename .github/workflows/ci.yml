@@ -172,6 +172,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo build --workspace --locked
       - if: runner.os != 'Linux'
+        env:
+          RUST_TEST_THREADS: 2
         run: cargo test --workspace --all-targets --locked
       - name: macOS sandbox failure diagnostics
         if: failure() && runner.os == 'macOS'
@@ -186,7 +188,7 @@ jobs:
           sudo systemd-run --wait --pipe --collect \
             -p User="$USER" -p WorkingDirectory="$PWD" \
             -p Delegate=yes -p DelegateSubgroup=supervisor \
-            /usr/bin/env "PATH=$PATH" RUST_TEST_THREADS=1 cargo test --workspace --all-targets --locked
+            /usr/bin/env "PATH=$PATH" RUST_TEST_THREADS=2 cargo test --workspace --all-targets --locked
       - if: runner.os == 'Linux'
         run: |
           sudo systemd-run --wait --pipe --collect \
