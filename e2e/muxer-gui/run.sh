@@ -204,6 +204,12 @@ xdotool type --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
 if [ ! -s "$marker" ] || ! grep -q SOLMU_MUXER_GUI_E2E "$marker"; then
+  import -window "$window" docs/screenshots/muxer-gui.png
+  python3 - "$snapshot" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+print(json.dumps({"active": data.get("active"), "spaces": data.get("spaces"), "tabs": data.get("tabs"), "panes": data.get("panes")}, indent=2))
+PY
   echo 'GUI input did not reach its terminal pane' >&2
   exit 1
 fi
