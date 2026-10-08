@@ -78,6 +78,11 @@ for _ in $(seq 1 40); do
   [ "$stopped" = finished ] && break
   sleep 0.1
 done
-[ "$stopped" = finished ] || { echo 'Boxer GUI Stop did not stop the selected process' >&2; exit 1; }
+if [ "$stopped" != finished ]; then
+  import -window "$window" docs/screenshots/boxer-gui.png
+  "$root/target/debug/boxer" ps --all --json >&2
+  echo "Boxer GUI Stop did not stop the selected process (status=$stopped, id=$gui_launch_id)" >&2
+  exit 1
+fi
 gui_launch_id=''
 test -s docs/screenshots/boxer-gui.png
