@@ -471,7 +471,7 @@ final class SolmuStore: ObservableObject {
         SolmuURLProtocol.handler = { request in
             let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
             let body = request.value(forHTTPHeaderField: SolmuURLProtocol.testBodyHeader)
-                .flatMap(Data.init(base64Encoded:))
+                .flatMap { Data(base64Encoded: $0) }
                 .flatMap { try? JSONSerialization.jsonObject(with: $0) as? SolmuJSON }
                 ?? request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? SolmuJSON }
                 ?? [:]
