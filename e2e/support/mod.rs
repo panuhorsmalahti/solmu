@@ -245,6 +245,11 @@ impl Backend {
         for key in CREDENTIAL_KEYS {
             command.env_remove(key);
         }
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
         if self.credentials && !self.dotenv {
             command
                 .env("OPENAI_API_KEY", "fixture-key")
@@ -308,9 +313,21 @@ impl Backend {
     pub fn stop(&mut self) {
         if let Some(mut child) = self.child.take() {
             #[cfg(unix)]
-            if self.routed {
+            if self.boxed {
+                let process_group = -(child.id() as i32);
                 unsafe {
-                    libc::kill(child.id() as i32, libc::SIGTERM);
+                    libc::kill(process_group, libc::SIGTERM);
+                }
+                let deadline = std::time::Instant::now() + Duration::from_secs(2);
+                while child.try_wait().ok().flatten().is_none()
+                    && std::time::Instant::now() < deadline
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                if child.try_wait().ok().flatten().is_none() {
+                    unsafe {
+                        libc::kill(process_group, libc::SIGKILL);
+                    }
                 }
             } else {
                 let _ = child.kill();
