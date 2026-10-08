@@ -15,6 +15,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
+capture_window() {
+  local window_id=$1 output=$2
+  for _ in $(seq 1 10); do
+    if xdotool getwindowname "$window_id" >/dev/null 2>&1 && import -window "$window_id" "$output" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  echo "Could not capture Boxer GUI window $window_id" >&2
+  return 1
+}
+
 export BOXER_SESSIONS_DIR="$state/sessions"
 (cd "$root" && "$root/target/debug/boxer-gui") &
 gui_pid=$!
@@ -27,7 +39,7 @@ done
 [ -n "$window" ] || { echo 'Boxer GUI window did not appear' >&2; exit 1; }
 mkdir -p docs/screenshots
 sleep 1
-import -window "$window" "$state/empty.png"
+capture_window "$window" "$state/empty.png"
 
 # Launch from the CLI while Boxer GUI is open. The directory watcher must make
 # the new record appear in the rendered list without a timer-based refresh.
@@ -41,13 +53,13 @@ for _ in $(seq 1 40); do
 done
 [ -n "$launch_id" ] || { echo 'CLI Boxer launch did not create a session record' >&2; exit 1; }
 sleep 1
-import -window "$window" docs/screenshots/boxer-gui.png
+capture_window "$window" docs/screenshots/boxer-gui.png
 cmp -s "$state/empty.png" docs/screenshots/boxer-gui.png && { echo 'Boxer GUI did not react to the session record change' >&2; exit 1; }
 
 "$root/target/debug/boxer" stop "$launch_id" --force >/dev/null
 launch_pid=''
 sleep 1
-import -window "$window" "$state/stopped.png"
+capture_window "$window" "$state/stopped.png"
 cmp -s "$state/empty.png" "$state/stopped.png" && { echo 'Boxer GUI did not react to the launch stopping' >&2; exit 1; }
 
 # Launch and stop a process from the GUI itself.
@@ -67,7 +79,7 @@ for _ in $(seq 1 40); do
   sleep 0.1
 done
 if [ -z "$gui_launch_id" ]; then
-  import -window "$window" docs/screenshots/boxer-gui.png
+  capture_window "$window" docs/screenshots/boxer-gui.png
   echo 'Boxer GUI did not launch the selected program' >&2
   exit 1
 fi
@@ -79,7 +91,7 @@ for _ in $(seq 1 40); do
   sleep 0.1
 done
 if [[ "$stopped" != stopped && "$stopped" != finished ]]; then
-  import -window "$window" docs/screenshots/boxer-gui.png
+  capture_window "$window" docs/screenshots/boxer-gui.png
   "$root/target/debug/boxer" ps --all --json >&2
   echo "Boxer GUI Stop did not stop the selected process (status=$stopped, id=$gui_launch_id)" >&2
   exit 1
