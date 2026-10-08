@@ -276,7 +276,9 @@ done
 [ "$opened" = "$before:1:$worktree_space:$worktree_space" ] || { echo "GUI did not reopen the existing worktree space (state=$opened)" >&2; exit 1; }
 # A space context menu can remove the checkout while preserving its branch.
 worktree_path="$state/worktrees/source/gui-e2e-worktree"
-xdotool mousemove --window "$window" 100 245 click 3
+xdotool mousemove --sync --window "$window" 600 500 click 1
+sleep 0.2
+xdotool mousemove --sync --window "$window" 100 245 click 3
 sleep 0.3
 import -window "$window" docs/screenshots/muxer-gui-remove-worktree.png
 xdotool mousemove --window "$window" 150 300 click 1
