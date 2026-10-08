@@ -51,7 +51,6 @@ import -window "$window" "$state/stopped.png"
 cmp -s "$state/empty.png" "$state/stopped.png" && { echo 'Boxer GUI did not react to the launch stopping' >&2; exit 1; }
 
 # Launch and stop a process from the GUI itself.
-xdotool mousemove --window "$window" 170 200 click 1 key ctrl+a BackSpace
 xdotool mousemove --window "$window" 450 200 click 1 key ctrl+a
 xdotool type --clearmodifiers '/bin/cat'
 xdotool mousemove --window "$window" 900 200 click 1

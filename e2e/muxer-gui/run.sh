@@ -64,7 +64,13 @@ xdotool mousemove --window "$window" 110 184 click 1
 for _ in $(seq 1 30); do
   active_space=$(python3 - "$snapshot" <<'PY'
 import json, sys
-print(json.load(open(sys.argv[1]))["active_space"])
+data = json.load(open(sys.argv[1]))
+active = data["active"]
+space = next(space for space in data["spaces"] if any(
+    tab["id"] == space["selected"] and tab["selected"] == active
+    for tab in space["tabs"]
+))
+print(space["id"])
 PY
 )
   [ "$active_space" = "$first_space" ] && break
@@ -127,7 +133,12 @@ for _ in $(seq 1 30); do
 import json, sys
 data = json.load(open(sys.argv[1]))
 space = next(space for space in data["spaces"] if space["id"] == int(sys.argv[2]))
-print(f'{len(space["tabs"])}:{space["selected"]}:{space["id"]}:{data["active_space"]}')
+active = data["active"]
+active_space = next(item["id"] for item in data["spaces"] if any(
+    tab["id"] == item["selected"] and tab["selected"] == active
+    for tab in item["tabs"]
+))
+print(f'{len(space["tabs"])}:{space["selected"]}:{space["id"]}:{active_space}')
 PY
 )
   [ "$count" = "1:$first_tab:$first_space:$first_space" ] && break
