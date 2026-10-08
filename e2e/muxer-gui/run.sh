@@ -173,7 +173,7 @@ xdotool mousemove --window "$window" 500 300
 sleep 0.2
 xdotool click 3
 sleep 0.3
-xdotool mousemove --window "$window" 550 388
+xdotool mousemove --sync --window "$window" 550 385
 sleep 0.2
 xdotool click 1
 for _ in $(seq 1 30); do
