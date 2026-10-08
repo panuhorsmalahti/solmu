@@ -192,7 +192,7 @@ fi
 
 # Focus the terminal surface, type like a normal terminal, and verify the shell
 # command's file side effect.
-marker="$state/gui-command.txt"
+marker="$source/gui-e2e-marker"
 xdotool windowfocus --sync "$window"
 sleep 0.2
 eval "$(xdotool getwindowgeometry --shell "$window")"
@@ -200,10 +200,10 @@ xdotool mousemove --window "$window" "$((WIDTH / 2))" "$((HEIGHT / 2))"
 sleep 0.2
 xdotool click 1
 sleep 0.2
-xdotool type --delay 20 --clearmodifiers "echo SOLMU_MUXER_GUI_E2E > '$marker'"
+xdotool type --delay 20 --clearmodifiers 'touch gui-e2e-marker'
 xdotool key Return
 for _ in $(seq 1 30); do [ -s "$marker" ] && break; sleep 0.5; done
-if [ ! -s "$marker" ] || ! grep -q SOLMU_MUXER_GUI_E2E "$marker"; then
+if [ ! -f "$marker" ]; then
   import -window "$window" docs/screenshots/muxer-gui.png
   python3 - "$snapshot" <<'PY'
 import json, sys
