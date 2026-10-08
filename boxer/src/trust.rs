@@ -153,8 +153,9 @@ pub fn verify_policy(
                 "Trust policy instruction patterns must stay inside the workspace",
             ));
         }
-        let workspace_glob = glob::Pattern::escape(&workspace.to_string_lossy());
-        let pattern_glob = format!("{workspace_glob}{}{pattern}", std::path::MAIN_SEPARATOR);
+        let workspace_pattern = workspace.to_string_lossy().replace('\\', "/");
+        let workspace_glob = glob::Pattern::escape(&workspace_pattern);
+        let pattern_glob = format!("{workspace_glob}/{pattern}");
         let matches = glob::glob(&pattern_glob).map_err(|error| {
             io::Error::other(format!("Invalid trust policy instruction pattern: {error}"))
         })?;
