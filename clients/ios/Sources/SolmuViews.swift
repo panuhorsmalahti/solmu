@@ -21,19 +21,19 @@ struct SolmuHomeView: View {
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack { ConversationView(store: store, onDisconnect: onDisconnect) }
-                .solmuNotices(from: store)
+                .solmuNotices(from: store, isActive: tab == .chat)
                 .tabItem { Label("Chat", systemImage: SolmuTab.chat.icon) }.tag(SolmuTab.chat)
             NavigationStack { ProfileView(store: store) }
-                .solmuNotices(from: store)
+                .solmuNotices(from: store, isActive: tab == .profile)
                 .tabItem { Label("Profile", systemImage: SolmuTab.profile.icon) }.tag(SolmuTab.profile)
             NavigationStack { AuditView(store: store) }
-                .solmuNotices(from: store)
+                .solmuNotices(from: store, isActive: tab == .audit)
                 .tabItem { Label("Audit", systemImage: SolmuTab.audit.icon) }.tag(SolmuTab.audit)
             NavigationStack { TasksView(store: store) }
-                .solmuNotices(from: store)
+                .solmuNotices(from: store, isActive: tab == .tasks)
                 .tabItem { Label("Tasks", systemImage: SolmuTab.tasks.icon) }.tag(SolmuTab.tasks)
             NavigationStack { MoreView(store: store) }
-                .solmuNotices(from: store)
+                .solmuNotices(from: store, isActive: tab == .more)
                 .tabItem { Label("More", systemImage: SolmuTab.more.icon) }.tag(SolmuTab.more)
         }
         .tint(SolmuPalette.green)
@@ -54,9 +54,9 @@ struct SolmuHomeView: View {
 }
 
 private extension View {
-    func solmuNotices(from store: SolmuStore) -> some View {
+    func solmuNotices(from store: SolmuStore, isActive: Bool) -> some View {
         alert("Solmu", isPresented: Binding(
-            get: { !store.error.isEmpty || !store.notice.isEmpty },
+            get: { isActive && (!store.error.isEmpty || !store.notice.isEmpty) },
             set: { if !$0 { store.error = ""; store.notice = "" } }
         )) {
             Button("OK", role: .cancel) { store.error = ""; store.notice = "" }
