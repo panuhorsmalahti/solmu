@@ -53,25 +53,37 @@ sleep 2
 mkdir -p docs/screenshots
 
 # The top strip acts like browser tabs: create, switch, then close a tab.
-first_tab=$(python3 - "$snapshot" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-space = data["spaces"][0]
-print(space["tabs"][0]["id"])
-PY
-)
 first_space=$(python3 - "$snapshot" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-print(data["spaces"][0]["id"])
+space = next(space for space in data["spaces"] if space["kind"] == "terminal")
+print(space["id"])
+PY
+)
+xdotool mousemove --window "$window" 110 184 click 1
+for _ in $(seq 1 30); do
+  active_space=$(python3 - "$snapshot" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1]))["active_space"])
+PY
+)
+  [ "$active_space" = "$first_space" ] && break
+  sleep 0.3
+done
+[ "$active_space" = "$first_space" ] || { echo 'Could not select the Terminal space' >&2; exit 1; }
+first_tab=$(python3 - "$snapshot" "$first_space" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+space = next(space for space in data["spaces"] if space["id"] == int(sys.argv[2]))
+print(space["tabs"][0]["id"])
 PY
 )
 xdotool mousemove --window "$window" 390 38 click 1
 for _ in $(seq 1 30); do
-  count=$(python3 - "$snapshot" <<'PY'
+  count=$(python3 - "$snapshot" "$first_space" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = data["spaces"][0]
+space = next(space for space in data["spaces"] if space["id"] == int(sys.argv[2]))
 print(len(space["tabs"]))
 PY
 )
@@ -79,29 +91,29 @@ PY
   sleep 0.3
 done
 [ "$count" = 2 ] || { echo 'Top tab strip did not create a tab' >&2; exit 1; }
-second_tab=$(python3 - "$snapshot" <<'PY'
+second_tab=$(python3 - "$snapshot" "$first_space" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = data["spaces"][0]
+space = next(space for space in data["spaces"] if space["id"] == int(sys.argv[2]))
 print(space["tabs"][1]["id"])
 PY
 )
 xdotool mousemove --window "$window" 335 38 click 1
 sleep 0.3
-active_tab=$(python3 - "$snapshot" <<'PY'
+active_tab=$(python3 - "$snapshot" "$first_space" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = data["spaces"][0]
+space = next(space for space in data["spaces"] if space["id"] == int(sys.argv[2]))
 print(space["selected"])
 PY
 )
 [ "$active_tab" = "$first_tab" ] || { echo 'Top tab strip did not switch tabs' >&2; exit 1; }
 xdotool mousemove --window "$window" 420 38 click 1
 sleep 0.3
-active_tab=$(python3 - "$snapshot" <<'PY'
+active_tab=$(python3 - "$snapshot" "$first_space" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = data["spaces"][0]
+space = next(space for space in data["spaces"] if space["id"] == int(sys.argv[2]))
 print(space["selected"])
 PY
 )
@@ -111,17 +123,17 @@ sleep 0.3
 import -window "$window" docs/screenshots/muxer-gui-tab-context-menu.png
 xdotool mousemove --window "$window" 450 58 click 1
 for _ in $(seq 1 30); do
-  count=$(python3 - "$snapshot" <<'PY'
+  count=$(python3 - "$snapshot" "$first_space" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-space = data["spaces"][0]
-print(f'{len(space["tabs"])}:{space["selected"]}:{space["id"]}')
+space = next(space for space in data["spaces"] if space["id"] == int(sys.argv[2]))
+print(f'{len(space["tabs"])}:{space["selected"]}:{space["id"]}:{data["active_space"]}')
 PY
 )
-  [ "$count" = "1:$first_tab:$first_space" ] && break
+  [ "$count" = "1:$first_tab:$first_space:$first_space" ] && break
   sleep 0.3
 done
-[ "$count" = "1:$first_tab:$first_space" ] || { echo "Closing a tab did not select the previous tab in the same space (state=$count)" >&2; exit 1; }
+[ "$count" = "1:$first_tab:$first_space:$first_space" ] || { echo "Closing a tab did not select the previous tab in the same space (state=$count)" >&2; exit 1; }
 
 # Right-click the focused pane for layout actions, then close the split pane.
 xdotool mousemove --window "$window" 500 300

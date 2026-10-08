@@ -1,7 +1,9 @@
 use super::*;
+#[cfg(target_arch = "x86_64")]
 use std::{io::BufRead, process::Stdio, thread, time::Instant};
 
 #[test]
+#[cfg(target_arch = "x86_64")]
 fn supervised_command_approval_supports_once_and_session_grants() {
     let workspace = tempfile::tempdir().unwrap();
     let supervisor_root = workspace.path().join("supervisor-data");
@@ -66,6 +68,7 @@ fn supervised_command_approval_supports_once_and_session_grants() {
 }
 
 #[test]
+#[cfg(target_arch = "x86_64")]
 fn supervised_command_denial_is_recorded_and_does_not_run_the_command() {
     let workspace = tempfile::tempdir().unwrap();
     let supervisor_root = workspace.path().join("supervisor-data");
@@ -104,6 +107,7 @@ fn supervised_command_denial_is_recorded_and_does_not_run_the_command() {
 }
 
 #[test]
+#[cfg(target_arch = "x86_64")]
 fn supervised_network_approval_can_grant_a_target_for_the_session() {
     let workspace = tempfile::tempdir().unwrap();
     let supervisor_root = workspace.path().join("supervisor-data");
@@ -277,4 +281,25 @@ fn supervised_network_approval_can_grant_a_target_for_the_session() {
         .unwrap();
     assert_eq!(tampered.status.code(), Some(125));
     assert!(String::from_utf8_lossy(&tampered.stderr).contains("authentication failed"));
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+#[test]
+fn supervised_approvals_require_linux_x86_64() {
+    let workspace = tempfile::tempdir().unwrap();
+    let marker = workspace.path().join("should-not-run");
+    let output = Command::new(binary("boxer"))
+        .args(["--isolated", "--network", "deny", "--supervised", "--cwd"])
+        .arg(workspace.path())
+        .arg("--")
+        .arg(binary("sandbox-probe"))
+        .arg(&marker)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(125));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("Supervised approvals require Linux x86_64")
+    );
+    assert!(!marker.exists());
 }

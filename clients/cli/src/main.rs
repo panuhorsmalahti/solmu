@@ -201,7 +201,7 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
                     reported_metadata = metadata;
                 }
             }
-            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame, &session.skills, &session.mcp, &session.plugins); } else { draw(frame, &session, &input, show_threads, scroll, spinner, (connected, task_notice.as_deref()), chooser, chooser_selection); draw_commands(frame, &input, command_selection); })?;
+            terminal.draw(|frame| if let Some(page) = &page { page.draw(frame, &session.skills, &session.mcp, &session.plugins); } else { draw(frame, &session, DrawState { input: &input, show_threads, scroll, spinner, connected, task_notice: task_notice.as_deref(), chooser, chooser_selection }); draw_commands(frame, &input, command_selection); })?;
             let can_submit = !session.busy;
             tokio::select! {
                 Some(command) = bridge.receiver.recv() => {
@@ -398,18 +398,28 @@ async fn run(thread: Option<String>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn draw(
-    frame: &mut Frame<'_>,
-    session: &Session,
-    input: &str,
+struct DrawState<'a> {
+    input: &'a str,
     show_threads: bool,
     scroll: u16,
     spinner: usize,
-    status: (bool, Option<&str>),
+    connected: bool,
+    task_notice: Option<&'a str>,
     chooser: bool,
     chooser_selection: usize,
-) {
-    let (connected, task_notice) = status;
+}
+
+fn draw(frame: &mut Frame<'_>, session: &Session, state: DrawState<'_>) {
+    let DrawState {
+        input,
+        show_threads,
+        scroll,
+        spinner,
+        connected,
+        task_notice,
+        chooser,
+        chooser_selection,
+    } = state;
     let embedded = std::env::var_os("SOLMU_MUXER").is_some();
     let [header, conversation, status, composer, footer] = Layout::vertical([
         Constraint::Length(3),
