@@ -91,6 +91,7 @@ async fn resume_without_id_opens_title_chooser_and_resumes_selected_conversation
     let mut chooser = Terminal::start_with_resume(&backend, "");
     chooser.wait("Resume a conversation").await;
     chooser.wait("Pick this one").await;
+    chooser.ready().await;
     chooser.send(b"\r");
     chooser.wait("A saved message").await;
     chooser.wait("Hello from Solmu").await;
