@@ -21,22 +21,41 @@ struct SolmuHomeView: View {
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack { ConversationView(store: store, onDisconnect: onDisconnect) }
-                .solmuNotices(from: store, isActive: tab == .chat)
                 .tabItem { Label("Chat", systemImage: SolmuTab.chat.icon) }.tag(SolmuTab.chat)
             NavigationStack { ProfileView(store: store) }
-                .solmuNotices(from: store, isActive: tab == .profile)
                 .tabItem { Label("Profile", systemImage: SolmuTab.profile.icon) }.tag(SolmuTab.profile)
             NavigationStack { AuditView(store: store) }
-                .solmuNotices(from: store, isActive: tab == .audit)
                 .tabItem { Label("Audit", systemImage: SolmuTab.audit.icon) }.tag(SolmuTab.audit)
             NavigationStack { TasksView(store: store) }
-                .solmuNotices(from: store, isActive: tab == .tasks)
                 .tabItem { Label("Tasks", systemImage: SolmuTab.tasks.icon) }.tag(SolmuTab.tasks)
             NavigationStack { MoreView(store: store) }
-                .solmuNotices(from: store, isActive: tab == .more)
                 .tabItem { Label("More", systemImage: SolmuTab.more.icon) }.tag(SolmuTab.more)
         }
         .tint(SolmuPalette.green)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if !store.error.isEmpty || !store.notice.isEmpty {
+                HStack(spacing: 12) {
+                    Text(store.error.isEmpty ? store.notice : store.error)
+                        .font(.subheadline)
+                        .foregroundStyle(SolmuPalette.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("solmu-notice")
+                    Button {
+                        store.error = ""
+                        store.notice = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(SolmuPalette.muted)
+                    }
+                    .accessibilityLabel("Dismiss notice")
+                    .accessibilityIdentifier("dismiss-notice")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(SolmuPalette.paper)
+                .overlay(alignment: .bottom) { Rectangle().fill(SolmuPalette.border).frame(height: 1) }
+            }
+        }
         .task { await store.start() }
         .onChange(of: tab) { _, selected in
             Task {
@@ -49,19 +68,6 @@ struct SolmuHomeView: View {
                     }
                 } catch { store.error = error.localizedDescription }
             }
-        }
-    }
-}
-
-private extension View {
-    func solmuNotices(from store: SolmuStore, isActive: Bool) -> some View {
-        alert("Solmu", isPresented: Binding(
-            get: { isActive && (!store.error.isEmpty || !store.notice.isEmpty) },
-            set: { if !$0 { store.error = ""; store.notice = "" } }
-        )) {
-            Button("OK", role: .cancel) { store.error = ""; store.notice = "" }
-        } message: {
-            Text(store.error.isEmpty ? store.notice : store.error)
         }
     }
 }

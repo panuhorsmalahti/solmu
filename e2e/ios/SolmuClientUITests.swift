@@ -33,8 +33,9 @@ final class SolmuClientUITests: XCTestCase {
         input.tap(); input.typeText("/goal Keep iOS covered")
         XCTAssertEqual(input.value as? String, "/goal Keep iOS covered")
         app.buttons["send-message"].tap()
-        XCTAssertTrue(app.alerts.staticTexts["Goal started: Keep iOS covered (goal-ios)"].waitForExistence(timeout: 10))
-        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(app.staticTexts["solmu-notice"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["solmu-notice"].label, "Goal started: Keep iOS covered (goal-ios)")
+        app.buttons["dismiss-notice"].tap()
 
         app.tabBars.buttons["Profile"].tap()
         let prompt = app.descendants(matching: .any).matching(identifier: "profile-prompt").firstMatch

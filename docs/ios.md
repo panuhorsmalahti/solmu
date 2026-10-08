@@ -5,6 +5,9 @@ it does not display the web client inside a browser view. Threads and Profile
 are shared with every other client, and streamed replies arrive over the same
 backend API.
 
+Command confirmations and errors appear in a dismissible banner at the top of
+the active screen.
+
 ## Connect
 
 On the same Mac as the backend, use `http://127.0.0.1:3000`. On an iPhone,
