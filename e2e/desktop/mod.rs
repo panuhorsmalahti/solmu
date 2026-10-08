@@ -8,6 +8,25 @@ use solmu_client::Api;
 use solmu_e2e::support::Backend;
 use std::time::Duration;
 
+struct ContainsText<'a>(&'a str);
+
+impl iced_test::selector::Selector for ContainsText<'_> {
+    type Output = ();
+
+    fn select(&mut self, candidate: iced_test::selector::Candidate<'_>) -> Option<Self::Output> {
+        match candidate {
+            iced_test::selector::Candidate::Text { content, .. } if content.contains(self.0) => {
+                Some(())
+            }
+            _ => None,
+        }
+    }
+
+    fn description(&self) -> String {
+        format!("text contains {:?}", self.0)
+    }
+}
+
 struct Ui<P: Program> {
     program: P,
     emulator: Option<Emulator<P>>,
@@ -56,7 +75,7 @@ impl<P: Program + 'static> Ui<P> {
             loop {
                 let found =
                     iced_test::simulator(self.emulator.as_ref().unwrap().view(&self.program))
-                        .find(text)
+                        .find(ContainsText(text))
                         .is_ok();
                 if found {
                     break;
