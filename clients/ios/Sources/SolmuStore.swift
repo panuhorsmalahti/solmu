@@ -48,7 +48,7 @@ final class SolmuURLProtocol: URLProtocol {
             var body = Data()
             let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
             defer { buffer.deallocate(); stream.close() }
-            while stream.hasBytesAvailable {
+            while true {
                 let count = stream.read(buffer, maxLength: 1024)
                 if count <= 0 { break }
                 body.append(buffer, count: count)
