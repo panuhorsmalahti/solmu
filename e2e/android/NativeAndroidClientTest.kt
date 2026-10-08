@@ -2,6 +2,7 @@ package com.solmu.android
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -108,10 +109,16 @@ class NativeAndroidClientTest {
         compose.waitUntil(conditionDescription = "the chat screen loads", timeoutMillis = 30_000) {
             compose.onAllNodesWithText("A little space for your next big idea.").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.waitUntil(conditionDescription = "the conversation input is ready", timeoutMillis = 30_000) {
+            runCatching { compose.onNodeWithTag("message-input").assertIsEnabled() }.isSuccess
+        }
         compose.onNodeWithTag("message-input").performTextInput("Hello from Android")
         compose.onNodeWithTag("send-message").performClick()
         compose.waitUntil(conditionDescription = "the streamed assistant reply appears", timeoutMillis = 30_000) {
             compose.onAllNodesWithText("Hello from Solmu").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.waitUntil(conditionDescription = "the conversation input is ready for a follow-up", timeoutMillis = 30_000) {
+            runCatching { compose.onNodeWithTag("message-input").assertIsEnabled() }.isSuccess
         }
         compose.onNodeWithTag("message-input").performTextInput("/goal Keep Android covered")
         compose.onNodeWithTag("send-message").performClick()
