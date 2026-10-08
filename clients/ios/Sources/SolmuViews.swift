@@ -46,7 +46,7 @@ struct SolmuHomeView: View {
             }
         }
         .alert(
-            store.error.isEmpty ? "" : "Solmu",
+            "Solmu",
             isPresented: Binding(
                 get: { !store.error.isEmpty || !store.notice.isEmpty },
                 set: { if !$0 { store.error = ""; store.notice = "" } }
