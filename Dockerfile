@@ -19,6 +19,7 @@ COPY clients/cli ./clients/cli
 COPY clients/desktop ./clients/desktop
 COPY e2e ./e2e
 COPY boxer ./boxer
+COPY boxer-gui ./boxer-gui
 COPY muxer ./muxer
 COPY muxer-gui ./muxer-gui
 COPY cloud/congregator/backend ./cloud/congregator/backend
