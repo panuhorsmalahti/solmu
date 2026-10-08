@@ -36,6 +36,7 @@ enum SolmuAPIError: LocalizedError {
 }
 
 final class SolmuURLProtocol: URLProtocol {
+    static let testBodyProperty = "SolmuUITestBody"
     static var handler: ((URLRequest) -> (Int, String))?
 
     override class func canInit(with request: URLRequest) -> Bool { handler != nil && request.url?.scheme != "ws" && request.url?.scheme != "wss" }
@@ -44,26 +45,14 @@ final class SolmuURLProtocol: URLProtocol {
     override func startLoading() {
         var intercepted = request
         if intercepted.httpBody == nil, let stream = intercepted.httpBodyStream {
-            let mode = RunLoop.Mode.default
-            stream.schedule(in: .current, forMode: mode)
             stream.open()
             var body = Data()
             let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
-            defer {
-                buffer.deallocate()
-                stream.remove(from: .current, forMode: mode)
-                stream.close()
-            }
-            let deadline = Date().addingTimeInterval(2)
-            while Date() < deadline {
+            defer { buffer.deallocate(); stream.close() }
+            while stream.hasBytesAvailable {
                 let count = stream.read(buffer, maxLength: 1024)
-                if count > 0 {
-                    body.append(buffer, count: count)
-                } else if stream.streamStatus == .atEnd || stream.streamStatus == .closed || stream.streamStatus == .error {
-                    break
-                } else {
-                    RunLoop.current.run(until: Date().addingTimeInterval(0.01))
-                }
+                if count <= 0 { break }
+                body.append(buffer, count: count)
             }
             intercepted.httpBody = body
             intercepted.httpBodyStream = nil
@@ -147,6 +136,9 @@ final class SolmuStore: ObservableObject {
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.fragmentsAllowed, .sortedKeys])
+            if testMode {
+                URLProtocol.setProperty(body, forKey: SolmuURLProtocol.testBodyProperty, in: &request)
+            }
         }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw SolmuAPIError.invalidResponse }
@@ -478,7 +470,9 @@ final class SolmuStore: ObservableObject {
         var webhook: SolmuJSON?
         SolmuURLProtocol.handler = { request in
             let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
-            let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? SolmuJSON } ?? [:]
+            let body = URLProtocol.property(forKey: SolmuURLProtocol.testBodyProperty, in: request) as? SolmuJSON
+                ?? request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? SolmuJSON }
+                ?? [:]
             func json(_ value: SolmuJSON) -> (Int, String) { (200, String(data: (try? JSONSerialization.data(withJSONObject: value)) ?? Data("{}".utf8), encoding: .utf8) ?? "{}") }
             switch (request.httpMethod ?? "GET", path) {
             case ("GET", "/threads"): return json(["items": [thread]])
