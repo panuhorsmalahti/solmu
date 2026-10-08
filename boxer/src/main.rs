@@ -882,7 +882,11 @@ fn run() -> io::Result<i32> {
         ));
     }
     #[cfg(unix)]
-    if !sessions::is_child() {
+    // Rollback launches an internal child to run the requested program while
+    // the parent records its snapshots. The outer Boxer process already owns
+    // the attached session, so tracking this helper as another attached
+    // session would add an unnecessary nested supervisor.
+    if !sessions::is_child() && !rollback_child {
         return sessions::start_attached(
             &raw_arguments,
             &workspace,
