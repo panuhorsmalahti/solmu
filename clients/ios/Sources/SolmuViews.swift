@@ -206,7 +206,7 @@ struct ConversationView: View {
                     draftFocused = false
                     store.send(message)
                 } label: { Image(systemName: "arrow.up").fontWeight(.bold).frame(width: 44, height: 44) }
-                    .buttonStyle(.borderedProminent).accessibilityLabel("Send message").accessibilityIdentifier("send-message")
+                    .buttonStyle(.borderedProminent).accessibilityLabel("Send message").accessibilityValue(draft).accessibilityIdentifier("send-message")
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.busy)
             }
         }

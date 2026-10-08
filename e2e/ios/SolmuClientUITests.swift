@@ -50,7 +50,13 @@ final class SolmuClientUITests: XCTestCase {
         // Wait for that response state to end before submitting the next command.
         XCTAssertTrue(app.buttons["stop-response"].waitForNonExistence(timeout: 20))
         enterText("/goal Keep iOS covered", in: input)
-        app.buttons["send-message"].tap()
+        let send = app.buttons["send-message"]
+        let draftReady = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "/goal Keep iOS covered"),
+            object: send
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [draftReady], timeout: 10), .completed)
+        send.tap()
         XCTAssertTrue(app.staticTexts["solmu-notice"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["solmu-notice"].label, "Goal started: Keep iOS covered (goal-ios)")
         app.buttons["dismiss-notice"].tap()
